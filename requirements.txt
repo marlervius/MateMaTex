@@ -1,10 +1,4 @@
 # Core framework
-crewai[tools]>=0.80.0
+crewai[tools,google-genai]>=0.80.0
 streamlit>=1.31.0
 python-dotenv>=1.0.0
-
-# For Google Gemini (if using langchain)
-# langchain-google-genai>=1.0.0
-
-# Utilities
-pathlib2>=2.3.7
