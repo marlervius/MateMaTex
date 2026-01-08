@@ -542,6 +542,35 @@ def main():
     # Build instructions from checkboxes and difficulty
     content_instructions = []
     
+    # Special handling for "Arbeidsark" - only exercises
+    is_worksheet = selected_material == "arbeidsark"
+    
+    if is_worksheet:
+        content_instructions.append(
+            "ARBEIDSARK-MODUS: Dette er et RENT OPPGAVEARK. "
+            "IKKE inkluder teori, definisjoner eller eksempler. "
+            "Gå RETT på oppgavene. "
+            "Lag MINST 10 varierte oppgaver med stigende vanskelighetsgrad. "
+            "Bruk \\begin{taskbox}{Oppgave N} for hver oppgave. "
+            "Start dokumentet med en kort tittel og gå direkte til oppgavene."
+        )
+        if st.session_state.include_solutions:
+            content_instructions.append("Inkluder løsningsforslag (fasit) på slutten i multicols-format")
+        else:
+            content_instructions.append("IKKE inkluder løsningsforslag")
+    else:
+        # Normal mode - use checkboxes
+        if not st.session_state.include_theory:
+            content_instructions.append("Ikke inkluder teori/definisjoner")
+        if not st.session_state.include_examples:
+            content_instructions.append("Ikke inkluder eksempler")
+        if not st.session_state.include_exercises:
+            content_instructions.append("Ikke inkluder oppgaver")
+        if not st.session_state.include_solutions:
+            content_instructions.append("Ikke inkluder løsningsforslag")
+        if not st.session_state.include_graphs:
+            content_instructions.append("Ikke inkluder grafer eller figurer")
+    
     # Add difficulty level instruction
     difficulty = st.session_state.difficulty_level
     if difficulty == "Lett":
@@ -551,17 +580,13 @@ def main():
     else:
         content_instructions.append("Vanskelighetsgrad: MIDDELS - Balansert vanskelighetsgrad med variasjon fra enkle til litt utfordrende oppgaver")
     
-    if not st.session_state.include_theory:
-        content_instructions.append("Ikke inkluder teori/definisjoner")
-    if not st.session_state.include_examples:
-        content_instructions.append("Ikke inkluder eksempler")
-    if not st.session_state.include_exercises:
-        content_instructions.append("Ikke inkluder oppgaver")
-    if not st.session_state.include_solutions:
-        content_instructions.append("Ikke inkluder løsningsforslag")
-    if not st.session_state.include_graphs:
-        content_instructions.append("Ikke inkluder grafer eller figurer")
-    if st.session_state.include_tips:
+    # Graph instruction (applies to both modes)
+    if not is_worksheet and not st.session_state.include_graphs:
+        pass  # Already handled above
+    elif is_worksheet and st.session_state.include_graphs:
+        content_instructions.append("Inkluder relevante figurer/grafer i oppgavene der det er nyttig")
+    
+    if st.session_state.include_tips and not is_worksheet:
         content_instructions.append("Inkluder tips og huskelapper i merk-bokser")
     
     instructions = ". ".join(content_instructions) if content_instructions else ""
