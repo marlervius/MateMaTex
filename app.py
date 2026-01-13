@@ -928,9 +928,9 @@ def render_sidebar():
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
         # API Status
-    api_configured = bool(os.getenv("GOOGLE_API_KEY"))
-    model_name = os.getenv("GOOGLE_MODEL", "gemini-2.0-flash")
-    
+        api_configured = bool(os.getenv("GOOGLE_API_KEY"))
+        model_name = os.getenv("GOOGLE_MODEL", "gemini-2.0-flash")
+        
         if api_configured:
             st.markdown(f"""
             <div style="
@@ -965,9 +965,9 @@ def render_sidebar():
                 <div style="color: #9090a0; font-size: 0.75rem; margin-top: 0.25rem;">
                     {t("add_api_key")}
                 </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
+            </div>
+            """, unsafe_allow_html=True)
+        
         # History section - load from persistent storage
         st.markdown(f"""
         <p class="section-label" style="margin-top: 1.5rem;">
@@ -1020,9 +1020,9 @@ def render_sidebar():
                 st.markdown(f"""
                 <div style="color: #606070; font-size: 0.7rem; margin-top: -0.5rem; margin-bottom: 0.5rem; padding-left: 0.25rem;">
                     {grade} • {time_str}
-        </div>
-        """, unsafe_allow_html=True)
-    else:
+                </div>
+                """, unsafe_allow_html=True)
+        else:
             st.markdown(f"""
             <div style="
                 text-align: center;
@@ -1503,11 +1503,11 @@ def render_configuration():
                 </div>
             """, unsafe_allow_html=True)
             
-        st.session_state.num_exercises = st.slider(
-            "Antall oppgaver",
-            min_value=3,
-            max_value=25,
-            value=st.session_state.num_exercises,
+            st.session_state.num_exercises = st.slider(
+                "Antall oppgaver",
+                min_value=3,
+                max_value=25,
+                value=st.session_state.num_exercises,
                 step=1
             )
             
@@ -1533,22 +1533,22 @@ def render_configuration():
             # Exercise types
             exercise_types = get_exercise_types()
             with st.expander("📝 Oppgavetyper", expanded=False):
-            selected_types = []
-            cols = st.columns(2)
-            for i, (type_key, type_info) in enumerate(exercise_types.items()):
-                with cols[i % 2]:
-                    if st.checkbox(
-                        type_info["name"],
-                        value=type_key in st.session_state.selected_exercise_types,
-                        help=type_info["description"],
-                        key=f"extype_{type_key}"
-                    ):
-                        selected_types.append(type_key)
-            
-            if selected_types:
-                st.session_state.selected_exercise_types = selected_types
-            else:
-                st.session_state.selected_exercise_types = ["standard"]
+                selected_types = []
+                cols = st.columns(2)
+                for i, (type_key, type_info) in enumerate(exercise_types.items()):
+                    with cols[i % 2]:
+                        if st.checkbox(
+                            type_info["name"],
+                            value=type_key in st.session_state.selected_exercise_types,
+                            help=type_info["description"],
+                            key=f"extype_{type_key}"
+                        ):
+                            selected_types.append(type_key)
+                
+                if selected_types:
+                    st.session_state.selected_exercise_types = selected_types
+                else:
+                    st.session_state.selected_exercise_types = ["standard"]
     
     return selected_grade, grade_options, topic, selected_material
 
@@ -1774,7 +1774,7 @@ def render_results():
                             st.session_state.answer_pdf_path = pdf_path
                             st.toast("✅ Fasit-ark klart!")
                             st.rerun()
-    else:
+                        else:
                             st.warning("Ingen løsninger funnet i dokumentet")
                     except Exception as e:
                         st.error(f"Kunne ikke lage fasit-ark: {e}")
@@ -1835,7 +1835,7 @@ def render_results():
                 with regen_col2:
                     if st.button("🔄 Regenerer denne seksjonen", use_container_width=True):
                         st.info("🚧 Seksjon-regenerering krever en ny AI-forespørsel. Denne funksjonen kommer snart!")
-        else:
+            else:
                 st.info("Ingen seksjoner funnet i dokumentet")
         else:
             st.info("Kunne ikke analysere dokumentet")
@@ -1890,7 +1890,7 @@ def render_results():
                     emoji = get_difficulty_emoji(ex.difficulty)
                     factors = ", ".join(ex.factors) if ex.factors else "Standard"
                     st.markdown(f"{emoji} **{ex.title}** - {ex.difficulty.capitalize()} ({factors})")
-    else:
+        else:
             st.info("Ingen oppgaver funnet å analysere")
     
     # QR code for answers
@@ -1931,7 +1931,7 @@ def render_results():
                     st.markdown("**Svar i QR-koden:**")
                     for num, ans in list(st.session_state.qr_answers.items())[:5]:
                         st.markdown(f"- Oppgave {num}: {ans[:50]}...")
-    else:
+        else:
             st.info("📦 QR-kode krever `qrcode`-pakken. Kjør: `pip install qrcode[pil]`")
     
     # LK20 Coverage Report
