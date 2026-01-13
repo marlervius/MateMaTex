@@ -928,9 +928,9 @@ def render_sidebar():
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
         # API Status
-        api_configured = bool(os.getenv("GOOGLE_API_KEY"))
-        model_name = os.getenv("GOOGLE_MODEL", "gemini-2.0-flash")
-        
+    api_configured = bool(os.getenv("GOOGLE_API_KEY"))
+    model_name = os.getenv("GOOGLE_MODEL", "gemini-2.0-flash")
+    
         if api_configured:
             st.markdown(f"""
             <div style="
@@ -965,9 +965,9 @@ def render_sidebar():
                 <div style="color: #9090a0; font-size: 0.75rem; margin-top: 0.25rem;">
                     {t("add_api_key")}
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
-        
+    </div>
+    """, unsafe_allow_html=True)
+    
         # History section - load from persistent storage
         st.markdown(f"""
         <p class="section-label" style="margin-top: 1.5rem;">
@@ -1020,9 +1020,9 @@ def render_sidebar():
                 st.markdown(f"""
                 <div style="color: #606070; font-size: 0.7rem; margin-top: -0.5rem; margin-bottom: 0.5rem; padding-left: 0.25rem;">
                     {grade} • {time_str}
-                </div>
-                """, unsafe_allow_html=True)
-        else:
+        </div>
+        """, unsafe_allow_html=True)
+    else:
             st.markdown(f"""
             <div style="
                 text-align: center;
@@ -1108,6 +1108,60 @@ def render_sidebar():
                     st.rerun()
                 else:
                     st.warning("Skriv inn et navn for malen")
+        
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        
+        # Favorites section
+        st.markdown("""
+        <p class="section-label">⭐ Favoritter</p>
+        """, unsafe_allow_html=True)
+        
+        from src.tools import load_favorites, get_favorite, delete_favorite, render_star_rating
+        
+        favorites = load_favorites()
+        pinned = [f for f in favorites if f.is_pinned]
+        recent = [f for f in favorites if not f.is_pinned][:5]
+        
+        all_favs = pinned + recent
+        
+        if all_favs:
+            for fav in all_favs[:6]:
+                pin_icon = "📌 " if fav.is_pinned else ""
+                stars = render_star_rating(fav.rating)
+                
+                col_f1, col_f2 = st.columns([4, 1])
+                with col_f1:
+                    if st.button(
+                        f"{pin_icon}{fav.name}",
+                        key=f"fav_{fav.id}",
+                        use_container_width=True,
+                        help=f"{stars} | {fav.topic}"
+                    ):
+                        # Load favorite
+                        loaded = get_favorite(fav.id)
+                        if loaded:
+                            st.session_state.latex_result = loaded.latex_content
+                            st.session_state.selected_topic = loaded.topic
+                            st.session_state.selected_grade = loaded.grade_level
+                            st.toast(f"⭐ Lastet: {loaded.name}")
+                            st.rerun()
+                with col_f2:
+                    if st.button("🗑️", key=f"del_fav_{fav.id}", help="Slett"):
+                        delete_favorite(fav.id)
+                        st.toast("🗑️ Favoritt slettet")
+                        st.rerun()
+        else:
+            st.markdown("""
+            <div style="
+                text-align: center;
+                padding: 1rem;
+                color: #606070;
+                font-size: 0.85rem;
+            ">
+                <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">⭐</div>
+                Ingen favoritter ennå
+            </div>
+            """, unsafe_allow_html=True)
 
 
 def render_hero():
@@ -1122,9 +1176,9 @@ def render_hero():
             Generer profesjonelle matematikkoppgaver, arbeidsark og kapitler
             tilpasset norsk læreplan (LK20)
         </p>
-    </div>
-    """, unsafe_allow_html=True)
-
+        </div>
+        """, unsafe_allow_html=True)
+    
 
 def render_templates():
     """Render template selection cards."""
@@ -1175,48 +1229,48 @@ def render_configuration():
             </div>
         """, unsafe_allow_html=True)
         
-        grade_options = {
-            "1.-4. trinn": "1-4. trinn",
-            "5.-7. trinn": "5-7. trinn",
-            "8. trinn": "8. trinn",
-            "9. trinn": "9. trinn",
-            "10. trinn": "10. trinn",
-            "VG1 1T": "VG1 1T",
-            "VG1 1P": "VG1 1P",
-            "VG2 R1": "VG2 R1",
-            "VG3 R2": "VG3 R2",
-        }
+    grade_options = {
+        "1.-4. trinn": "1-4. trinn",
+        "5.-7. trinn": "5-7. trinn",
+        "8. trinn": "8. trinn",
+        "9. trinn": "9. trinn",
+        "10. trinn": "10. trinn",
+        "VG1 1T": "VG1 1T",
+        "VG1 1P": "VG1 1P",
+        "VG2 R1": "VG2 R1",
+        "VG3 R2": "VG3 R2",
+    }
         
-        selected_grade = st.selectbox(
-            "Klassetrinn",
-            options=list(grade_options.keys()),
-            index=4,
-            label_visibility="collapsed"
-        )
-        
+    selected_grade = st.selectbox(
+        "Klassetrinn",
+        options=list(grade_options.keys()),
+        index=4,
+        label_visibility="collapsed"
+    )
+    
         # Topic selection
-        topics_by_category = get_topics_for_grade(selected_grade)
-        topic_choices = ["-- Velg tema --", "✍️ Skriv eget tema..."]
-        for category, topics in topics_by_category.items():
-            for t in topics:
-                topic_choices.append(f"{t}")
-        
-        selected_topic_choice = st.selectbox(
-            "Velg tema",
-            options=topic_choices,
+    topics_by_category = get_topics_for_grade(selected_grade)
+    topic_choices = ["-- Velg tema --", "✍️ Skriv eget tema..."]
+    for category, topics in topics_by_category.items():
+        for t in topics:
+            topic_choices.append(f"{t}")
+    
+    selected_topic_choice = st.selectbox(
+        "Velg tema",
+        options=topic_choices,
+        label_visibility="collapsed"
+    )
+    
+    topic = ""
+    if selected_topic_choice == "✍️ Skriv eget tema...":
+        topic = st.text_input(
+            "Skriv tema",
+            placeholder="f.eks. Lineære funksjoner, Pytagoras, Brøk...",
             label_visibility="collapsed"
         )
-        
-        topic = ""
-        if selected_topic_choice == "✍️ Skriv eget tema...":
-            topic = st.text_input(
-                "Skriv tema",
-                placeholder="f.eks. Lineære funksjoner, Pytagoras, Brøk...",
-                label_visibility="collapsed"
-            )
-        elif selected_topic_choice != "-- Velg tema --":
-            topic = selected_topic_choice
-        
+    elif selected_topic_choice != "-- Velg tema --":
+        topic = selected_topic_choice
+    
         # Topic suggestions
         from src.tools import get_topic_suggestions
         suggestions = get_topic_suggestions(selected_grade, topic, num_suggestions=4)
@@ -1277,21 +1331,21 @@ def render_configuration():
         
         # Competency goals
         competency_goals = get_competency_goals(selected_grade)
-        if competency_goals:
-            with st.expander("🎯 Kompetansemål (LK20)", expanded=False):
-                st.markdown("""
+    if competency_goals:
+        with st.expander("🎯 Kompetansemål (LK20)", expanded=False):
+            st.markdown("""
                 <p style="color: #9090a0; font-size: 0.85rem; margin-bottom: 1rem;">
                 Velg hvilke kompetansemål materialet skal dekke.
-                </p>
-                """, unsafe_allow_html=True)
-                
-                selected_goals = []
-                for i, goal in enumerate(competency_goals):
-                    if st.checkbox(goal, key=f"goal_{i}"):
-                        selected_goals.append(goal)
-                
-                st.session_state.selected_competency_goals = selected_goals
-        
+            </p>
+            """, unsafe_allow_html=True)
+            
+            selected_goals = []
+            for i, goal in enumerate(competency_goals):
+                if st.checkbox(goal, key=f"goal_{i}"):
+                    selected_goals.append(goal)
+            
+            st.session_state.selected_competency_goals = selected_goals
+    
         # Formula library
         with st.expander("📐 Formelbibliotek", expanded=False):
             from src.tools import get_categories, get_formulas_by_category
@@ -1342,7 +1396,7 @@ def render_configuration():
             value=st.session_state.include_theory
         )
         st.session_state.include_examples = st.checkbox(
-            "💡 Eksempler",
+            "💡 Eksempler", 
             value=st.session_state.include_examples
         )
         st.session_state.include_exercises = st.checkbox(
@@ -1361,11 +1415,11 @@ def render_configuration():
             "💬 Tips og hint",
             value=st.session_state.include_tips
         )
-        
+    
         st.markdown("</div>", unsafe_allow_html=True)
         
         # Difficulty and exercise count
-        if st.session_state.include_exercises:
+    if st.session_state.include_exercises:
             st.markdown("""
             <div class="config-card">
                 <div class="card-header">
@@ -1377,11 +1431,11 @@ def render_configuration():
                 </div>
             """, unsafe_allow_html=True)
             
-            st.session_state.num_exercises = st.slider(
-                "Antall oppgaver",
-                min_value=3,
-                max_value=25,
-                value=st.session_state.num_exercises,
+        st.session_state.num_exercises = st.slider(
+            "Antall oppgaver",
+            min_value=3,
+            max_value=25,
+            value=st.session_state.num_exercises,
                 step=1
             )
             
@@ -1407,22 +1461,22 @@ def render_configuration():
             # Exercise types
             exercise_types = get_exercise_types()
             with st.expander("📝 Oppgavetyper", expanded=False):
-                selected_types = []
-                cols = st.columns(2)
-                for i, (type_key, type_info) in enumerate(exercise_types.items()):
-                    with cols[i % 2]:
-                        if st.checkbox(
-                            type_info["name"],
-                            value=type_key in st.session_state.selected_exercise_types,
-                            help=type_info["description"],
-                            key=f"extype_{type_key}"
-                        ):
-                            selected_types.append(type_key)
-                
-                if selected_types:
-                    st.session_state.selected_exercise_types = selected_types
-                else:
-                    st.session_state.selected_exercise_types = ["standard"]
+            selected_types = []
+            cols = st.columns(2)
+            for i, (type_key, type_info) in enumerate(exercise_types.items()):
+                with cols[i % 2]:
+                    if st.checkbox(
+                        type_info["name"],
+                        value=type_key in st.session_state.selected_exercise_types,
+                        help=type_info["description"],
+                        key=f"extype_{type_key}"
+                    ):
+                        selected_types.append(type_key)
+            
+            if selected_types:
+                st.session_state.selected_exercise_types = selected_types
+            else:
+                st.session_state.selected_exercise_types = ["standard"]
     
     return selected_grade, grade_options, topic, selected_material
 
@@ -1648,7 +1702,7 @@ def render_results():
                             st.session_state.answer_pdf_path = pdf_path
                             st.toast("✅ Fasit-ark klart!")
                             st.rerun()
-                        else:
+    else:
                             st.warning("Ingen løsninger funnet i dokumentet")
                     except Exception as e:
                         st.error(f"Kunne ikke lage fasit-ark: {e}")
@@ -1709,7 +1763,7 @@ def render_results():
                 with regen_col2:
                     if st.button("🔄 Regenerer denne seksjonen", use_container_width=True):
                         st.info("🚧 Seksjon-regenerering krever en ny AI-forespørsel. Denne funksjonen kommer snart!")
-            else:
+        else:
                 st.info("Ingen seksjoner funnet i dokumentet")
         else:
             st.info("Kunne ikke analysere dokumentet")
@@ -1764,7 +1818,7 @@ def render_results():
                     emoji = get_difficulty_emoji(ex.difficulty)
                     factors = ", ".join(ex.factors) if ex.factors else "Standard"
                     st.markdown(f"{emoji} **{ex.title}** - {ex.difficulty.capitalize()} ({factors})")
-        else:
+    else:
             st.info("Ingen oppgaver funnet å analysere")
     
     # QR code for answers
@@ -1805,8 +1859,151 @@ def render_results():
                     st.markdown("**Svar i QR-koden:**")
                     for num, ans in list(st.session_state.qr_answers.items())[:5]:
                         st.markdown(f"- Oppgave {num}: {ans[:50]}...")
-        else:
+    else:
             st.info("📦 QR-kode krever `qrcode`-pakken. Kjør: `pip install qrcode[pil]`")
+    
+    # LK20 Coverage Report
+    with st.expander("📊 LK20 Kompetansemål-dekning", expanded=False):
+        from src.tools import analyze_coverage, format_coverage_report, get_coverage_badge
+        
+        grade = st.session_state.get("selected_grade", "8. trinn")
+        topic = st.session_state.get("selected_topic", "")
+        
+        report = analyze_coverage(st.session_state.latex_result, grade, topic)
+        
+        # Coverage badge
+        color, label = get_coverage_badge(report.coverage_percentage)
+        st.markdown(f"""
+        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+            <div style="
+                background: {color};
+                color: white;
+                padding: 0.5rem 1rem;
+                border-radius: 20px;
+                font-weight: 600;
+            ">{int(report.coverage_percentage * 100)}% - {label}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Progress bar
+        st.progress(report.coverage_percentage)
+        
+        # Covered goals
+        if report.covered_goals:
+            st.markdown(f"**✅ Dekket ({len(report.covered_goals)}):**")
+            for result in report.covered_goals[:5]:
+                conf = int(result.confidence * 100)
+                st.markdown(f"- {result.goal.text[:70]}... ({conf}%)")
+        
+        # Uncovered goals
+        if report.uncovered_goals:
+            with st.expander(f"❌ Ikke dekket ({len(report.uncovered_goals)})"):
+                for goal in report.uncovered_goals:
+                    st.markdown(f"- {goal.text[:70]}...")
+        
+        # Recommendations
+        if report.recommendations:
+            st.markdown("**💡 Anbefalinger:**")
+            for rec in report.recommendations:
+                st.info(rec)
+    
+    # Rubric Generator
+    with st.expander("📋 Vurderingskriterier", expanded=False):
+        from src.tools import generate_rubric, rubric_to_markdown
+        
+        st.markdown("""
+        <p style="color: #9090a0; font-size: 0.85rem; margin-bottom: 1rem;">
+            Generer vurderingskriterier for dette innholdet.
+        </p>
+        """, unsafe_allow_html=True)
+        
+        grade = st.session_state.get("selected_grade", "8. trinn")
+        topic = st.session_state.get("selected_topic", "Matematikk")
+        
+        rubric = generate_rubric(topic, grade, num_exercises=10)
+        
+        # Display rubric summary
+        col_r1, col_r2, col_r3 = st.columns(3)
+        with col_r1:
+            st.metric("Maks poeng", rubric.max_points)
+        with col_r2:
+            st.metric("Bestått", f"{int(rubric.passing_threshold * 100)}%")
+        with col_r3:
+            st.metric("Kriterier", len(rubric.criteria))
+        
+        # Show criteria
+        for criterion in rubric.criteria:
+            weight = int(criterion.weight * 100)
+            with st.expander(f"{criterion.name} ({weight}%)"):
+                st.markdown(f"*{criterion.description}*")
+                for grade_val, desc in list(criterion.levels.items())[:3]:
+                    st.markdown(f"**{grade_val}:** {desc}")
+        
+        # Download rubric
+        rubric_md = rubric_to_markdown(rubric)
+        st.download_button(
+            "⬇️ Last ned vurderingskriterier",
+            data=rubric_md,
+            file_name=f"vurdering_{topic.replace(' ', '_')}.md",
+            mime="text/markdown",
+            use_container_width=True
+        )
+    
+    # Differentiation Assistant
+    with st.expander("🎯 Differensiering", expanded=False):
+        from src.tools import LEVEL_CONFIG, get_differentiation_summary
+        
+        st.markdown("""
+        <p style="color: #9090a0; font-size: 0.85rem; margin-bottom: 1rem;">
+            Generer innhold på tre nivåer for tilpasset opplæring.
+        </p>
+        """, unsafe_allow_html=True)
+        
+        # Show level options
+        for level_key, config in LEVEL_CONFIG.items():
+            col_d1, col_d2 = st.columns([3, 1])
+            with col_d1:
+                st.markdown(f"""
+                **{config['emoji']} {config['name']}**  
+                {config['description']}
+                """)
+            with col_d2:
+                if st.button(f"Generer", key=f"diff_{level_key}", use_container_width=True):
+                    st.info(f"🚧 Generering av {config['name']}-nivå krever en ny AI-forespørsel. Kommer snart!")
+        
+        st.divider()
+        st.markdown("**📊 Oversikt:**")
+        st.markdown("""
+        | Nivå | Oppgaver | Est. tid |
+        |------|----------|----------|
+        | 🟢 Grunnleggende | 12 | ~36 min |
+        | 🟡 Standard | 10 | ~50 min |
+        | 🔴 Utfordring | 6 | ~60 min |
+        """)
+    
+    # Add to Favorites
+    st.divider()
+    col_fav1, col_fav2 = st.columns([3, 1])
+    with col_fav1:
+        fav_name = st.text_input(
+            "Lagre som favoritt",
+            placeholder="Gi favoritten et navn...",
+            label_visibility="collapsed"
+        )
+    with col_fav2:
+        if st.button("⭐ Lagre", use_container_width=True, disabled=not fav_name):
+            from src.tools import add_favorite
+            
+            add_favorite(
+                name=fav_name,
+                topic=st.session_state.get("selected_topic", "Matematikk"),
+                grade_level=st.session_state.get("selected_grade", "8. trinn"),
+                material_type=st.session_state.get("material_type", "arbeidsark"),
+                latex_content=st.session_state.latex_result,
+                pdf_path=st.session_state.get("pdf_path"),
+                rating=4
+            )
+            st.toast(f"⭐ Lagret som favoritt: {fav_name}")
 
 
 # ============================================================================

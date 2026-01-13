@@ -99,6 +99,63 @@ from .template_builder import (
     PRESET_TEMPLATES,
 )
 
+from .rubric_generator import (
+    Rubric,
+    RubricCriterion,
+    generate_rubric,
+    rubric_to_latex,
+    rubric_to_markdown,
+    get_grade_from_score,
+    generate_quick_rubric,
+    MATH_CRITERIA,
+)
+
+from .lk20_coverage import (
+    CompetencyGoal,
+    CoverageResult,
+    CoverageReport,
+    get_goals_for_grade,
+    analyze_coverage,
+    format_coverage_report,
+    get_coverage_badge,
+    LK20_GOALS,
+)
+
+from .differentiation import (
+    DifferentiatedContent,
+    DifferentiatedSet,
+    LEVEL_CONFIG,
+    get_level_prompt,
+    adjust_content_difficulty,
+    create_level_header,
+    create_differentiated_set,
+    get_differentiation_summary,
+    merge_differentiated_pdf,
+    get_level_recommendations,
+)
+
+from .favorites import (
+    Favorite,
+    load_favorites,
+    save_favorites,
+    add_favorite,
+    get_favorite,
+    update_favorite,
+    delete_favorite,
+    toggle_pin,
+    get_pinned_favorites,
+    get_recent_favorites,
+    get_top_rated_favorites,
+    get_most_used_favorites,
+    search_favorites,
+    get_favorites_by_grade,
+    get_favorites_by_tag,
+    get_all_tags,
+    get_favorites_stats,
+    render_star_rating,
+    format_favorite_card,
+)
+
 __all__ = [
     # PDF tools
     "compile_latex_to_pdf",
@@ -176,4 +233,53 @@ __all__ = [
     "import_template",
     "get_preset_templates",
     "PRESET_TEMPLATES",
+    # Rubric generator
+    "Rubric",
+    "RubricCriterion",
+    "generate_rubric",
+    "rubric_to_latex",
+    "rubric_to_markdown",
+    "get_grade_from_score",
+    "generate_quick_rubric",
+    "MATH_CRITERIA",
+    # LK20 coverage
+    "CompetencyGoal",
+    "CoverageResult",
+    "CoverageReport",
+    "get_goals_for_grade",
+    "analyze_coverage",
+    "format_coverage_report",
+    "get_coverage_badge",
+    "LK20_GOALS",
+    # Differentiation
+    "DifferentiatedContent",
+    "DifferentiatedSet",
+    "LEVEL_CONFIG",
+    "get_level_prompt",
+    "adjust_content_difficulty",
+    "create_level_header",
+    "create_differentiated_set",
+    "get_differentiation_summary",
+    "merge_differentiated_pdf",
+    "get_level_recommendations",
+    # Favorites
+    "Favorite",
+    "load_favorites",
+    "save_favorites",
+    "add_favorite",
+    "get_favorite",
+    "update_favorite",
+    "delete_favorite",
+    "toggle_pin",
+    "get_pinned_favorites",
+    "get_recent_favorites",
+    "get_top_rated_favorites",
+    "get_most_used_favorites",
+    "search_favorites",
+    "get_favorites_by_grade",
+    "get_favorites_by_tag",
+    "get_all_tags",
+    "get_favorites_stats",
+    "render_star_rating",
+    "format_favorite_card",
 ]
