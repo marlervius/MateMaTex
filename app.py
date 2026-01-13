@@ -898,6 +898,82 @@ def render_sidebar():
         </div>
         """, unsafe_allow_html=True)
         
+        # Theme toggle
+        from src.tools import get_theme, generate_theme_css, DARK_THEME, LIGHT_THEME
+        
+        col_theme, col_lang = st.columns(2)
+        with col_theme:
+            theme_mode = st.selectbox(
+                "🎨",
+                options=["Mørk", "Lys"],
+                index=0 if st.session_state.get("theme_mode", "dark") == "dark" else 1,
+                label_visibility="collapsed"
+            )
+            st.session_state.theme_mode = "dark" if theme_mode == "Mørk" else "light"
+        
+        # Apply theme CSS
+        theme = get_theme(st.session_state.get("theme_mode", "dark"))
+        st.markdown(generate_theme_css(theme), unsafe_allow_html=True)
+        
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        
+        # Global search
+        from src.tools import global_search, get_type_icon, get_type_label
+        
+        search_query = st.text_input(
+            "🔍 Søk",
+            placeholder="Søk i alt innhold...",
+            label_visibility="collapsed",
+            key="global_search_input"
+        )
+        
+        if search_query and len(search_query) >= 2:
+            search_results = global_search(search_query, limit=5)
+            
+            if search_results:
+                st.markdown(f"""
+                <p style="color: #9090a0; font-size: 0.75rem; margin: 0.5rem 0;">
+                    Fant {len(search_results)} resultater
+                </p>
+                """, unsafe_allow_html=True)
+                
+                for result in search_results[:5]:
+                    icon = get_type_icon(result.type)
+                    if st.button(
+                        f"{icon} {result.title[:30]}...",
+                        key=f"sr_{result.id}",
+                        use_container_width=True,
+                        help=f"{get_type_label(result.type)}: {result.snippet[:50]}..."
+                    ):
+                        # Handle result click based on type
+                        if result.type == "favorite":
+                            from src.tools import get_favorite
+                            fav = get_favorite(result.id)
+                            if fav:
+                                st.session_state.latex_result = fav.latex_content
+                                st.session_state.generation_complete = True
+                                st.toast(f"📄 Lastet: {fav.name}")
+                                st.rerun()
+                        elif result.type == "exercise":
+                            from src.tools import get_exercise
+                            ex = get_exercise(result.id)
+                            if ex:
+                                st.session_state.selected_exercise = ex
+                                st.toast(f"📝 Lastet oppgave: {ex.title}")
+                        elif result.type == "history":
+                            tex = get_tex_content(result.id)
+                            if tex:
+                                st.session_state.latex_result = tex
+                                st.session_state.generation_complete = True
+                                st.toast(f"📜 Lastet fra historikk")
+                                st.rerun()
+            else:
+                st.markdown("""
+                <p style="color: #606070; font-size: 0.8rem; text-align: center; padding: 0.5rem;">
+                    Ingen resultater funnet
+                </p>
+                """, unsafe_allow_html=True)
+        
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
         # Language selection
@@ -1162,6 +1238,83 @@ def render_sidebar():
                 Ingen favoritter ennå
             </div>
             """, unsafe_allow_html=True)
+        
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        
+        # Folders & Tags section
+        with st.expander("📁 Mapper og tags", expanded=False):
+            from src.tools import (
+                load_folders, create_folder, delete_folder,
+                load_tags, create_tag, delete_tag,
+                FOLDER_COLORS, FOLDER_ICONS, TAG_COLORS
+            )
+            
+            # Folders
+            st.markdown("**📁 Mapper**")
+            folders = load_folders()
+            
+            if folders:
+                for folder in folders[:5]:
+                    col_f1, col_f2 = st.columns([4, 1])
+                    with col_f1:
+                        st.markdown(f"""
+                        <div style="
+                            display: flex;
+                            align-items: center;
+                            gap: 0.5rem;
+                            padding: 0.25rem;
+                        ">
+                            <span style="color: {folder.color};">{folder.icon}</span>
+                            <span style="color: #e2e8f0; font-size: 0.85rem;">{folder.name}</span>
+                            <span style="color: #606070; font-size: 0.7rem;">({folder.item_count})</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with col_f2:
+                        if st.button("🗑️", key=f"del_folder_{folder.id}", help="Slett"):
+                            delete_folder(folder.id)
+                            st.rerun()
+            
+            # Create new folder
+            with st.container():
+                new_folder_name = st.text_input("Ny mappe", placeholder="Mappenavn...", key="new_folder", label_visibility="collapsed")
+                if st.button("➕ Lag mappe", use_container_width=True, disabled=not new_folder_name):
+                    create_folder(new_folder_name)
+                    st.toast(f"📁 Mappe '{new_folder_name}' opprettet!")
+                    st.rerun()
+            
+            st.markdown("---")
+            
+            # Tags
+            st.markdown("**🏷️ Tags**")
+            tags = load_tags()
+            
+            # Show tags as pills
+            tags_html = ""
+            for tag in tags[:8]:
+                tags_html += f"""
+                <span style="
+                    display: inline-block;
+                    background: {tag.color}20;
+                    color: {tag.color};
+                    padding: 0.15rem 0.5rem;
+                    border-radius: 12px;
+                    font-size: 0.7rem;
+                    margin: 0.1rem;
+                ">{tag.name}</span>
+                """
+            st.markdown(f'<div style="margin-bottom: 0.5rem;">{tags_html}</div>', unsafe_allow_html=True)
+            
+            # Create new tag
+            col_tag1, col_tag2 = st.columns([3, 1])
+            with col_tag1:
+                new_tag_name = st.text_input("Ny tag", placeholder="Tagnavn...", key="new_tag", label_visibility="collapsed")
+            with col_tag2:
+                new_tag_color = st.selectbox("Farge", options=TAG_COLORS, key="new_tag_color", label_visibility="collapsed")
+            
+            if st.button("🏷️ Lag tag", use_container_width=True, disabled=not new_tag_name):
+                create_tag(new_tag_name, new_tag_color)
+                st.toast(f"🏷️ Tag '{new_tag_name}' opprettet!")
+                st.rerun()
         
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
@@ -1939,6 +2092,74 @@ def render_results():
                         st.markdown(f"- Oppgave {num}: {ans[:50]}...")
         else:
             st.info("📦 QR-kode krever `qrcode`-pakken. Kjør: `pip install qrcode[pil]`")
+    
+    # GeoGebra Integration
+    with st.expander("📊 GeoGebra Grafer", expanded=False):
+        from src.tools import (
+            get_template_list, create_graph_from_template, 
+            get_geogebra_embed_html, extract_functions_from_content
+        )
+        
+        st.markdown("""
+        <p style="color: #9090a0; font-size: 0.85rem; margin-bottom: 1rem;">
+            Lag interaktive grafer med GeoGebra.
+        </p>
+        """, unsafe_allow_html=True)
+        
+        # Template selector
+        templates = get_template_list()
+        template_options = {t["title"]: t["key"] for t in templates}
+        
+        selected_template = st.selectbox(
+            "Velg grafmal",
+            options=list(template_options.keys()),
+            label_visibility="collapsed"
+        )
+        
+        col_ggb1, col_ggb2 = st.columns(2)
+        
+        with col_ggb1:
+            if st.button("📊 Vis graf", use_container_width=True):
+                template_key = template_options[selected_template]
+                graph = create_graph_from_template(template_key)
+                if graph:
+                    st.session_state.geogebra_graph = graph
+                    st.toast(f"✅ Graf opprettet: {graph['title']}")
+                    st.rerun()
+        
+        with col_ggb2:
+            if st.button("🔍 Fra innhold", use_container_width=True, help="Finn funksjoner i dokumentet"):
+                functions = extract_functions_from_content(st.session_state.latex_result)
+                if functions:
+                    st.session_state.geogebra_graph = {
+                        "title": "Funksjoner fra dokumentet",
+                        "commands": functions,
+                        "description": f"Fant {len(functions)} funksjoner",
+                    }
+                    st.toast(f"✅ Fant {len(functions)} funksjoner!")
+                    st.rerun()
+                else:
+                    st.warning("Fant ingen funksjoner i dokumentet")
+        
+        # Show GeoGebra graph if created
+        if hasattr(st.session_state, 'geogebra_graph') and st.session_state.geogebra_graph:
+            graph = st.session_state.geogebra_graph
+            st.markdown(f"**{graph['title']}**")
+            st.caption(graph.get('description', ''))
+            
+            # Embed GeoGebra
+            embed_html = get_geogebra_embed_html(
+                commands=graph['commands'],
+                width=500,
+                height=350,
+                show_toolbar=True
+            )
+            st.markdown(embed_html, unsafe_allow_html=True)
+            
+            # Show commands
+            with st.expander("Se GeoGebra-kommandoer"):
+                for cmd in graph['commands']:
+                    st.code(cmd, language=None)
     
     # LK20 Coverage Report
     with st.expander("📊 LK20 Kompetansemål-dekning", expanded=False):
