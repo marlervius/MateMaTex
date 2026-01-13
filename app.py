@@ -1159,6 +1159,35 @@ def render_configuration():
         elif selected_topic_choice != "-- Velg tema --":
             topic = selected_topic_choice
         
+        # Topic suggestions
+        from src.tools import get_topic_suggestions
+        suggestions = get_topic_suggestions(selected_grade, topic, num_suggestions=4)
+        
+        if suggestions:
+            st.markdown("""
+            <p style="color: #9090a0; font-size: 0.8rem; margin-top: 0.5rem; margin-bottom: 0.3rem;">
+                💡 Foreslåtte emner:
+            </p>
+            """, unsafe_allow_html=True)
+            
+            suggestion_cols = st.columns(4)
+            for i, sugg in enumerate(suggestions[:4]):
+                with suggestion_cols[i]:
+                    difficulty_emoji = {"lett": "🟢", "middels": "🟡", "vanskelig": "🔴"}.get(sugg.get("difficulty", ""), "")
+                    if st.button(
+                        f"{difficulty_emoji} {sugg['topic'][:15]}{'...' if len(sugg['topic']) > 15 else ''}",
+                        key=f"sugg_{i}",
+                        help=sugg.get("description", ""),
+                        use_container_width=True
+                    ):
+                        st.session_state.suggested_topic = sugg['topic']
+                        st.rerun()
+            
+            # Apply suggested topic if selected
+            if hasattr(st.session_state, 'suggested_topic') and st.session_state.suggested_topic:
+                topic = st.session_state.suggested_topic
+                st.session_state.suggested_topic = None
+        
         st.markdown("</div>", unsafe_allow_html=True)
         
         # Material type
@@ -1492,6 +1521,158 @@ def render_results():
     # View-only LaTeX code
     with st.expander("👁️ Se LaTeX-kode (kun visning)"):
         st.code(st.session_state.latex_result, language="latex")
+    
+    # Print-friendly version
+    with st.expander("🖨️ Utskriftsvennlig versjon", expanded=False):
+        st.markdown("""
+        <p style="color: #9090a0; font-size: 0.85rem; margin-bottom: 1rem;">
+            Generer en versjon optimalisert for utskrift (gråtoner, tynn ramme, mindre blekk).
+        </p>
+        """, unsafe_allow_html=True)
+        
+        col_print1, col_print2 = st.columns(2)
+        
+        with col_print1:
+            if st.button("📄 Lag utskriftsversjon", use_container_width=True):
+                from src.tools import create_print_version, compile_latex_to_pdf
+                with st.spinner("Lager utskriftsversjon..."):
+                    try:
+                        print_latex = create_print_version(st.session_state.latex_result)
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        pdf_path = compile_latex_to_pdf(print_latex, f"print_{timestamp}")
+                        st.session_state.print_pdf_path = pdf_path
+                        st.toast("✅ Utskriftsversjon klar!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Kunne ikke lage utskriftsversjon: {e}")
+        
+        with col_print2:
+            if st.button("📋 Lag kun fasit-ark", use_container_width=True):
+                from src.tools import create_answer_sheet, compile_latex_to_pdf
+                with st.spinner("Lager fasit-ark..."):
+                    try:
+                        answer_latex = create_answer_sheet(st.session_state.latex_result)
+                        if answer_latex:
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            pdf_path = compile_latex_to_pdf(answer_latex, f"fasit_{timestamp}")
+                            st.session_state.answer_pdf_path = pdf_path
+                            st.toast("✅ Fasit-ark klart!")
+                            st.rerun()
+                        else:
+                            st.warning("Ingen løsninger funnet i dokumentet")
+                    except Exception as e:
+                        st.error(f"Kunne ikke lage fasit-ark: {e}")
+        
+        # Download print PDFs if available
+        if hasattr(st.session_state, 'print_pdf_path') and st.session_state.print_pdf_path:
+            if Path(st.session_state.print_pdf_path).exists():
+                with open(st.session_state.print_pdf_path, "rb") as f:
+                    st.download_button(
+                        "⬇️ Last ned utskriftsversjon",
+                        data=f.read(),
+                        file_name=Path(st.session_state.print_pdf_path).name,
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+        
+        if hasattr(st.session_state, 'answer_pdf_path') and st.session_state.answer_pdf_path:
+            if Path(st.session_state.answer_pdf_path).exists():
+                with open(st.session_state.answer_pdf_path, "rb") as f:
+                    st.download_button(
+                        "⬇️ Last ned fasit-ark",
+                        data=f.read(),
+                        file_name=Path(st.session_state.answer_pdf_path).name,
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+    
+    # Section regeneration
+    with st.expander("🔄 Regenerer seksjon", expanded=False):
+        st.markdown("""
+        <p style="color: #9090a0; font-size: 0.85rem; margin-bottom: 1rem;">
+            Velg en seksjon og generer den på nytt med AI.
+        </p>
+        """, unsafe_allow_html=True)
+        
+        from src.tools import get_section_summary
+        sections = get_section_summary(st.session_state.latex_result)
+        
+        if sections:
+            section_options = [f"{s['name']} ({s['exercises']} oppgaver)" for s in sections if s['type'] in ['section', 'subsection']]
+            
+            if section_options:
+                selected_section = st.selectbox(
+                    "Velg seksjon",
+                    options=section_options,
+                    label_visibility="collapsed"
+                )
+                
+                regen_col1, regen_col2 = st.columns(2)
+                
+                with regen_col1:
+                    regen_instructions = st.text_input(
+                        "Instruksjoner (valgfritt)",
+                        placeholder="f.eks. Gjør oppgavene vanskeligere...",
+                        label_visibility="collapsed"
+                    )
+                
+                with regen_col2:
+                    if st.button("🔄 Regenerer denne seksjonen", use_container_width=True):
+                        st.info("🚧 Seksjon-regenerering krever en ny AI-forespørsel. Denne funksjonen kommer snart!")
+            else:
+                st.info("Ingen seksjoner funnet i dokumentet")
+        else:
+            st.info("Kunne ikke analysere dokumentet")
+
+
+# ============================================================================
+# BATCH GENERATION
+# ============================================================================
+def render_batch_generation():
+    """Render the batch generation section."""
+    st.markdown("""
+    <div class="config-card">
+        <div class="card-header">
+            <div class="card-icon violet">📦</div>
+            <div>
+                <p class="card-title">Batch-generering</p>
+                <p class="card-description">Generer flere emner samtidig</p>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    batch_topics = st.text_area(
+        "Emner (ett per linje)",
+        placeholder="Brøk\nProsent\nLikninger\nFunksjoner",
+        height=100,
+        label_visibility="collapsed"
+    )
+    
+    if batch_topics:
+        topics = [t.strip() for t in batch_topics.strip().split('\n') if t.strip()]
+        
+        from src.tools import estimate_batch_time
+        min_time, max_time = estimate_batch_time(len(topics))
+        
+        st.markdown(f"""
+        <div style="
+            text-align: center;
+            padding: 0.5rem;
+            background: rgba(139, 92, 246, 0.1);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: 8px;
+            margin: 0.5rem 0;
+            color: #8b5cf6;
+            font-size: 0.85rem;
+        ">
+            📦 <strong>{len(topics)}</strong> emner • ⏱️ Estimert: <strong>{min_time}-{max_time} min</strong>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("🚀 Start batch-generering", use_container_width=True):
+            st.info("🚧 Batch-generering er under utvikling. Kommer snart med full støtte!")
+    
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ============================================================================
@@ -1514,6 +1695,12 @@ def main():
     
     # Render configuration
     selected_grade, grade_options, topic, selected_material = render_configuration()
+    
+    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+    
+    # Batch generation toggle
+    with st.expander("📦 Batch-generering (flere emner)", expanded=False):
+        render_batch_generation()
     
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
     
