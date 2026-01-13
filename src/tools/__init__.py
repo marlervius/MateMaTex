@@ -259,6 +259,35 @@ from .geogebra import (
     GEOGEBRA_COMMAND_REFERENCE,
 )
 
+from .usage_dashboard import (
+    UsageStats,
+    record_generation,
+    get_usage_stats,
+    get_dashboard_html,
+    get_activity_chart_data,
+    get_achievements,
+    render_achievements_html,
+)
+
+from .pptx_exporter import (
+    is_pptx_available,
+    SlideContent,
+    parse_latex_to_slides,
+    create_pptx,
+    latex_to_pptx,
+    get_pptx_preview,
+)
+
+from .watermark import (
+    WatermarkConfig,
+    add_watermark_to_latex,
+    create_header_footer_latex,
+    get_logo_latex,
+    SCHOOL_TEMPLATES,
+    apply_template as apply_watermark_template,
+    render_watermark_preview_html,
+)
+
 __all__ = [
     # PDF tools
     "compile_latex_to_pdf",
@@ -474,4 +503,27 @@ __all__ = [
     "get_template_list",
     "render_template_selector_html",
     "GEOGEBRA_COMMAND_REFERENCE",
+    # Usage dashboard
+    "UsageStats",
+    "record_generation",
+    "get_usage_stats",
+    "get_dashboard_html",
+    "get_activity_chart_data",
+    "get_achievements",
+    "render_achievements_html",
+    # PowerPoint export
+    "is_pptx_available",
+    "SlideContent",
+    "parse_latex_to_slides",
+    "create_pptx",
+    "latex_to_pptx",
+    "get_pptx_preview",
+    # Watermark
+    "WatermarkConfig",
+    "add_watermark_to_latex",
+    "create_header_footer_latex",
+    "get_logo_latex",
+    "SCHOOL_TEMPLATES",
+    "apply_watermark_template",
+    "render_watermark_preview_html",
 ]

@@ -1381,6 +1381,71 @@ def render_sidebar():
             </div>
             """, unsafe_allow_html=True)
         
+        # Usage Dashboard
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        
+        with st.expander("📊 Bruksdashboard", expanded=False):
+            from src.tools import get_usage_stats, get_dashboard_html, get_achievements, render_achievements_html
+            
+            stats = get_usage_stats()
+            
+            if stats.total_generations > 0:
+                st.markdown(get_dashboard_html(stats), unsafe_allow_html=True)
+                
+                # Achievements
+                achievements = get_achievements(stats)
+                if achievements:
+                    st.markdown("**🏆 Dine badges:**")
+                    st.markdown(render_achievements_html(achievements), unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div style="text-align: center; padding: 1rem; color: #606070;">
+                    <div style="font-size: 2rem; margin-bottom: 0.5rem;">📊</div>
+                    <p style="font-size: 0.85rem;">Ingen data ennå - generer noe innhold!</p>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        # Watermark settings
+        with st.expander("🖼️ Vannmerke / Logo", expanded=False):
+            st.markdown("""
+            <p style="color: #9090a0; font-size: 0.85rem; margin-bottom: 0.75rem;">
+                Legg til skolelogo og navn på PDF-dokumenter.
+            </p>
+            """, unsafe_allow_html=True)
+            
+            # School name
+            school_name = st.text_input(
+                "Skolenavn",
+                value=st.session_state.get("school_name", ""),
+                placeholder="F.eks. Trondheim videregående skole",
+                key="watermark_school_name"
+            )
+            st.session_state.school_name = school_name
+            
+            # Template selection
+            from src.tools import SCHOOL_TEMPLATES, render_watermark_preview_html
+            
+            template_options = {t["name"]: key for key, t in SCHOOL_TEMPLATES.items()}
+            selected_template_name = st.selectbox(
+                "Mal",
+                options=list(template_options.keys()),
+                key="watermark_template"
+            )
+            st.session_state.watermark_template = template_options.get(selected_template_name, "generic")
+            
+            # Preview
+            if school_name:
+                st.markdown("**Forhåndsvisning:**")
+                preview_html = render_watermark_preview_html(school_name, st.session_state.watermark_template)
+                st.markdown(preview_html, unsafe_allow_html=True)
+            
+            # Enable watermark checkbox
+            st.session_state.enable_watermark = st.checkbox(
+                "Aktiver vannmerke på PDF",
+                value=st.session_state.get("enable_watermark", False),
+                key="watermark_enabled"
+            )
+        
         # Keyboard shortcuts help
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
@@ -1825,6 +1890,37 @@ def render_results():
                         data=f.read(),
                         file_name=word_path.name,
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True
+                    )
+    
+    with col4:
+        # PowerPoint export
+        from src.tools import is_pptx_available, latex_to_pptx
+        
+        if is_pptx_available():
+            if st.button("📽️ PowerPoint", use_container_width=True):
+                with st.spinner("Lager presentasjon..."):
+                    output_path = Path("output") / f"matematikk_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pptx"
+                    output_path.parent.mkdir(exist_ok=True)
+                    pptx_path = latex_to_pptx(st.session_state.latex_result, str(output_path))
+                    if pptx_path and Path(pptx_path).exists():
+                        st.session_state.pptx_path = pptx_path
+                        st.toast("✅ Presentasjon opprettet!")
+                        st.rerun()
+        else:
+            st.button("📽️ PPTX", disabled=True, use_container_width=True, help="Installer python-pptx")
+    
+    # Show PPTX download if available
+    if hasattr(st.session_state, 'pptx_path') and st.session_state.pptx_path:
+        pptx_path = Path(st.session_state.pptx_path)
+        if pptx_path.exists():
+            with col4:
+                with open(pptx_path, "rb") as f:
+                    st.download_button(
+                        "⬇️ Last ned PPTX",
+                        data=f.read(),
+                        file_name=pptx_path.name,
+                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                         use_container_width=True
                     )
     
@@ -2559,6 +2655,18 @@ def main():
             
             progress_placeholder.empty()
             
+            # Apply watermark if enabled
+            if st.session_state.get("enable_watermark") and st.session_state.get("school_name"):
+                from src.tools import apply_watermark_template
+                latex_result = apply_watermark_template(
+                    latex_result,
+                    template_key=st.session_state.get("watermark_template", "generic"),
+                    school_name=st.session_state.school_name,
+                    document_title=topic,
+                    class_name=selected_grade
+                )
+                st.session_state.latex_result = latex_result
+            
             # Save files
             with st.spinner("Lagrer filer..."):
                 tex_path = save_tex_file(latex_result, filename)
@@ -2570,6 +2678,15 @@ def main():
             
             # Add to history
             add_to_history(topic, selected_grade, selected_material, pdf_path, latex_result)
+            
+            # Record usage statistics
+            from src.tools import record_generation
+            record_generation(
+                topic=topic,
+                grade=selected_grade,
+                material_type=selected_material,
+                num_exercises=st.session_state.get("num_exercises", 10)
+            )
             
             st.session_state.generation_complete = True
             st.session_state.is_generating = False
