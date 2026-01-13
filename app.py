@@ -1,369 +1,720 @@
 """
 MateMaTeX - Matematikkverkstedet AI
 AI Editorial Team for generating math worksheets and chapters in LaTeX/PDF format.
+Redesigned with enhanced UX and visual aesthetics.
 """
 
 import os
+import json
+from datetime import datetime
+from pathlib import Path
 
 # Load environment variables BEFORE any other imports
 from dotenv import load_dotenv
 load_dotenv()
 
 import streamlit as st
-from pathlib import Path
-from datetime import datetime
 
 # Page configuration
 st.set_page_config(
     page_title="MateMaTeX",
-    page_icon="📐",
-    layout="centered",
-    initial_sidebar_state="collapsed"
+    page_icon="◇",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# Dark theme CSS
+# ============================================================================
+# CUSTOM CSS - Modern, Distinctive Design
+# ============================================================================
 st.markdown("""
 <style>
-    /* Import Google Font */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    /* Import distinctive fonts */
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
     
-    /* Global dark theme */
+    /* CSS Variables for theming */
+    :root {
+        --bg-primary: #0a0a0f;
+        --bg-secondary: #12121a;
+        --bg-card: #1a1a24;
+        --bg-card-hover: #22222e;
+        --border-subtle: #2a2a3a;
+        --border-accent: #3d3d52;
+        --text-primary: #f0f0f5;
+        --text-secondary: #9090a0;
+        --text-muted: #606070;
+        --accent-gold: #f0b429;
+        --accent-gold-dim: #c4941f;
+        --accent-amber: #f59e0b;
+        --accent-emerald: #10b981;
+        --accent-rose: #f43f5e;
+        --accent-violet: #8b5cf6;
+        --gradient-gold: linear-gradient(135deg, #f0b429 0%, #f59e0b 50%, #d97706 100%);
+        --gradient-dark: linear-gradient(180deg, #0a0a0f 0%, #12121a 100%);
+        --shadow-lg: 0 10px 40px rgba(0,0,0,0.4);
+        --shadow-glow: 0 0 30px rgba(240,180,41,0.15);
+    }
+    
+    /* Global styles */
     .stApp {
-        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-        font-family: 'Inter', sans-serif;
+        background: var(--gradient-dark);
+        font-family: 'Outfit', sans-serif;
     }
     
-    /* Hide default Streamlit elements */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    
-    /* Main container */
-    .main-container {
-        max-width: 600px;
-        margin: 0 auto;
-        padding: 2rem 1rem;
+    /* Hide Streamlit branding */
+    #MainMenu, footer, header, .stDeployButton {
+        visibility: hidden;
     }
     
-    /* Logo and title */
-    .logo-title {
+    /* Sidebar styling */
+    section[data-testid="stSidebar"] {
+        background: var(--bg-secondary);
+        border-right: 1px solid var(--border-subtle);
+    }
+    
+    section[data-testid="stSidebar"] .stMarkdown {
+        color: var(--text-primary);
+    }
+    
+    /* Main content area */
+    .main .block-container {
+        padding: 2rem 3rem;
+        max-width: 1200px;
+    }
+    
+    /* Hero section */
+    .hero-container {
         text-align: center;
+        padding: 2rem 0 3rem 0;
         margin-bottom: 2rem;
     }
-    .logo-title h1 {
-        color: #f8fafc;
-        font-size: 2rem;
-        font-weight: 700;
-        margin: 0;
-    }
-    .logo-title p {
-        color: #94a3b8;
-        font-size: 0.95rem;
-        margin-top: 0.5rem;
-    }
     
-    /* Card styling */
-    .input-card {
-        background: #1e293b;
-        border: 1px solid #334155;
-        border-radius: 12px;
-        padding: 1.25rem;
-        margin-bottom: 1rem;
-    }
-    
-    .card-label {
-        color: #94a3b8;
-        font-size: 0.85rem;
-        font-weight: 500;
-        margin-bottom: 0.5rem;
-        display: flex;
+    .hero-badge {
+        display: inline-flex;
         align-items: center;
         gap: 0.5rem;
-    }
-    
-    /* Custom select boxes */
-    .stSelectbox > div > div {
-        background: #0f172a !important;
-        border: 1px solid #334155 !important;
-        border-radius: 10px !important;
-        color: #f8fafc !important;
-    }
-    
-    .stSelectbox > div > div:hover {
-        border-color: #3b82f6 !important;
-    }
-    
-    /* Custom text input */
-    .stTextInput > div > div > input {
-        background: #0f172a !important;
-        border: 1px solid #334155 !important;
-        border-radius: 10px !important;
-        color: #f8fafc !important;
-        padding: 0.75rem 1rem !important;
-    }
-    
-    .stTextInput > div > div > input:focus {
-        border-color: #3b82f6 !important;
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
-    }
-    
-    .stTextInput > div > div > input::placeholder {
-        color: #64748b !important;
-    }
-    
-    /* Toggle cards section */
-    .toggle-section {
-        background: #1e293b;
-        border: 1px solid #334155;
-        border-radius: 12px;
-        padding: 1rem;
-        margin-bottom: 1rem;
-    }
-    
-    .toggle-header {
-        color: #94a3b8;
-        font-size: 0.85rem;
+        background: rgba(240, 180, 41, 0.1);
+        border: 1px solid rgba(240, 180, 41, 0.2);
+        padding: 0.4rem 1rem;
+        border-radius: 100px;
+        font-size: 0.8rem;
+        color: var(--accent-gold);
+        margin-bottom: 1.5rem;
         font-weight: 500;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        cursor: pointer;
-        margin-bottom: 1rem;
+        letter-spacing: 0.5px;
     }
     
-    .toggle-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 0.75rem;
+    .hero-title {
+        font-size: 3.5rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #fff 0%, #f0b429 50%, #f59e0b 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin: 0 0 1rem 0;
+        letter-spacing: -1px;
     }
     
-    .toggle-card {
-        background: #0f172a;
-        border: 1px solid #334155;
-        border-radius: 10px;
-        padding: 1rem;
-        cursor: pointer;
+    .hero-subtitle {
+        font-size: 1.15rem;
+        color: var(--text-secondary);
+        max-width: 500px;
+        margin: 0 auto;
+        line-height: 1.6;
+    }
+    
+    /* Card components */
+    .config-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin-bottom: 1.25rem;
         transition: all 0.2s ease;
     }
     
-    .toggle-card:hover {
-        border-color: #3b82f6;
+    .config-card:hover {
+        border-color: var(--border-accent);
+        background: var(--bg-card-hover);
     }
     
-    .toggle-card.active {
-        background: rgba(59, 130, 246, 0.15);
-        border-color: #3b82f6;
-    }
-    
-    .toggle-card-title {
-        color: #f8fafc;
-        font-size: 0.9rem;
-        font-weight: 600;
+    .card-header {
         display: flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+    
+    .card-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.1rem;
+    }
+    
+    .card-icon.gold { background: rgba(240, 180, 41, 0.15); }
+    .card-icon.emerald { background: rgba(16, 185, 129, 0.15); }
+    .card-icon.violet { background: rgba(139, 92, 246, 0.15); }
+    .card-icon.rose { background: rgba(244, 63, 94, 0.15); }
+    
+    .card-title {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin: 0;
+    }
+    
+    .card-description {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        margin: 0;
+    }
+    
+    /* Template cards */
+    .template-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin: 1rem 0;
+    }
+    
+    .template-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        border-radius: 12px;
+        padding: 1.25rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .template-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: var(--gradient-gold);
+        opacity: 0;
+        transition: opacity 0.2s ease;
+    }
+    
+    .template-card:hover {
+        border-color: var(--accent-gold);
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-glow);
+    }
+    
+    .template-card:hover::before {
+        opacity: 1;
+    }
+    
+    .template-emoji {
+        font-size: 2rem;
+        margin-bottom: 0.75rem;
+    }
+    
+    .template-name {
+        font-weight: 600;
+        color: var(--text-primary);
         margin-bottom: 0.25rem;
     }
     
-    .toggle-card-desc {
-        color: #64748b;
-        font-size: 0.75rem;
+    .template-desc {
+        font-size: 0.8rem;
+        color: var(--text-muted);
     }
     
-    /* Generate button */
-    .stButton > button {
-        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
-        color: white !important;
-        border: none !important;
+    /* Form elements */
+    .stSelectbox > div > div,
+    .stMultiSelect > div > div {
+        background: var(--bg-secondary) !important;
+        border: 1px solid var(--border-subtle) !important;
         border-radius: 10px !important;
-        padding: 0.875rem 2rem !important;
-        font-weight: 600 !important;
-        font-size: 1rem !important;
-        width: 100% !important;
-        margin-top: 1rem !important;
-        transition: all 0.2s ease !important;
+        color: var(--text-primary) !important;
     }
     
-    .stButton > button:hover {
-        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
-        transform: translateY(-1px) !important;
-        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4) !important;
+    .stSelectbox > div > div:hover,
+    .stMultiSelect > div > div:hover {
+        border-color: var(--accent-gold) !important;
     }
     
-    /* Status messages */
-    .stSuccess, .stInfo, .stWarning, .stError {
-        background: #1e293b !important;
+    .stTextInput > div > div > input,
+    .stTextArea > div > div > textarea {
+        background: var(--bg-secondary) !important;
+        border: 1px solid var(--border-subtle) !important;
         border-radius: 10px !important;
+        color: var(--text-primary) !important;
+        font-family: 'Outfit', sans-serif !important;
     }
     
-    /* Expander styling */
-    .streamlit-expanderHeader {
-        background: #1e293b !important;
-        border-radius: 10px !important;
-        color: #f8fafc !important;
+    .stTextInput > div > div > input:focus,
+    .stTextArea > div > div > textarea:focus {
+        border-color: var(--accent-gold) !important;
+        box-shadow: 0 0 0 2px rgba(240, 180, 41, 0.15) !important;
     }
     
-    /* Expander content */
-    .streamlit-expanderContent {
-        background: #1e293b !important;
-        border: 1px solid #334155 !important;
-        border-top: none !important;
-        border-radius: 0 0 10px 10px !important;
+    .stTextInput > div > div > input::placeholder {
+        color: var(--text-muted) !important;
     }
     
-    /* Slider styling */
+    /* Slider */
     .stSlider > div > div > div {
-        background: #334155 !important;
+        background: var(--border-subtle) !important;
     }
     
     .stSlider > div > div > div > div {
-        background: #3b82f6 !important;
-    }
-    
-    /* Multiselect styling */
-    .stMultiSelect > div > div {
-        background: #0f172a !important;
-        border: 1px solid #334155 !important;
-        border-radius: 10px !important;
-    }
-    
-    /* Download buttons */
-    .stDownloadButton > button {
-        background: #1e293b !important;
-        border: 1px solid #334155 !important;
-        color: #f8fafc !important;
-        border-radius: 10px !important;
-    }
-    
-    .stDownloadButton > button:hover {
-        background: #334155 !important;
-        border-color: #3b82f6 !important;
+        background: var(--accent-gold) !important;
     }
     
     /* Checkbox styling */
     .stCheckbox {
-        background: #0f172a;
-        border: 1px solid #334155;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-subtle);
         border-radius: 10px;
-        padding: 1rem;
+        padding: 0.75rem 1rem;
         margin-bottom: 0.5rem;
+        transition: all 0.2s ease;
+    }
+    
+    .stCheckbox:hover {
+        border-color: var(--border-accent);
     }
     
     .stCheckbox:has(input:checked) {
-        background: rgba(59, 130, 246, 0.15);
-        border-color: #3b82f6;
+        background: rgba(240, 180, 41, 0.08);
+        border-color: rgba(240, 180, 41, 0.3);
     }
     
-    /* Checkbox label text - make it more readable */
     .stCheckbox label {
-        color: #e2e8f0 !important;
+        color: var(--text-primary) !important;
         font-weight: 500 !important;
     }
     
-    .stCheckbox label span {
-        color: #e2e8f0 !important;
-    }
-    
-    .stCheckbox p {
-        color: #e2e8f0 !important;
-    }
-    
-    /* Radio button styling */
+    /* Radio buttons */
     .stRadio > div {
-        background: #0f172a;
-        border: 1px solid #334155;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-subtle);
         border-radius: 10px;
         padding: 0.75rem;
     }
     
     .stRadio label {
-        color: #e2e8f0 !important;
-        font-weight: 500 !important;
+        color: var(--text-primary) !important;
     }
     
-    .stRadio [data-baseweb="radio"] {
-        background: #334155 !important;
+    /* Generate button */
+    .stButton > button {
+        background: var(--gradient-gold) !important;
+        color: #0a0a0f !important;
+        border: none !important;
+        border-radius: 12px !important;
+        padding: 0.875rem 2rem !important;
+        font-weight: 700 !important;
+        font-size: 1rem !important;
+        font-family: 'Outfit', sans-serif !important;
+        letter-spacing: 0.3px !important;
+        width: 100% !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 4px 20px rgba(240, 180, 41, 0.25) !important;
     }
     
-    .stRadio [data-baseweb="radio"]:has(input:checked) {
-        background: #3b82f6 !important;
+    .stButton > button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 8px 30px rgba(240, 180, 41, 0.35) !important;
     }
     
-    /* API status badge */
-    .api-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem 1rem;
-        background: rgba(34, 197, 94, 0.15);
-        border: 1px solid rgba(34, 197, 94, 0.3);
-        border-radius: 20px;
-        color: #22c55e;
-        font-size: 0.8rem;
-        margin-bottom: 1.5rem;
+    .stButton > button:active {
+        transform: translateY(0) !important;
     }
     
-    .api-badge.error {
-        background: rgba(239, 68, 68, 0.15);
-        border-color: rgba(239, 68, 68, 0.3);
-        color: #ef4444;
+    /* Download buttons */
+    .stDownloadButton > button {
+        background: var(--bg-card) !important;
+        border: 1px solid var(--border-accent) !important;
+        color: var(--text-primary) !important;
+        border-radius: 10px !important;
+        font-family: 'Outfit', sans-serif !important;
+        transition: all 0.2s ease !important;
+    }
+    
+    .stDownloadButton > button:hover {
+        background: var(--bg-card-hover) !important;
+        border-color: var(--accent-gold) !important;
     }
     
     /* Progress section */
-    .progress-card {
-        background: #1e293b;
-        border: 1px solid #334155;
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin: 1rem 0;
-    }
-    
-    .progress-item {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        padding: 0.5rem 0;
-        color: #94a3b8;
-    }
-    
-    .progress-item.active {
-        color: #3b82f6;
-    }
-    
-    .progress-item.done {
-        color: #22c55e;
-    }
-    
-    /* Results section */
-    .results-card {
-        background: #1e293b;
-        border: 1px solid #334155;
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin: 1rem 0;
-    }
-    
-    /* Divider */
-    hr {
-        border: none;
-        border-top: 1px solid #334155;
+    .progress-container {
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        border-radius: 16px;
+        padding: 2rem;
         margin: 1.5rem 0;
     }
     
-    /* Hide streamlit branding */
-    .viewerBadge_container__1QSob {
-        display: none;
+    .progress-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .progress-steps {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .progress-step {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.75rem 1rem;
+        border-radius: 10px;
+        background: var(--bg-secondary);
+        border: 1px solid transparent;
+        transition: all 0.3s ease;
+    }
+    
+    .progress-step.active {
+        border-color: var(--accent-gold);
+        background: rgba(240, 180, 41, 0.08);
+    }
+    
+    .progress-step.done {
+        border-color: var(--accent-emerald);
+        background: rgba(16, 185, 129, 0.08);
+    }
+    
+    .step-indicator {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 0.85rem;
+        background: var(--bg-card);
+        color: var(--text-muted);
+        border: 2px solid var(--border-subtle);
+        transition: all 0.3s ease;
+    }
+    
+    .progress-step.active .step-indicator {
+        background: var(--accent-gold);
+        color: #0a0a0f;
+        border-color: var(--accent-gold);
+        animation: pulse 1.5s infinite;
+    }
+    
+    .progress-step.done .step-indicator {
+        background: var(--accent-emerald);
+        color: white;
+        border-color: var(--accent-emerald);
+    }
+    
+    @keyframes pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(240, 180, 41, 0.4); }
+        50% { box-shadow: 0 0 0 8px rgba(240, 180, 41, 0); }
+    }
+    
+    .step-content {
+        flex: 1;
+    }
+    
+    .step-title {
+        font-weight: 600;
+        color: var(--text-primary);
+        font-size: 0.9rem;
+    }
+    
+    .step-desc {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+    }
+    
+    .progress-step.active .step-title {
+        color: var(--accent-gold);
+    }
+    
+    .progress-step.done .step-title {
+        color: var(--accent-emerald);
+    }
+    
+    /* Results section */
+    .results-container {
+        background: var(--bg-card);
+        border: 1px solid var(--accent-emerald);
+        border-radius: 16px;
+        padding: 2rem;
+        margin: 1.5rem 0;
+    }
+    
+    .results-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .results-icon {
+        width: 48px;
+        height: 48px;
+        background: rgba(16, 185, 129, 0.15);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+    }
+    
+    .results-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin: 0;
+    }
+    
+    .results-subtitle {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        margin: 0;
+    }
+    
+    /* History sidebar */
+    .history-item {
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        border-radius: 10px;
+        padding: 0.875rem;
+        margin-bottom: 0.75rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    
+    .history-item:hover {
+        border-color: var(--border-accent);
+        background: var(--bg-card-hover);
+    }
+    
+    .history-topic {
+        font-weight: 600;
+        color: var(--text-primary);
+        font-size: 0.85rem;
+        margin-bottom: 0.25rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .history-meta {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+    }
+    
+    /* Expander */
+    .streamlit-expanderHeader {
+        background: var(--bg-card) !important;
+        border-radius: 10px !important;
+        color: var(--text-primary) !important;
+        font-family: 'Outfit', sans-serif !important;
+    }
+    
+    .streamlit-expanderContent {
+        background: var(--bg-card) !important;
+        border: 1px solid var(--border-subtle) !important;
+        border-top: none !important;
+        border-radius: 0 0 10px 10px !important;
+    }
+    
+    /* Code blocks */
+    .stCodeBlock {
+        background: var(--bg-secondary) !important;
+        border: 1px solid var(--border-subtle) !important;
+        border-radius: 10px !important;
+    }
+    
+    code {
+        font-family: 'JetBrains Mono', monospace !important;
+    }
+    
+    /* Status messages */
+    .stSuccess, .stInfo, .stWarning, .stError {
+        background: var(--bg-card) !important;
+        border-radius: 10px !important;
+        font-family: 'Outfit', sans-serif !important;
+    }
+    
+    /* PDF iframe */
+    .pdf-preview {
+        border: 1px solid var(--border-subtle);
+        border-radius: 12px;
+        overflow: hidden;
+        margin-top: 1rem;
+    }
+    
+    /* Section labels */
+    .section-label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    /* Divider */
+    .divider {
+        height: 1px;
+        background: var(--border-subtle);
+        margin: 1.5rem 0;
+    }
+    
+    /* Stats badges */
+    .stats-row {
+        display: flex;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+    
+    .stat-badge {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-subtle);
+        border-radius: 8px;
+        padding: 0.5rem 0.875rem;
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+    }
+    
+    .stat-badge strong {
+        color: var(--accent-gold);
+    }
+    
+    /* Footer */
+    .footer {
+        text-align: center;
+        padding: 2rem 0;
+        color: var(--text-muted);
+        font-size: 0.8rem;
+        border-top: 1px solid var(--border-subtle);
+        margin-top: 3rem;
+    }
+    
+    .footer a {
+        color: var(--accent-gold);
+        text-decoration: none;
+    }
+    
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: var(--bg-secondary);
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: var(--border-accent);
+        border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: var(--text-muted);
     }
 </style>
 """, unsafe_allow_html=True)
 
 
+# ============================================================================
+# TEMPLATES - Quick-start configurations
+# ============================================================================
+TEMPLATES = {
+    "worksheet_basic": {
+        "name": "Oppgaveark",
+        "emoji": "📝",
+        "description": "Kun oppgaver, ingen teori",
+        "config": {
+            "material_type": "arbeidsark",
+            "include_theory": False,
+            "include_examples": False,
+            "include_exercises": True,
+            "include_solutions": True,
+            "include_graphs": True,
+            "include_tips": False,
+            "num_exercises": 10,
+        }
+    },
+    "chapter_full": {
+        "name": "Fullt kapittel",
+        "emoji": "📖",
+        "description": "Teori, eksempler og oppgaver",
+        "config": {
+            "material_type": "kapittel",
+            "include_theory": True,
+            "include_examples": True,
+            "include_exercises": True,
+            "include_solutions": True,
+            "include_graphs": True,
+            "include_tips": True,
+            "num_exercises": 8,
+        }
+    },
+    "exam_prep": {
+        "name": "Prøveforberedelse",
+        "emoji": "📋",
+        "description": "Varierte eksamensoppgaver",
+        "config": {
+            "material_type": "prøve",
+            "include_theory": False,
+            "include_examples": False,
+            "include_exercises": True,
+            "include_solutions": True,
+            "include_graphs": True,
+            "include_tips": False,
+            "num_exercises": 15,
+        }
+    },
+    "theory_focus": {
+        "name": "Teorigjennomgang",
+        "emoji": "🎓",
+        "description": "Fokus på forklaringer",
+        "config": {
+            "material_type": "kapittel",
+            "include_theory": True,
+            "include_examples": True,
+            "include_exercises": False,
+            "include_solutions": False,
+            "include_graphs": True,
+            "include_tips": True,
+            "num_exercises": 0,
+        }
+    },
+}
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
 def initialize_session_state():
     """Initialize session state variables."""
     defaults = {
         "latex_result": None,
         "pdf_path": None,
-        "pdf_bytes": None,  # For PDF preview
+        "pdf_bytes": None,
         "generation_complete": False,
         "error_message": None,
         "include_theory": True,
@@ -379,10 +730,40 @@ def initialize_session_state():
         "selected_exercise_types": ["standard"],
         "differentiation_mode": False,
         "num_exercises": 10,
+        "history": [],
+        "current_step": 0,
+        "is_generating": False,
+        "selected_template": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+
+
+def apply_template(template_key: str):
+    """Apply a template configuration to session state."""
+    if template_key in TEMPLATES:
+        config = TEMPLATES[template_key]["config"]
+        for key, value in config.items():
+            st.session_state[key] = value
+        st.session_state.selected_template = template_key
+
+
+def add_to_history(topic: str, grade: str, material_type: str, pdf_path: str = None, tex_content: str = None):
+    """Add a generation to history."""
+    entry = {
+        "topic": topic,
+        "grade": grade,
+        "material_type": material_type,
+        "timestamp": datetime.now().isoformat(),
+        "pdf_path": pdf_path,
+        "tex_content": tex_content,
+    }
+    if "history" not in st.session_state:
+        st.session_state.history = []
+    st.session_state.history.insert(0, entry)
+    # Keep only last 20 entries
+    st.session_state.history = st.session_state.history[:20]
 
 
 def run_crew(grade: str, topic: str, material_type: str, instructions: str, content_options: dict) -> str:
@@ -442,398 +823,514 @@ def save_tex_file(latex_content: str, filename: str) -> str:
     return str(tex_path)
 
 
-def main():
-    """Main application function."""
-    initialize_session_state()
-    
-    # Check API status
-    api_configured = bool(os.getenv("GOOGLE_API_KEY"))
-    model_name = os.getenv("GOOGLE_MODEL", "gemini-2.0-flash")
-    
-    # Header
+# ============================================================================
+# UI COMPONENTS
+# ============================================================================
+def render_sidebar():
+    """Render the sidebar with history and settings."""
+    with st.sidebar:
+        st.markdown("""
+        <div style="padding: 1rem 0;">
+            <h2 style="color: #f0b429; font-weight: 700; margin: 0; font-size: 1.4rem;">
+                ◇ MateMaTeX
+            </h2>
+            <p style="color: #9090a0; font-size: 0.8rem; margin-top: 0.25rem;">
+                AI-drevet oppgavegenerator
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        
+        # API Status
+        api_configured = bool(os.getenv("GOOGLE_API_KEY"))
+        model_name = os.getenv("GOOGLE_MODEL", "gemini-2.0-flash")
+        
+        if api_configured:
+            st.markdown(f"""
+            <div style="
+                background: rgba(16, 185, 129, 0.1);
+                border: 1px solid rgba(16, 185, 129, 0.2);
+                border-radius: 8px;
+                padding: 0.75rem;
+                margin-bottom: 1rem;
+            ">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <span style="color: #10b981;">●</span>
+                    <span style="color: #10b981; font-size: 0.85rem; font-weight: 500;">Tilkoblet</span>
+                </div>
+                <div style="color: #9090a0; font-size: 0.75rem; margin-top: 0.25rem;">
+                    {model_name}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div style="
+                background: rgba(244, 63, 94, 0.1);
+                border: 1px solid rgba(244, 63, 94, 0.2);
+                border-radius: 8px;
+                padding: 0.75rem;
+                margin-bottom: 1rem;
+            ">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <span style="color: #f43f5e;">●</span>
+                    <span style="color: #f43f5e; font-size: 0.85rem; font-weight: 500;">Ikke konfigurert</span>
+                </div>
+                <div style="color: #9090a0; font-size: 0.75rem; margin-top: 0.25rem;">
+                    Legg til GOOGLE_API_KEY i .env
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # History section
+        st.markdown("""
+        <p class="section-label" style="margin-top: 1.5rem;">
+            📜 Historikk
+        </p>
+        """, unsafe_allow_html=True)
+        
+        if st.session_state.history:
+            for i, entry in enumerate(st.session_state.history[:5]):
+                timestamp = datetime.fromisoformat(entry["timestamp"])
+                time_str = timestamp.strftime("%d.%m %H:%M")
+                
+                st.markdown(f"""
+                <div class="history-item">
+                    <div class="history-topic">{entry["topic"][:30]}...</div>
+                    <div class="history-meta">{entry["grade"]} • {time_str}</div>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div style="
+                text-align: center;
+                padding: 2rem 1rem;
+                color: #606070;
+                font-size: 0.85rem;
+            ">
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">📭</div>
+                Ingen genererte dokumenter ennå
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        
+        # Quick links
+        st.markdown("""
+        <p class="section-label">🔗 Lenker</p>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("""
+        <div style="font-size: 0.85rem; color: #9090a0;">
+            <a href="https://www.udir.no/lk20/mat01-05" target="_blank" 
+               style="color: #f0b429; text-decoration: none;">
+                📚 LK20 Læreplan
+            </a>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+def render_hero():
+    """Render the hero section."""
     st.markdown("""
-    <div class="logo-title">
-        <h1>📐 MateMaTeX</h1>
-        <p>Generer profesjonelle matematikkoppgaver med AI</p>
+    <div class="hero-container">
+        <div class="hero-badge">
+            ✦ Drevet av Gemini AI
+        </div>
+        <h1 class="hero-title">MateMaTeX</h1>
+        <p class="hero-subtitle">
+            Generer profesjonelle matematikkoppgaver, arbeidsark og kapitler
+            tilpasset norsk læreplan (LK20)
+        </p>
     </div>
     """, unsafe_allow_html=True)
+
+
+def render_templates():
+    """Render template selection cards."""
+    st.markdown('<p class="section-label">⚡ Hurtigstart med mal</p>', unsafe_allow_html=True)
     
-    # API Status Badge
-    if api_configured:
-        st.markdown(f"""
-        <div style="text-align: center;">
-            <span class="api-badge">✓ {model_name}</span>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown("""
-        <div style="text-align: center;">
-            <span class="api-badge error">✕ API ikke konfigurert</span>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Import curriculum data
+    cols = st.columns(4)
+    for i, (key, template) in enumerate(TEMPLATES.items()):
+        with cols[i]:
+            selected = st.session_state.selected_template == key
+            border_color = "#f0b429" if selected else "#2a2a3a"
+            bg_color = "rgba(240, 180, 41, 0.08)" if selected else "#1a1a24"
+            
+            if st.button(
+                f"{template['emoji']}\n\n**{template['name']}**\n\n{template['description']}",
+                key=f"template_{key}",
+                use_container_width=True,
+            ):
+                apply_template(key)
+                st.rerun()
+
+
+def render_configuration():
+    """Render the main configuration section."""
     from src.curriculum import get_topics_for_grade, get_competency_goals, get_exercise_types
     
-    # Grade Level
-    st.markdown('<p class="card-label">📚 Klassetrinn</p>', unsafe_allow_html=True)
-    grade_options = {
-        "1.-4. trinn": "1-4. trinn",
-        "5.-7. trinn": "5-7. trinn",
-        "8. trinn": "8. trinn",
-        "9. trinn": "9. trinn",
-        "10. trinn": "10. trinn",
-        "VG1 1T": "VG1 1T",
-        "VG1 1P": "VG1 1P",
-        "VG2 R1": "VG2 R1",
-        "VG3 R2": "VG3 R2",
-    }
-    selected_grade = st.selectbox(
-        "Klassetrinn",
-        options=list(grade_options.keys()),
-        index=4,
-        label_visibility="collapsed"
-    )
+    col1, col2 = st.columns([1.2, 0.8])
     
-    # Material Type
-    st.markdown('<p class="card-label">📄 Materialtype</p>', unsafe_allow_html=True)
-    material_options = {
-        "📖 Kapittel / Lærestoff": "kapittel",
-        "📝 Arbeidsark": "arbeidsark",
-        "📋 Prøve / Eksamen": "prøve",
-        "📚 Lekseark": "lekseark",
-    }
-    selected_material_display = st.selectbox(
-        "Materialtype",
-        options=list(material_options.keys()),
-        label_visibility="collapsed"
-    )
-    selected_material = material_options[selected_material_display]
-    
-    # ===== FEATURE 1: Topic Library =====
-    st.markdown('<p class="card-label">📖 Tema fra læreplan</p>', unsafe_allow_html=True)
-    
-    topics_by_category = get_topics_for_grade(selected_grade)
-    
-    # Build flat topic list with category prefix
-    topic_choices = ["-- Velg tema --", "✍️ Skriv eget tema..."]
-    for category, topics in topics_by_category.items():
-        for t in topics:
-            topic_choices.append(f"{t}")
-    
-    selected_topic_choice = st.selectbox(
-        "Velg tema",
-        options=topic_choices,
-        label_visibility="collapsed"
-    )
-    
-    # Custom topic input if selected
-    topic = ""
-    if selected_topic_choice == "✍️ Skriv eget tema...":
-        st.markdown('<p class="card-label">✏️ Eget tema</p>', unsafe_allow_html=True)
-        topic = st.text_input(
-            "Skriv tema",
-            placeholder="f.eks. Lineære funksjoner, Pytagoras, Brøk...",
+    with col1:
+        # Grade and Topic selection
+        st.markdown("""
+        <div class="config-card">
+            <div class="card-header">
+                <div class="card-icon gold">📚</div>
+                <div>
+                    <p class="card-title">Velg klassetrinn og tema</p>
+                    <p class="card-description">Basert på LK20 læreplan</p>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        grade_options = {
+            "1.-4. trinn": "1-4. trinn",
+            "5.-7. trinn": "5-7. trinn",
+            "8. trinn": "8. trinn",
+            "9. trinn": "9. trinn",
+            "10. trinn": "10. trinn",
+            "VG1 1T": "VG1 1T",
+            "VG1 1P": "VG1 1P",
+            "VG2 R1": "VG2 R1",
+            "VG3 R2": "VG3 R2",
+        }
+        
+        selected_grade = st.selectbox(
+            "Klassetrinn",
+            options=list(grade_options.keys()),
+            index=4,
             label_visibility="collapsed"
         )
-    elif selected_topic_choice != "-- Velg tema --":
-        topic = selected_topic_choice
+        
+        # Topic selection
+        topics_by_category = get_topics_for_grade(selected_grade)
+        topic_choices = ["-- Velg tema --", "✍️ Skriv eget tema..."]
+        for category, topics in topics_by_category.items():
+            for t in topics:
+                topic_choices.append(f"{t}")
+        
+        selected_topic_choice = st.selectbox(
+            "Velg tema",
+            options=topic_choices,
+            label_visibility="collapsed"
+        )
+        
+        topic = ""
+        if selected_topic_choice == "✍️ Skriv eget tema...":
+            topic = st.text_input(
+                "Skriv tema",
+                placeholder="f.eks. Lineære funksjoner, Pytagoras, Brøk...",
+                label_visibility="collapsed"
+            )
+        elif selected_topic_choice != "-- Velg tema --":
+            topic = selected_topic_choice
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        # Material type
+        st.markdown("""
+        <div class="config-card">
+            <div class="card-header">
+                <div class="card-icon emerald">📄</div>
+                <div>
+                    <p class="card-title">Materialtype</p>
+                    <p class="card-description">Hva skal genereres?</p>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        material_options = {
+            "📖 Kapittel / Lærestoff": "kapittel",
+            "📝 Arbeidsark": "arbeidsark",
+            "📋 Prøve / Eksamen": "prøve",
+            "📚 Lekseark": "lekseark",
+        }
+        selected_material_display = st.selectbox(
+            "Materialtype",
+            options=list(material_options.keys()),
+            label_visibility="collapsed"
+        )
+        selected_material = material_options[selected_material_display]
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        # Competency goals
+        competency_goals = get_competency_goals(selected_grade)
+        if competency_goals:
+            with st.expander("🎯 Kompetansemål (LK20)", expanded=False):
+                st.markdown("""
+                <p style="color: #9090a0; font-size: 0.85rem; margin-bottom: 1rem;">
+                Velg hvilke kompetansemål materialet skal dekke.
+                </p>
+                """, unsafe_allow_html=True)
+                
+                selected_goals = []
+                for i, goal in enumerate(competency_goals):
+                    if st.checkbox(goal, key=f"goal_{i}"):
+                        selected_goals.append(goal)
+                
+                st.session_state.selected_competency_goals = selected_goals
     
-    # ===== FEATURE 3: LK20 Competency Goals =====
-    competency_goals = get_competency_goals(selected_grade)
-    
-    if competency_goals:
-        with st.expander("🎯 Kompetansemål (LK20)", expanded=False):
+    with col2:
+        # Content options
+        st.markdown("""
+        <div class="config-card">
+            <div class="card-header">
+                <div class="card-icon violet">⚙️</div>
+                <div>
+                    <p class="card-title">Innhold</p>
+                    <p class="card-description">Tilpass hva som inkluderes</p>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        st.session_state.include_theory = st.checkbox(
+            "📘 Teori og definisjoner",
+            value=st.session_state.include_theory
+        )
+        st.session_state.include_examples = st.checkbox(
+            "💡 Eksempler",
+            value=st.session_state.include_examples
+        )
+        st.session_state.include_exercises = st.checkbox(
+            "✍️ Oppgaver",
+            value=st.session_state.include_exercises
+        )
+        st.session_state.include_solutions = st.checkbox(
+            "🔑 Fasit",
+            value=st.session_state.include_solutions
+        )
+        st.session_state.include_graphs = st.checkbox(
+            "📊 Grafer/Figurer",
+            value=st.session_state.include_graphs
+        )
+        st.session_state.include_tips = st.checkbox(
+            "💬 Tips og hint",
+            value=st.session_state.include_tips
+        )
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        # Difficulty and exercise count
+        if st.session_state.include_exercises:
             st.markdown("""
-            <p style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 1rem;">
-            Velg hvilke kompetansemål materialet skal dekke. Disse vil vises øverst i dokumentet.
-            </p>
+            <div class="config-card">
+                <div class="card-header">
+                    <div class="card-icon rose">📈</div>
+                    <div>
+                        <p class="card-title">Oppgaveinnstillinger</p>
+                        <p class="card-description">Antall og vanskelighetsgrad</p>
+                    </div>
+                </div>
             """, unsafe_allow_html=True)
             
-            selected_goals = []
-            for i, goal in enumerate(competency_goals):
-                if st.checkbox(goal, key=f"goal_{i}"):
-                    selected_goals.append(goal)
+            st.session_state.num_exercises = st.slider(
+                "Antall oppgaver",
+                min_value=3,
+                max_value=25,
+                value=st.session_state.num_exercises,
+                step=1
+            )
             
-            st.session_state.selected_competency_goals = selected_goals
+            difficulty_options = ["🟢 Lett", "🟡 Middels", "🔴 Vanskelig"]
+            difficulty_index = {"Lett": 0, "Middels": 1, "Vanskelig": 2}.get(
+                st.session_state.difficulty_level, 1
+            )
+            selected_difficulty = st.radio(
+                "Vanskelighetsgrad",
+                options=difficulty_options,
+                index=difficulty_index,
+                horizontal=True
+            )
+            st.session_state.difficulty_level = selected_difficulty.split(" ")[1]
+            
+            st.session_state.differentiation_mode = st.checkbox(
+                "📊 Generer 3 nivåer (differensiering)",
+                value=st.session_state.differentiation_mode
+            )
+            
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            # Exercise types
+            exercise_types = get_exercise_types()
+            with st.expander("📝 Oppgavetyper", expanded=False):
+                selected_types = []
+                cols = st.columns(2)
+                for i, (type_key, type_info) in enumerate(exercise_types.items()):
+                    with cols[i % 2]:
+                        if st.checkbox(
+                            type_info["name"],
+                            value=type_key in st.session_state.selected_exercise_types,
+                            help=type_info["description"],
+                            key=f"extype_{type_key}"
+                        ):
+                            selected_types.append(type_key)
+                
+                if selected_types:
+                    st.session_state.selected_exercise_types = selected_types
+                else:
+                    st.session_state.selected_exercise_types = ["standard"]
     
-    # Content customization
-    st.markdown('<p class="card-label">⚙️ Tilpass innhold</p>', unsafe_allow_html=True)
+    return selected_grade, grade_options, topic, selected_material
+
+
+def render_progress_indicator(current_step: int):
+    """Render an animated progress indicator."""
+    steps = [
+        {"title": "Pedagogen planlegger", "desc": "Analyserer læreplan og strukturerer innhold"},
+        {"title": "Matematikeren skriver", "desc": "Genererer oppgaver og forklaringer"},
+        {"title": "Illustratøren tegner", "desc": "Lager figurer og grafer"},
+        {"title": "Redaktøren ferdigstiller", "desc": "Setter sammen og kvalitetssikrer"},
+    ]
+    
+    steps_html = ""
+    for i, step in enumerate(steps):
+        if i < current_step:
+            status = "done"
+            indicator = "✓"
+        elif i == current_step:
+            status = "active"
+            indicator = str(i + 1)
+        else:
+            status = ""
+            indicator = str(i + 1)
+        
+        steps_html += f"""
+        <div class="progress-step {status}">
+            <div class="step-indicator">{indicator}</div>
+            <div class="step-content">
+                <div class="step-title">{step['title']}</div>
+                <div class="step-desc">{step['desc']}</div>
+            </div>
+        </div>
+        """
+    
+    st.markdown(f"""
+    <div class="progress-container">
+        <div class="progress-title">
+            <span>🔄</span> AI-teamet arbeider...
+        </div>
+        <div class="progress-steps">
+            {steps_html}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def render_results():
+    """Render the results section."""
+    st.markdown("""
+    <div class="results-container">
+        <div class="results-header">
+            <div class="results-icon">✨</div>
+            <div>
+                <p class="results-title">Materiale generert!</p>
+                <p class="results-subtitle">Last ned filene nedenfor</p>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.session_state.include_theory = st.checkbox(
-            "📘 Teori",
-            value=st.session_state.include_theory,
-            help="Definisjoner og forklaringer"
-        )
-        st.session_state.include_examples = st.checkbox(
-            "💡 Eksempler", 
-            value=st.session_state.include_examples,
-            help="Gjennomgåtte eksempler"
-        )
-        st.session_state.include_graphs = st.checkbox(
-            "📊 Grafer/Figurer",
-            value=st.session_state.include_graphs,
-            help="TikZ-illustrasjoner"
+        st.download_button(
+            "📄 Last ned LaTeX (.tex)",
+            data=st.session_state.latex_result,
+            file_name=f"matematikk_{datetime.now().strftime('%Y%m%d_%H%M%S')}.tex",
+            mime="text/plain",
+            use_container_width=True
         )
     
     with col2:
-        st.session_state.include_exercises = st.checkbox(
-            "✍️ Oppgaver",
-            value=st.session_state.include_exercises,
-            help="Øvingsoppgaver"
-        )
-        st.session_state.include_solutions = st.checkbox(
-            "🔑 Fasit",
-            value=st.session_state.include_solutions,
-            help="Løsningsforslag"
-        )
-        st.session_state.include_tips = st.checkbox(
-            "💬 Tips",
-            value=st.session_state.include_tips,
-            help="Hint og huskelapper"
-        )
-    
-    # Number of exercises selector (only shown when exercises are enabled)
-    if st.session_state.include_exercises:
-        st.markdown('<p class="card-label">🔢 Antall oppgaver</p>', unsafe_allow_html=True)
-        st.session_state.num_exercises = st.slider(
-            "Antall oppgaver",
-            min_value=3,
-            max_value=25,
-            value=st.session_state.num_exercises,
-            step=1,
-            label_visibility="collapsed"
-        )
-        
-        # ===== FEATURE 2: Exercise Types =====
-        exercise_types = get_exercise_types()
-        
-        with st.expander("📝 Oppgavetyper", expanded=False):
-            st.markdown("""
-            <p style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 1rem;">
-            Velg hvilke typer oppgaver som skal inkluderes. Du kan velge flere.
-            </p>
-            """, unsafe_allow_html=True)
-            
-            selected_types = []
-            cols = st.columns(2)
-            for i, (type_key, type_info) in enumerate(exercise_types.items()):
-                with cols[i % 2]:
-                    if st.checkbox(
-                        type_info["name"],
-                        value=type_key in st.session_state.selected_exercise_types,
-                        help=type_info["description"],
-                        key=f"extype_{type_key}"
-                    ):
-                        selected_types.append(type_key)
-            
-            if selected_types:
-                st.session_state.selected_exercise_types = selected_types
-            else:
-                st.session_state.selected_exercise_types = ["standard"]
-    
-    # Difficulty level selector
-    st.markdown('<p class="card-label">📈 Vanskelighetsgrad</p>', unsafe_allow_html=True)
-    difficulty_options = ["🟢 Lett", "🟡 Middels", "🔴 Vanskelig"]
-    difficulty_index = {"Lett": 0, "Middels": 1, "Vanskelig": 2}.get(
-        st.session_state.difficulty_level, 1
-    )
-    selected_difficulty = st.radio(
-        "Vanskelighetsgrad",
-        options=difficulty_options,
-        index=difficulty_index,
-        horizontal=True,
-        label_visibility="collapsed"
-    )
-    # Extract clean difficulty name
-    st.session_state.difficulty_level = selected_difficulty.split(" ")[1]
-    
-    # ===== FEATURE 4: Differentiation Mode =====
-    st.markdown('<p class="card-label">🎚️ Differensiering</p>', unsafe_allow_html=True)
-    st.session_state.differentiation_mode = st.checkbox(
-        "📊 Generer 3 nivåer (lett, middels, vanskelig)",
-        value=st.session_state.differentiation_mode,
-        help="Lag tre versjoner av arbeidsarket med ulik vanskelighetsgrad"
-    )
-    
-    # Build instructions from checkboxes and difficulty
-    content_instructions = []
-    
-    # Get number of exercises (default to 10 if not set)
-    num_exercises = st.session_state.get("num_exercises", 10)
-    
-    # Build explicit content inclusion/exclusion lists
-    include_list = []
-    exclude_list = []
-    
-    if st.session_state.include_theory:
-        include_list.append("teori og definisjoner")
-    else:
-        exclude_list.append("teori")
-        exclude_list.append("definisjoner")
-    
-    if st.session_state.include_examples:
-        include_list.append("gjennomgåtte eksempler")
-    else:
-        exclude_list.append("eksempler")
-    
-    if st.session_state.include_exercises:
-        include_list.append(f"{num_exercises} oppgaver")
-    else:
-        exclude_list.append("oppgaver")
-    
-    if st.session_state.include_solutions:
-        include_list.append("løsningsforslag/fasit")
-    else:
-        exclude_list.append("løsningsforslag")
-        exclude_list.append("fasit")
-    
-    if st.session_state.include_graphs:
-        include_list.append("grafer og figurer")
-    else:
-        exclude_list.append("grafer")
-        exclude_list.append("figurer")
-        exclude_list.append("TikZ-illustrasjoner")
-    
-    if st.session_state.include_tips:
-        include_list.append("tips og hint")
-    else:
-        exclude_list.append("tips")
-        exclude_list.append("hint")
-    
-    # Create very explicit instructions
-    if exclude_list:
-        content_instructions.append(
-            f"VIKTIG - IKKE INKLUDER følgende: {', '.join(exclude_list)}. "
-            f"Disse elementene skal IKKE være med i dokumentet overhodet."
-        )
-    
-    if include_list:
-        content_instructions.append(
-            f"INKLUDER KUN følgende: {', '.join(include_list)}. "
-            f"Ingenting annet skal være med."
-        )
-    
-    # Special handling for worksheet mode (arbeidsark)
-    is_worksheet = selected_material == "arbeidsark"
-    
-    if is_worksheet:
-        # Check if ONLY exercises are selected (no theory, no examples)
-        only_exercises = (
-            st.session_state.include_exercises and 
-            not st.session_state.include_theory and 
-            not st.session_state.include_examples
-        )
-        
-        if only_exercises:
-            content_instructions.insert(0,
-                f"RENT OPPGAVEARK: Dette dokumentet skal KUN inneholde oppgaver. "
-                f"ABSOLUTT INGEN teori, definisjoner, forklaringer eller eksempler. "
-                f"Start dokumentet med kun en tittel, deretter gå DIREKTE til oppgavene. "
-                f"Lag NØYAKTIG {num_exercises} oppgaver med stigende vanskelighetsgrad. "
-                f"Bruk \\begin{{taskbox}}{{Oppgave N}} for hver oppgave."
-            )
+        if st.session_state.pdf_path and Path(st.session_state.pdf_path).exists():
+            with open(st.session_state.pdf_path, "rb") as f:
+                st.download_button(
+                    "📕 Last ned PDF",
+                    data=f.read(),
+                    file_name=Path(st.session_state.pdf_path).name,
+                    mime="application/pdf",
+                    use_container_width=True
+                )
         else:
-            content_instructions.insert(0,
-                f"ARBEIDSARK: Lag et arbeidsark med {num_exercises} oppgaver."
-            )
+            st.info("💡 PDF krever pdflatex installert")
+    
+    # PDF Preview
+    if st.session_state.pdf_bytes:
+        import base64
+        st.markdown('<p class="section-label" style="margin-top: 1.5rem;">👁️ Forhåndsvisning</p>', unsafe_allow_html=True)
         
-        if st.session_state.include_solutions:
-            content_instructions.append(
-                "Inkluder løsningsforslag (fasit) på SLUTTEN av dokumentet i multicols-format."
-            )
-    else:
-        # For kapittel/prøve modes
-        if st.session_state.include_exercises:
-            content_instructions.append(f"Lag {num_exercises} oppgaver med varierende vanskelighetsgrad.")
+        pdf_base64 = base64.b64encode(st.session_state.pdf_bytes).decode('utf-8')
+        st.markdown(f'''
+        <div class="pdf-preview">
+            <iframe 
+                src="data:application/pdf;base64,{pdf_base64}" 
+                width="100%" 
+                height="600px" 
+                style="border: none; background: #fff;"
+            ></iframe>
+        </div>
+        ''', unsafe_allow_html=True)
     
-    # Add difficulty level instruction
-    difficulty = st.session_state.difficulty_level
-    if st.session_state.differentiation_mode:
-        content_instructions.append(
-            "DIFFERENSIERING: Lag TRE separate seksjoner med økende vanskelighetsgrad: "
-            "1) 'Nivå 1 - Lett' med enkle oppgaver, "
-            "2) 'Nivå 2 - Middels' med moderate oppgaver, "
-            "3) 'Nivå 3 - Vanskelig' med utfordrende oppgaver. "
-            "Hver seksjon skal ha like mange oppgaver."
-        )
-    elif difficulty == "Lett":
-        content_instructions.append("Vanskelighetsgrad: LETT - Bruk enkle tall, grunnleggende konsepter, mye støtte og hint. Oppgavene skal være lette å løse")
-    elif difficulty == "Vanskelig":
-        content_instructions.append("Vanskelighetsgrad: VANSKELIG - Bruk komplekse tall, avanserte konsepter, utfordrende oppgaver med flere steg. Krev dypere forståelse")
-    else:
-        content_instructions.append("Vanskelighetsgrad: MIDDELS - Balansert vanskelighetsgrad med variasjon fra enkle til litt utfordrende oppgaver")
+    # LaTeX code expander
+    with st.expander("👁️ Se LaTeX-kode"):
+        st.code(st.session_state.latex_result, language="latex")
+
+
+# ============================================================================
+# MAIN APPLICATION
+# ============================================================================
+def main():
+    """Main application function."""
+    initialize_session_state()
     
-    # Add competency goals instruction
-    if st.session_state.selected_competency_goals:
-        goals_text = "; ".join(st.session_state.selected_competency_goals)
-        content_instructions.append(
-            f"KOMPETANSEMÅL: Materialet skal dekke følgende LK20-kompetansemål: {goals_text}. "
-            "List disse kompetansemålene øverst i dokumentet under overskriften 'Kompetansemål'."
-        )
+    # Render sidebar
+    render_sidebar()
     
-    # Add exercise types instruction
-    exercise_types = get_exercise_types()
-    if st.session_state.selected_exercise_types and len(st.session_state.selected_exercise_types) > 0:
-        type_instructions = []
-        for etype in st.session_state.selected_exercise_types:
-            if etype in exercise_types:
-                type_instructions.append(exercise_types[etype]["instruction"])
-        if type_instructions:
-            content_instructions.append("OPPGAVETYPER: " + " ".join(type_instructions))
+    # Render hero
+    render_hero()
     
-    # Graph instruction (applies to both modes)
-    if not is_worksheet and not st.session_state.include_graphs:
-        pass  # Already handled above
-    elif is_worksheet and st.session_state.include_graphs:
-        content_instructions.append("Inkluder relevante figurer/grafer i oppgavene der det er nyttig")
+    # Render templates
+    render_templates()
     
-    if st.session_state.include_tips and not is_worksheet:
-        content_instructions.append("Inkluder tips og huskelapper i merk-bokser")
+    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
     
-    instructions = ". ".join(content_instructions) if content_instructions else ""
+    # Render configuration
+    selected_grade, grade_options, topic, selected_material = render_configuration()
+    
+    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
     
     # Validation
+    api_configured = bool(os.getenv("GOOGLE_API_KEY"))
     can_generate = api_configured and bool(topic)
     
     if not topic:
-        st.warning("Skriv inn et tema for å generere materiale")
+        st.warning("⚠️ Velg eller skriv inn et tema for å generere materiale")
     
     # Generate Button
-    if st.button("🚀 Generer Materiale", disabled=not can_generate, use_container_width=True):
+    if st.button("◇ Generer materiale", disabled=not can_generate, use_container_width=True):
         st.session_state.latex_result = None
         st.session_state.pdf_path = None
+        st.session_state.pdf_bytes = None
         st.session_state.generation_complete = False
+        st.session_state.is_generating = True
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         safe_topic = "".join(c for c in topic if c.isalnum() or c in (' ', '-', '_')).strip()
         safe_topic = safe_topic.replace(' ', '_')[:30]
         filename = f"{safe_topic}_{selected_grade.replace(' ', '_').replace('.', '')}_{timestamp}"
         
-        # Progress display
-        progress = st.empty()
-        
-        with progress.container():
-            st.markdown("""
-            <div class="progress-card">
-                <div class="progress-item active">🎓 Pedagogen planlegger...</div>
-                <div class="progress-item">🔢 Matematikeren skriver...</div>
-                <div class="progress-item">🎨 Illustratøren tegner...</div>
-                <div class="progress-item">✍️ Redaktøren ferdigstiller...</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Build exercise type instructions
-        exercise_type_instructions = []
+        # Build content options
+        from src.curriculum import get_exercise_types
         exercise_types = get_exercise_types()
+        exercise_type_instructions = []
         for etype in st.session_state.selected_exercise_types:
             if etype in exercise_types:
                 exercise_type_instructions.append(exercise_types[etype]["instruction"])
         
-        # Build content options dictionary
         content_options = {
             "include_theory": st.session_state.include_theory,
             "include_examples": st.session_state.include_examples,
@@ -850,8 +1347,29 @@ def main():
             "differentiation_mode": st.session_state.differentiation_mode,
         }
         
+        # Build instructions
+        content_instructions = []
+        num_exercises = st.session_state.num_exercises
+        
+        if not st.session_state.include_theory:
+            content_instructions.append("IKKE inkluder teori eller definisjoner")
+        if not st.session_state.include_examples:
+            content_instructions.append("IKKE inkluder eksempler")
+        if st.session_state.include_exercises:
+            content_instructions.append(f"Lag {num_exercises} oppgaver")
+        if st.session_state.differentiation_mode:
+            content_instructions.append("Lag tre nivåer: lett, middels, vanskelig")
+        
+        instructions = ". ".join(content_instructions)
+        
+        # Progress placeholder
+        progress_placeholder = st.empty()
+        
         try:
-            with st.spinner("AI-teamet arbeider... (2-5 min)"):
+            with progress_placeholder.container():
+                render_progress_indicator(0)
+            
+            with st.spinner(""):
                 latex_result = run_crew(
                     grade=grade_options[selected_grade],
                     topic=topic,
@@ -861,7 +1379,7 @@ def main():
                 )
                 st.session_state.latex_result = latex_result
             
-            progress.empty()
+            progress_placeholder.empty()
             
             # Save files
             with st.spinner("Lagrer filer..."):
@@ -869,70 +1387,29 @@ def main():
                 pdf_path = generate_pdf(latex_result, filename)
                 if pdf_path:
                     st.session_state.pdf_path = pdf_path
-                    # Store PDF bytes for preview
                     with open(pdf_path, "rb") as f:
                         st.session_state.pdf_bytes = f.read()
             
+            # Add to history
+            add_to_history(topic, selected_grade, selected_material, pdf_path, latex_result)
+            
             st.session_state.generation_complete = True
+            st.session_state.is_generating = False
             st.rerun()
             
         except Exception as e:
-            progress.empty()
-            st.error(f"Feil under generering: {e}")
+            progress_placeholder.empty()
+            st.session_state.is_generating = False
+            st.error(f"❌ Feil under generering: {e}")
     
-    # Results
+    # Show results if complete
     if st.session_state.generation_complete and st.session_state.latex_result:
-        st.markdown("---")
-        st.success("✨ Materiale generert!")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.download_button(
-                "📄 Last ned .tex",
-                data=st.session_state.latex_result,
-                file_name=f"matematikk_{datetime.now().strftime('%Y%m%d_%H%M%S')}.tex",
-                mime="text/plain",
-                use_container_width=True
-            )
-        
-        with col2:
-            if st.session_state.pdf_path and Path(st.session_state.pdf_path).exists():
-                with open(st.session_state.pdf_path, "rb") as f:
-                    st.download_button(
-                        "📕 Last ned PDF",
-                        data=f.read(),
-                        file_name=Path(st.session_state.pdf_path).name,
-                        mime="application/pdf",
-                        use_container_width=True
-                    )
-            else:
-                st.info("PDF krever pdflatex")
-        
-        # ===== FEATURE 5: PDF Preview =====
-        if st.session_state.pdf_bytes:
-            import base64
-            st.markdown('<p class="card-label" style="margin-top: 1.5rem;">👁️ Forhåndsvisning</p>', unsafe_allow_html=True)
-            
-            # Encode PDF to base64 for embedding
-            pdf_base64 = base64.b64encode(st.session_state.pdf_bytes).decode('utf-8')
-            pdf_display = f'''
-            <iframe 
-                src="data:application/pdf;base64,{pdf_base64}" 
-                width="100%" 
-                height="600px" 
-                style="border: 1px solid #334155; border-radius: 10px; background: #fff;"
-            ></iframe>
-            '''
-            st.markdown(pdf_display, unsafe_allow_html=True)
-        
-        with st.expander("👁️ Se LaTeX-kode"):
-            st.code(st.session_state.latex_result, language="latex")
+        render_results()
     
     # Footer
     st.markdown("""
-    <div style="text-align: center; color: #64748b; font-size: 0.8rem; margin-top: 3rem;">
-        MateMaTeX © 2026 • Bygget med CrewAI
+    <div class="footer">
+        <p>MateMaTeX © 2026 • Bygget med <a href="https://www.crewai.com/" target="_blank">CrewAI</a> og <a href="https://streamlit.io/" target="_blank">Streamlit</a></p>
     </div>
     """, unsafe_allow_html=True)
 

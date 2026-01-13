@@ -329,7 +329,8 @@ def compile_latex_to_pdf(
     latex_content: str,
     filename: str,
     output_dir: Optional[str] = None,
-    cleanup_aux: bool = True
+    cleanup_aux: bool = True,
+    max_retries: int = 3
 ) -> str:
     """
     Compile LaTeX content to PDF using pdflatex.
@@ -339,13 +340,14 @@ def compile_latex_to_pdf(
         filename: Base name for the output file (without extension).
         output_dir: Directory to save output files. Defaults to 'output/'.
         cleanup_aux: Whether to remove auxiliary files after compilation.
+        max_retries: Maximum number of compilation attempts for recoverable errors.
 
     Returns:
         Path to the generated PDF file.
 
     Raises:
         FileNotFoundError: If pdflatex is not installed.
-        RuntimeError: If LaTeX compilation fails.
+        RuntimeError: If LaTeX compilation fails after all retries.
     """
     # Set default output directory
     if output_dir is None:
@@ -362,6 +364,9 @@ def compile_latex_to_pdf(
     # Clean up AI output (remove markdown blocks, nested documents)
     latex_content = clean_ai_output(latex_content)
     
+    # Fix common AI-generated LaTeX issues
+    latex_content = _fix_common_latex_issues(latex_content)
+    
     # Ensure valid preamble
     latex_content = ensure_preamble(latex_content)
 
@@ -375,48 +380,75 @@ def compile_latex_to_pdf(
     print(f"[OK] LaTeX source saved to: {tex_file}")
 
     # Check if pdflatex is available
-    try:
-        subprocess.run(
-            ["pdflatex", "--version"],
-            capture_output=True,
-            check=True
-        )
-    except FileNotFoundError:
+    pdflatex_cmd = _find_pdflatex()
+    if not pdflatex_cmd:
         raise FileNotFoundError(
             "pdflatex not found. Please install TeX Live or MiKTeX.\n"
             "- Windows: https://miktex.org/download\n"
             "- Linux: sudo apt install texlive-full\n"
-            "- macOS: brew install --cask mactex"
+            "- macOS: brew install --cask mactex\n\n"
+            "After installation, restart your terminal/IDE."
         )
 
-    # Run pdflatex (twice for proper cross-references)
-    for run_num in range(2):
-        print(f"  Running pdflatex (pass {run_num + 1}/2)...")
-        result = subprocess.run(
-            [
-                "pdflatex",
-                "-interaction=nonstopmode",
-                "-halt-on-error",
-                f"-output-directory={output_dir}",
-                str(tex_file)
-            ],
-            capture_output=True,
-            text=True,
-            cwd=output_dir
-        )
+    # Run pdflatex with retry logic
+    last_error = None
+    for attempt in range(max_retries):
+        success = True
+        
+        # Run pdflatex (twice for proper cross-references)
+        for run_num in range(2):
+            print(f"  Running pdflatex (attempt {attempt + 1}, pass {run_num + 1}/2)...")
+            
+            try:
+                result = subprocess.run(
+                    [
+                        pdflatex_cmd,
+                        "-interaction=nonstopmode",
+                        "-halt-on-error",
+                        f"-output-directory={output_dir}",
+                        str(tex_file)
+                    ],
+                    capture_output=True,
+                    text=True,
+                    cwd=output_dir,
+                    timeout=120  # 2 minute timeout per pass
+                )
+            except subprocess.TimeoutExpired:
+                last_error = "LaTeX compilation timed out (>2 minutes). The document may be too complex."
+                success = False
+                break
 
-        if result.returncode != 0:
-            # Extract relevant error information from log
-            error_msg = _extract_latex_errors(log_file, result.stdout)
-            raise RuntimeError(
-                f"LaTeX compilation failed:\n{error_msg}\n\n"
-                f"Full log available at: {log_file}"
-            )
+            if result.returncode != 0:
+                # Extract error and try to fix
+                error_msg = _extract_latex_errors(log_file, result.stdout)
+                last_error = error_msg
+                
+                # Try to auto-fix common errors
+                if attempt < max_retries - 1:
+                    fixed_content = _try_autofix_latex(latex_content, error_msg)
+                    if fixed_content != latex_content:
+                        latex_content = fixed_content
+                        tex_file.write_text(latex_content, encoding="utf-8")
+                        print(f"  [RETRY] Auto-fixed LaTeX issues, retrying...")
+                
+                success = False
+                break
+        
+        if success:
+            break
+    else:
+        # All retries exhausted
+        raise RuntimeError(
+            f"LaTeX compilation failed after {max_retries} attempts:\n{last_error}\n\n"
+            f"Full log available at: {log_file}\n"
+            f"LaTeX source at: {tex_file}"
+        )
 
     # Verify PDF was created
     if not pdf_file.exists():
         raise RuntimeError(
-            f"PDF was not generated. Check the log file: {log_file}"
+            f"PDF was not generated despite successful compilation.\n"
+            f"Check the log file: {log_file}"
         )
 
     print(f"[OK] PDF generated: {pdf_file}")
@@ -426,6 +458,138 @@ def compile_latex_to_pdf(
         _cleanup_auxiliary_files(output_dir, filename)
 
     return str(pdf_file)
+
+
+def _find_pdflatex() -> Optional[str]:
+    """
+    Find pdflatex executable on the system.
+    
+    Returns:
+        Path to pdflatex or None if not found.
+    """
+    import shutil
+    
+    # Try standard command first
+    if shutil.which("pdflatex"):
+        return "pdflatex"
+    
+    # Common installation paths on Windows
+    windows_paths = [
+        r"C:\Program Files\MiKTeX\miktex\bin\x64\pdflatex.exe",
+        r"C:\Program Files (x86)\MiKTeX\miktex\bin\pdflatex.exe",
+        r"C:\texlive\2024\bin\windows\pdflatex.exe",
+        r"C:\texlive\2023\bin\windows\pdflatex.exe",
+    ]
+    
+    for path in windows_paths:
+        if Path(path).exists():
+            return path
+    
+    return None
+
+
+def _fix_common_latex_issues(latex_content: str) -> str:
+    """
+    Fix common LaTeX issues that AI models tend to generate.
+    
+    Args:
+        latex_content: The LaTeX content to fix.
+    
+    Returns:
+        Fixed LaTeX content.
+    """
+    import re
+    
+    content = latex_content
+    
+    # Fix unescaped percent signs in text (not comments)
+    # This is tricky - we need to avoid breaking actual comments
+    # Only fix % that appears after letters/numbers without backslash
+    content = re.sub(r'(\d)%(?!\s*$)', r'\1\\%', content)
+    
+    # Fix unescaped ampersands outside of tables/align
+    # (This is context-sensitive, so we're conservative)
+    
+    # Fix common Norwegian character issues
+    content = content.replace('æ', 'æ')  # Ensure proper encoding
+    content = content.replace('ø', 'ø')
+    content = content.replace('å', 'å')
+    
+    # Fix missing spaces after commands
+    content = re.sub(r'\\textbf\{([^}]+)\}(?=[a-zA-ZæøåÆØÅ])', r'\\textbf{\1} ', content)
+    
+    # Fix double backslashes that should be single (common AI mistake)
+    content = re.sub(r'\\\\(?=begin|end|section|subsection|textbf|frac|sqrt)', r'\\', content)
+    
+    # Remove any stray markdown that might have slipped through
+    content = re.sub(r'^\s*#{1,6}\s+', '', content, flags=re.MULTILINE)
+    content = re.sub(r'\*\*([^*]+)\*\*', r'\\textbf{\1}', content)
+    content = re.sub(r'\*([^*]+)\*', r'\\textit{\1}', content)
+    
+    # Fix missing closing braces in common patterns
+    # Count braces to detect obvious mismatches
+    open_count = content.count('{')
+    close_count = content.count('}')
+    
+    if open_count > close_count:
+        # Add missing closing braces at the end (before \end{document} if present)
+        diff = open_count - close_count
+        if r'\end{document}' in content:
+            content = content.replace(r'\end{document}', '}' * diff + r'\end{document}')
+        else:
+            content += '}' * diff
+    
+    return content
+
+
+def _try_autofix_latex(latex_content: str, error_msg: str) -> str:
+    """
+    Try to automatically fix LaTeX errors based on error message.
+    
+    Args:
+        latex_content: The LaTeX content with errors.
+        error_msg: The error message from pdflatex.
+    
+    Returns:
+        Potentially fixed LaTeX content.
+    """
+    import re
+    
+    content = latex_content
+    
+    # Fix undefined control sequence errors
+    if "Undefined control sequence" in error_msg:
+        # Extract the undefined command
+        match = re.search(r'\\([a-zA-Z]+)', error_msg)
+        if match:
+            undefined_cmd = match.group(1)
+            # Common fixes for undefined commands
+            fixes = {
+                'R': r'\mathbb{R}',  # Real numbers
+                'N': r'\mathbb{N}',  # Natural numbers
+                'Z': r'\mathbb{Z}',  # Integers
+                'Q': r'\mathbb{Q}',  # Rationals
+            }
+            if undefined_cmd in fixes:
+                content = content.replace(f'\\{undefined_cmd}', fixes[undefined_cmd])
+    
+    # Fix missing $ errors (math mode)
+    if "Missing $" in error_msg:
+        # This is harder to auto-fix, but we can try wrapping isolated math symbols
+        pass
+    
+    # Fix runaway argument (usually missing closing brace)
+    if "Runaway argument" in error_msg:
+        # Try to find and close unclosed environments
+        environments = ['definisjon', 'eksempel', 'taskbox', 'merk', 'losning', 'figure', 'align']
+        for env in environments:
+            opens = content.count(f'\\begin{{{env}}}')
+            closes = content.count(f'\\end{{{env}}}')
+            if opens > closes:
+                # Add missing end tags
+                content += f'\n\\end{{{env}}}' * (opens - closes)
+    
+    return content
 
 
 def _extract_latex_errors(log_file: Path, stdout: str) -> str:
