@@ -97,6 +97,14 @@ def get_level_prompt(level: str, topic: str, grade_level: str) -> str:
     
     characteristics = "\n".join(f"- {c}" for c in config["characteristics"])
     
+    # Build adjustment text based on level
+    if level == "lett":
+        adjustments = "- Bruk små, enkle tall\n- Gi tydelige eksempler før oppgavene\n- Inkluder hint ved hver oppgave"
+    elif level == "middels":
+        adjustments = "- Varier vanskelighetsgrad innen oppgavesettet\n- Inkluder noen tekstoppgaver\n- Krev at eleven viser fremgangsmåte"
+    else:
+        adjustments = "- Bruk komplekse uttrykk og tall\n- Inkluder bevisoppgaver\n- Kombiner flere emner\n- Krev fullstendig argumentasjon"
+    
     return f"""Generer et matematikkark om '{topic}' for {grade_level}.
 
 **Vanskelighetsgrad:** {config['name']} ({level})
@@ -107,9 +115,7 @@ def get_level_prompt(level: str, topic: str, grade_level: str) -> str:
 **Antall oppgaver:** {config['num_exercises']}
 
 **Tilpasninger:**
-{"- Bruk små, enkle tall\n- Gi tydelige eksempler før oppgavene\n- Inkluder hint ved hver oppgave" if level == "lett" else ""}
-{"- Varier vanskelighetsgrad innen oppgavesettet\n- Inkluder noen tekstoppgaver\n- Krev at eleven viser fremgangsmåte" if level == "middels" else ""}
-{"- Bruk komplekse uttrykk og tall\n- Inkluder bevisoppgaver\n- Kombiner flere emner\n- Krev fullstendig argumentasjon" if level == "vanskelig" else ""}
+{adjustments}
 
 Lag innholdet på norsk med LaTeX-formatering.
 """
