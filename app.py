@@ -1286,6 +1286,12 @@ def render_configuration():
     """Render the main configuration section."""
     from src.curriculum import get_topics_for_grade, get_competency_goals, get_exercise_types
     
+    # Initialize return values to avoid UnboundLocalError
+    selected_grade = "8. trinn"
+    grade_options = {}
+    topic = ""
+    selected_material = "arbeidsark"
+    
     col1, col2 = st.columns([1.2, 0.8])
     
     with col1:
