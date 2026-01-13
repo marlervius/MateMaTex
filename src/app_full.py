@@ -225,7 +225,7 @@ def run_crew(grade: str, topic: str, material_type: str, instructions: str, cont
     
     pedagogue = agents.pedagogue()
     mathematician = agents.mathematician()
-    illustrator = agents.illustrator()
+    illustrator = agents.illustrator(grade=grade)  # Pass grade for age-appropriate illustrations
     chief_editor = agents.chief_editor()
     
     full_topic = topic
@@ -915,6 +915,64 @@ def render_sidebar():
                 value=st.session_state.get("enable_watermark", False),
                 key="watermark_enabled"
             )
+        
+        # Cover page settings
+        with st.expander("📄 Forside", expanded=False):
+            st.markdown("""
+            <p style="color: #9090a0; font-size: 0.85rem; margin-bottom: 0.75rem;">
+                Legg til profesjonell forside på dokumentet.
+            </p>
+            """, unsafe_allow_html=True)
+            
+            from src.tools import COVER_STYLES
+            
+            # Enable cover page
+            st.session_state.enable_cover_page = st.checkbox(
+                "Inkluder forside",
+                value=st.session_state.get("enable_cover_page", False),
+                key="cover_page_enabled"
+            )
+            
+            if st.session_state.enable_cover_page:
+                # Style selection
+                style_options = list(COVER_STYLES.keys())
+                style_labels = list(COVER_STYLES.values())
+                
+                selected_style = st.selectbox(
+                    "Forsidestil",
+                    options=style_options,
+                    format_func=lambda x: COVER_STYLES[x],
+                    index=0,
+                    key="cover_style"
+                )
+                st.session_state.cover_style = selected_style
+                
+                # Optional teacher name
+                teacher_name = st.text_input(
+                    "Lærernavn (valgfritt)",
+                    value=st.session_state.get("teacher_name", ""),
+                    placeholder="F.eks. Ola Nordmann",
+                    key="cover_teacher_name"
+                )
+                st.session_state.teacher_name = teacher_name
+                
+                # Class name override
+                class_name = st.text_input(
+                    "Klasse (valgfritt)",
+                    value=st.session_state.get("class_name", ""),
+                    placeholder="F.eks. 10A eller Matte 2P",
+                    key="cover_class_name"
+                )
+                st.session_state.class_name = class_name
+                
+                # Preview style
+                style_previews = {
+                    "modern": "🎨 Moderne design med geometriske aksenter",
+                    "classic": "📚 Tradisjonelt lærebokutseende",
+                    "minimal": "✨ Enkelt og profesjonelt",
+                    "colorful": "🌈 Fargerikt for yngre elever",
+                }
+                st.info(style_previews.get(selected_style, ""))
         
         # Keyboard shortcuts help
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
@@ -2163,6 +2221,21 @@ def main():
                     document_title=topic,
                     class_name=selected_grade
                 )
+                st.session_state.latex_result = latex_result
+            
+            # Apply cover page if enabled
+            if st.session_state.get("enable_cover_page"):
+                from src.tools import CoverPageConfig, insert_cover_page
+                cover_config = CoverPageConfig(
+                    title=topic,
+                    subtitle=selected_material.title() if selected_material else None,
+                    grade=selected_grade,
+                    school_name=st.session_state.get("school_name"),
+                    teacher_name=st.session_state.get("teacher_name"),
+                    class_name=st.session_state.get("class_name") or selected_grade,
+                    style=st.session_state.get("cover_style", "modern")
+                )
+                latex_result = insert_cover_page(latex_result, cover_config)
                 st.session_state.latex_result = latex_result
             
             # Save files

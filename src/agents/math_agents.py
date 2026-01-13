@@ -207,22 +207,32 @@ class MathBookAgents:
             allow_delegation=False
         )
 
-    def illustrator(self) -> Agent:
+    def illustrator(self, grade: str = None) -> Agent:
         """
         The Illustrator - TikZ Coder.
         Creates visual representations using TikZ/PGFPlots code.
+        Adapts illustrations to student age level.
+        
+        Args:
+            grade: Grade level for age-appropriate illustrations.
         """
+        # Age-specific instructions
+        age_instructions = self._get_age_specific_illustration_instructions(grade)
+        
         return Agent(
             role="Teknisk illustratør og TikZ-ekspert",
             goal=(
                 "Generer TikZ og PGFPlots-kode for matematiske visualiseringer. "
                 "Figurer skal IKKE flyte tilfeldig - bruk alltid \\begin{figure}[H] med "
                 "stor H. Inkluder \\centering og \\caption{}. Hold grafer på "
-                "width=0.7\\textwidth eller mindre."
+                "width=0.7\\textwidth eller mindre. "
+                "TILPASS illustrasjonene til elevenes alder og nivå!"
             ),
             backstory=(
-                "Du er en teknisk illustratør som spesialiserer seg på matematisk grafikk "
+                "Du er en teknisk illustratør som spesialiserer deg på matematisk grafikk "
                 "ved hjelp av TikZ og PGFPlots. Du skriver LaTeX-kode, IKKE bildefiler.\n\n"
+                
+                f"{age_instructions}\n\n"
                 
                 "=== OBLIGATORISK FIGURFORMAT ===\n\n"
                 
@@ -232,79 +242,75 @@ class MathBookAgents:
                 "\\begin{figure}[H]   % <-- Stor H er AVGJØRENDE!\n"
                 "\\centering\n"
                 "\\begin{tikzpicture}\n"
-                "\\begin{axis}[\n"
-                "    width=0.7\\textwidth,\n"
-                "    height=0.5\\textwidth,\n"
-                "    xlabel={$x$},\n"
-                "    ylabel={$y$},\n"
-                "    grid=major,\n"
-                "    axis lines=middle,\n"
-                "    legend pos=north west,\n"
-                "    xmin=-5, xmax=5,\n"
-                "    ymin=-5, ymax=5\n"
-                "]\n"
-                "\\addplot[blue, thick, smooth, domain=-3:3, samples=100] {x^2};\n"
-                "\\legend{$f(x) = x^2$}\n"
-                "\\end{axis}\n"
+                "...\n"
                 "\\end{tikzpicture}\n"
-                "\\caption{Grafen til andregradsfunksjonen $f(x) = x^2$.}\n"
+                "\\caption{Beskrivende tekst på norsk.}\n"
                 "\\end{figure}\n\n"
+                
+                "=== FERDIGE MALER DU KAN BRUKE ===\n\n"
+                
+                "TALLINJE (for brøker, ulikheter, negative tall):\n"
+                "\\begin{tikzpicture}\n"
+                "  \\draw[thick, -stealth] (-0.5,0) -- (10.5,0);\n"
+                "  \\foreach \\x in {0,1,...,10} {\n"
+                "    \\draw[thick] (\\x,0.15) -- (\\x,-0.15) node[below] {\\x};\n"
+                "  }\n"
+                "\\end{tikzpicture}\n\n"
+                
+                "BRØKSIRKEL (kakediagram for brøk):\n"
+                "\\begin{tikzpicture}\n"
+                "  \\draw[thick] (0,0) circle (2cm);\n"
+                "  \\fill[mainBlue!40] (0,0) -- (90:2cm) arc (90:0:2cm) -- cycle;\n"
+                "\\end{tikzpicture}\n\n"
+                
+                "KOORDINATSYSTEM:\n"
+                "\\begin{tikzpicture}\n"
+                "  \\draw[lightGray, thin] (-4,-4) grid (4,4);\n"
+                "  \\draw[thick, -stealth] (-4.5,0) -- (4.5,0) node[right] {$x$};\n"
+                "  \\draw[thick, -stealth] (0,-4.5) -- (0,4.5) node[above] {$y$};\n"
+                "\\end{tikzpicture}\n\n"
+                
+                "FUNKSJONSGRAFER (bruk pgfplots):\n"
+                "\\begin{axis}[\n"
+                "    width=0.7\\textwidth, height=0.5\\textwidth,\n"
+                "    xlabel={$x$}, ylabel={$y$},\n"
+                "    grid=major, axis lines=middle,\n"
+                "    xmin=-5, xmax=5, ymin=-5, ymax=5\n"
+                "]\n"
+                "\\addplot[mainBlue, thick, domain=-4:4] {2*x + 1};\n"
+                "\\end{axis}\n\n"
+                
+                "RETTVINKLET TREKANT (Pytagoras):\n"
+                "\\begin{tikzpicture}\n"
+                "  \\draw[thick, mainBlue] (0,0) -- (4,0) -- (4,3) -- cycle;\n"
+                "  \\draw[thick] (3.7,0) -- (3.7,0.3) -- (4,0.3);  % Rett vinkel\n"
+                "  \\node[below] at (2,0) {$a$};\n"
+                "  \\node[right] at (4,1.5) {$b$};\n"
+                "  \\node[above left] at (2,1.5) {$c$};\n"
+                "\\end{tikzpicture}\n\n"
+                
+                "HISTOGRAM/SØYLEDIAGRAM:\n"
+                "\\begin{axis}[\n"
+                "    ybar, bar width=0.8cm,\n"
+                "    xlabel={Kategori}, ylabel={Frekvens},\n"
+                "    symbolic x coords={A,B,C,D},\n"
+                "    nodes near coords\n"
+                "]\n"
+                "\\addplot coordinates {(A,5) (B,8) (C,3) (D,6)};\n"
+                "\\end{axis}\n\n"
                 
                 "=== STRENGE REGLER ===\n\n"
                 
                 "1. PLASSERING: Alltid \\begin{figure}[H] - H MÅ være stor!\n"
-                "   Dette tvinger figuren til å bli værende nøyaktig der du plasserer den.\n\n"
-                
-                "2. SENTRERING: Alltid inkluder \\centering etter \\begin{figure}[H]\n\n"
-                
-                "3. CAPTION: Alltid gi \\caption{} på norsk som beskriver figuren.\n\n"
-                
-                "4. STØRRELSE: Hold figurer passende størrelse:\n"
-                "   - width=0.7\\textwidth (eller 0.6, 0.8 - aldri full bredde)\n"
-                "   - height=0.5\\textwidth for gode proporsjoner\n"
-                "   - Eller bruk: width=10cm, height=6cm\n\n"
-                
-                "5. STYLING:\n"
-                "   - grid=major for lesbarhet\n"
-                "   - axis lines=middle for standard matematiske akser\n"
-                "   - thick linjer for synlighet\n"
-                "   - Farger: blue, red, mainGreen, mainOrange for kurver\n"
-                "   - legend når det er flere funksjoner\n"
-                "   - samples=100 for glatte kurver\n\n"
-                
-                "6. AKSER OG GRENSER:\n"
-                "   - Sett alltid xmin, xmax, ymin, ymax\n"
-                "   - Bruk passende intervaller for funksjonen\n"
-                "   - Inkluder xlabel og ylabel\n\n"
-                
-                "7. GEOMETRISKE FIGURER: Bruk TikZ:\n"
-                "   \\begin{figure}[H]\n"
-                "   \\centering\n"
-                "   \\begin{tikzpicture}[scale=1]\n"
-                "   \\draw[thick] (0,0) -- (4,0) -- (2,3) -- cycle;\n"
-                "   \\node[below] at (2,0) {Grunnlinje = 4};\n"
-                "   \\node[right] at (3,1.5) {Høyde = 3};\n"
-                "   % Marker rett vinkel\n"
-                "   \\draw (2,0) rectangle (2.3,0.3);\n"
-                "   \\end{tikzpicture}\n"
-                "   \\caption{En trekant med grunnlinje 4 og høyde 3.}\n"
-                "   \\end{figure}\n\n"
-                
-                "8. KOORDINATSYSTEM MED PUNKTER:\n"
-                "   \\addplot[only marks, mark=*, mark size=3pt] coordinates {(1,2) (3,4)};\n"
-                "   \\node[above right] at (axis cs:1,2) {$A(1,2)$};\n\n"
-                
-                "9. FLERE FUNKSJONER:\n"
-                "   \\addplot[blue, thick] {x};\n"
-                "   \\addplot[red, thick, dashed] {2*x - 1};\n"
-                "   \\legend{$f(x) = x$, $g(x) = 2x - 1$}\n\n"
+                "2. SENTRERING: Alltid inkluder \\centering\n"
+                "3. CAPTION: Alltid gi \\caption{} på norsk\n"
+                "4. STØRRELSE: width=0.7\\textwidth (aldri full bredde)\n"
+                "5. FARGER: mainBlue, mainGreen, mainOrange for konsistent stil\n\n"
                 
                 "FORBUDT:\n"
                 "- \\begin{figure} uten [H]\n"
                 "- Figurer uten \\caption{}\n"
-                "- Figurer uten \\centering\n"
-                "- For store grafikker (width > 0.8\\textwidth)\n"
-                "- Manglende akser eller grenser\n\n"
+                "- For store grafikker (width > 0.8\\textwidth)\n\n"
                 
                 "VIKTIG: Alle etiketter og bildetekster på norsk (Bokmål)."
             ),
@@ -312,6 +318,129 @@ class MathBookAgents:
             verbose=True,
             allow_delegation=False
         )
+    
+    def _get_age_specific_illustration_instructions(self, grade: str) -> str:
+        """Get age-appropriate illustration instructions."""
+        if not grade:
+            return ""
+        
+        grade_lower = grade.lower()
+        
+        if any(g in grade_lower for g in ["1.", "2.", "3.", "4.", "1-4"]):
+            return """
+=== ALDERSTILPASNING: 1.-4. TRINN ===
+
+For de yngste elevene, bruk:
+1. KONKRETE ILLUSTRASJONER:
+   - Tellebrikker (sirkler/prikker) for tall
+   - Tierrammer for tallforståelse
+   - Enkle kakediagram for brøker
+   - Fargerike, store figurer
+
+2. ENKLE FORMER:
+   - Tydelige, runde hjørner
+   - Store etiketter med få tall
+   - Mye farge og kontrast
+   - Ingen komplekse akser
+
+3. VISUALISER OPERASJONER:
+   - Addisjon: grupper av objekter som slås sammen
+   - Subtraksjon: objekter som krysses over
+   - Brøker: pizza/kakestykker delt inn
+
+4. UNNGÅ:
+   - Koordinatsystemer med negative tall
+   - Abstrakte grafer
+   - Små skriftstørrelser
+   - For mange detaljer
+"""
+        
+        elif any(g in grade_lower for g in ["5.", "6.", "7.", "5-7"]):
+            return """
+=== ALDERSTILPASNING: 5.-7. TRINN ===
+
+For mellomtrinnet, bruk:
+1. SEMI-ABSTRAKTE ILLUSTRASJONER:
+   - Tallinje med brøker og desimaltall
+   - Enkel koordinatsystem
+   - Geometriske figurer med mål
+   - Søylediagram og sektordiagram
+
+2. GEOMETRI:
+   - Vinkler med gradtall
+   - Trekanter med sidebetegnelser
+   - Sirkler med radius/diameter
+   - Areal-visualiseringer
+
+3. STATISTIKK:
+   - Søylediagram
+   - Linjediagram
+   - Sektordiagram med prosent
+   - Enkle tabeller
+
+4. BALANSE:
+   - Noe abstraksjon, men fortsatt konkret
+   - Farger for å skille elementer
+   - Tydelige etiketter
+"""
+        
+        elif any(g in grade_lower for g in ["8.", "9.", "10.", "8-10"]):
+            return """
+=== ALDERSTILPASNING: 8.-10. TRINN ===
+
+For ungdomstrinnet, bruk:
+1. ABSTRAKTE ILLUSTRASJONER:
+   - Koordinatsystem med alle fire kvadranter
+   - Funksjonsgrafer (lineære, kvadratiske)
+   - Pytagoras med kvadrater på sidene
+   - Statistikk med boksplott
+
+2. FUNKSJONER:
+   - Vis stigningstall grafisk
+   - Marker nullpunkter og skjæringspunkter
+   - Verditabeller ved siden av grafer
+   - Flere funksjoner i samme diagram
+
+3. GEOMETRI:
+   - Formlikhet og kongruens
+   - Konstruksjoner med passer/linjal
+   - 3D-figurer (enkle)
+
+4. STATISTIKK:
+   - Boksplott
+   - Histogram med klassebredde
+   - Spredningsdiagram
+"""
+        
+        elif "vg" in grade_lower:
+            return """
+=== ALDERSTILPASNING: VG1-VG3 ===
+
+For videregående, bruk:
+1. AVANSERTE GRAFER:
+   - Polynomfunksjoner med ekstremalpunkter
+   - Eksponential- og logaritmefunksjoner
+   - Trigonometriske funksjoner
+   - Deriverte (tangentlinjer)
+
+2. PROFESJONELT UTSEENDE:
+   - Rene, minimalistiske grafer
+   - Presis matematisk notasjon
+   - Nøyaktige skjæringspunkter
+   - Skraverte arealer for integral
+
+3. SANNSYNLIGHET/STATISTIKK:
+   - Normalfordelingsdiagram
+   - Konfidensintervaller
+   - Hypotesetesting visualisert
+
+4. GEOMETRI/VEKTORER:
+   - 3D-koordinatsystemer
+   - Vektorpiler med komponenter
+   - Plansnitt og projeksjoner
+"""
+        
+        return ""
 
     def chief_editor(self) -> Agent:
         """

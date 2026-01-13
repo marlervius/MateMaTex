@@ -298,6 +298,26 @@ from .watermark import (
     render_watermark_preview_html,
 )
 
+from .graph_templates import (
+    GraphTemplate,
+    ALL_TEMPLATES as ALL_GRAPH_TEMPLATES,
+    TEMPLATES_BY_CATEGORY as GRAPH_TEMPLATES_BY_CATEGORY,
+    TEMPLATES_BY_GRADE as GRAPH_TEMPLATES_BY_GRADE,
+    get_templates_for_grade,
+    get_templates_for_category,
+    get_template_by_id,
+    get_all_categories as get_graph_categories,
+    get_template_summary_for_prompt,
+)
+
+from .cover_page import (
+    CoverPageConfig,
+    COVER_STYLES,
+    generate_cover_page_latex,
+    insert_cover_page,
+    get_cover_style_options,
+)
+
 __all__ = [
     # PDF tools
     "compile_latex_to_pdf",
@@ -544,4 +564,20 @@ __all__ = [
     "SCHOOL_TEMPLATES",
     "apply_watermark_template",
     "render_watermark_preview_html",
+    # Graph templates
+    "GraphTemplate",
+    "ALL_GRAPH_TEMPLATES",
+    "GRAPH_TEMPLATES_BY_CATEGORY",
+    "GRAPH_TEMPLATES_BY_GRADE",
+    "get_templates_for_grade",
+    "get_templates_for_category",
+    "get_template_by_id",
+    "get_graph_categories",
+    "get_template_summary_for_prompt",
+    # Cover page
+    "CoverPageConfig",
+    "COVER_STYLES",
+    "generate_cover_page_latex",
+    "insert_cover_page",
+    "get_cover_style_options",
 ]
