@@ -1403,21 +1403,21 @@ def render_configuration():
         
         # Competency goals
         competency_goals = get_competency_goals(selected_grade)
-    if competency_goals:
-        with st.expander("🎯 Kompetansemål (LK20)", expanded=False):
-            st.markdown("""
-                <p style="color: #9090a0; font-size: 0.85rem; margin-bottom: 1rem;">
-                Velg hvilke kompetansemål materialet skal dekke.
-            </p>
-            """, unsafe_allow_html=True)
-            
-            selected_goals = []
-            for i, goal in enumerate(competency_goals):
-                if st.checkbox(goal, key=f"goal_{i}"):
-                    selected_goals.append(goal)
-            
-            st.session_state.selected_competency_goals = selected_goals
-    
+        if competency_goals:
+            with st.expander("🎯 Kompetansemål (LK20)", expanded=False):
+                st.markdown("""
+                    <p style="color: #9090a0; font-size: 0.85rem; margin-bottom: 1rem;">
+                    Velg hvilke kompetansemål materialet skal dekke.
+                </p>
+                """, unsafe_allow_html=True)
+                
+                selected_goals = []
+                for i, goal in enumerate(competency_goals):
+                    if st.checkbox(goal, key=f"goal_{i}"):
+                        selected_goals.append(goal)
+                
+                st.session_state.selected_competency_goals = selected_goals
+        
         # Formula library
         with st.expander("📐 Formelbibliotek", expanded=False):
             from src.tools import get_categories, get_formulas_by_category
