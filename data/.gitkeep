@@ -1,0 +1,4 @@
+# This directory stores persistent data:
+# - history.json: Generation history
+# - settings.json: User preferences
+# - *.tex: Saved LaTeX files

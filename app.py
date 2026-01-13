@@ -781,20 +781,43 @@ def apply_template(template_key: str):
 
 
 def add_to_history(topic: str, grade: str, material_type: str, pdf_path: str = None, tex_content: str = None):
-    """Add a generation to history."""
+    """Add a generation to history (both session and persistent storage)."""
+    from src.storage import add_to_history as save_to_storage
+    
+    # Create session entry
     entry = {
         "topic": topic,
         "grade": grade,
         "material_type": material_type,
         "timestamp": datetime.now().isoformat(),
         "pdf_path": pdf_path,
-        "tex_content": tex_content,
     }
+    
+    # Add to session state
     if "history" not in st.session_state:
         st.session_state.history = []
     st.session_state.history.insert(0, entry)
-    # Keep only last 20 entries
     st.session_state.history = st.session_state.history[:20]
+    
+    # Save to persistent storage
+    if tex_content:
+        saved_entry = save_to_storage(
+            topic=topic,
+            grade=grade,
+            material_type=material_type,
+            tex_content=tex_content,
+            pdf_path=pdf_path,
+            settings={
+                "include_theory": st.session_state.get("include_theory", True),
+                "include_examples": st.session_state.get("include_examples", True),
+                "include_exercises": st.session_state.get("include_exercises", True),
+                "include_solutions": st.session_state.get("include_solutions", True),
+                "num_exercises": st.session_state.get("num_exercises", 10),
+            }
+        )
+        # Update session entry with persistent ID
+        entry["id"] = saved_entry["id"]
+        entry["tex_file"] = saved_entry.get("tex_file")
 
 
 def run_crew(grade: str, topic: str, material_type: str, instructions: str, content_options: dict) -> str:
@@ -858,7 +881,11 @@ def save_tex_file(latex_content: str, filename: str) -> str:
 # UI COMPONENTS
 # ============================================================================
 def render_sidebar():
-    """Render the sidebar with history and settings."""
+    """Render the sidebar with history, settings, and language selection."""
+    # Import storage and translations
+    from src.storage import load_history, load_settings, save_settings, get_tex_content, delete_history_entry
+    from src.translations import LANGUAGES, get_translator
+    
     with st.sidebar:
         st.markdown("""
         <div style="padding: 1rem 0;">
@@ -870,6 +897,33 @@ def render_sidebar():
             </p>
         </div>
         """, unsafe_allow_html=True)
+        
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        
+        # Language selection
+        settings = load_settings()
+        current_lang = settings.get("language", "no")
+        
+        lang_options = list(LANGUAGES.keys())
+        lang_labels = list(LANGUAGES.values())
+        current_idx = lang_options.index(current_lang) if current_lang in lang_options else 0
+        
+        selected_lang = st.selectbox(
+            "🌐 Språk / Language",
+            options=lang_options,
+            format_func=lambda x: LANGUAGES[x],
+            index=current_idx,
+            key="language_selector"
+        )
+        
+        if selected_lang != current_lang:
+            settings["language"] = selected_lang
+            save_settings(settings)
+            st.session_state.language = selected_lang
+            st.rerun()
+        
+        # Get translator
+        t = get_translator(selected_lang)
         
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
@@ -888,7 +942,7 @@ def render_sidebar():
             ">
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
                     <span style="color: #10b981;">●</span>
-                    <span style="color: #10b981; font-size: 0.85rem; font-weight: 500;">Tilkoblet</span>
+                    <span style="color: #10b981; font-size: 0.85rem; font-weight: 500;">{t("connected")}</span>
                 </div>
                 <div style="color: #9090a0; font-size: 0.75rem; margin-top: 0.25rem;">
                     {model_name}
@@ -896,7 +950,7 @@ def render_sidebar():
             </div>
             """, unsafe_allow_html=True)
         else:
-            st.markdown("""
+            st.markdown(f"""
             <div style="
                 background: rgba(244, 63, 94, 0.1);
                 border: 1px solid rgba(244, 63, 94, 0.2);
@@ -906,34 +960,70 @@ def render_sidebar():
             ">
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
                     <span style="color: #f43f5e;">●</span>
-                    <span style="color: #f43f5e; font-size: 0.85rem; font-weight: 500;">Ikke konfigurert</span>
+                    <span style="color: #f43f5e; font-size: 0.85rem; font-weight: 500;">{t("not_configured")}</span>
                 </div>
                 <div style="color: #9090a0; font-size: 0.75rem; margin-top: 0.25rem;">
-                    Legg til GOOGLE_API_KEY i .env
+                    {t("add_api_key")}
                 </div>
             </div>
             """, unsafe_allow_html=True)
         
-        # History section
-        st.markdown("""
+        # History section - load from persistent storage
+        st.markdown(f"""
         <p class="section-label" style="margin-top: 1.5rem;">
-            📜 Historikk
+            📜 {t("history")}
         </p>
         """, unsafe_allow_html=True)
         
-        if st.session_state.history:
-            for i, entry in enumerate(st.session_state.history[:5]):
-                timestamp = datetime.fromisoformat(entry["timestamp"])
-                time_str = timestamp.strftime("%d.%m %H:%M")
+        # Load persistent history
+        persistent_history = load_history()
+        
+        # Merge with session history
+        all_history = st.session_state.history + [h for h in persistent_history if h not in st.session_state.history]
+        
+        if all_history:
+            for i, entry in enumerate(all_history[:8]):
+                try:
+                    timestamp = datetime.fromisoformat(entry["timestamp"])
+                    time_str = timestamp.strftime("%d.%m %H:%M")
+                except (ValueError, KeyError):
+                    time_str = "Ukjent"
+                
+                topic = entry.get("topic", "Ukjent emne")
+                grade = entry.get("grade", "")
+                entry_id = entry.get("id", "")
+                
+                col1, col2 = st.columns([4, 1])
+                
+                with col1:
+                    # Clickable history item
+                    if st.button(
+                        f"📄 {topic[:25]}{'...' if len(topic) > 25 else ''}",
+                        key=f"hist_{entry_id}_{i}",
+                        use_container_width=True
+                    ):
+                        # Load this entry
+                        tex_content = get_tex_content(entry_id)
+                        if tex_content:
+                            st.session_state.latex_result = tex_content
+                            st.session_state.generation_complete = True
+                            st.toast(f"📄 Lastet: {topic}")
+                            st.rerun()
+                
+                with col2:
+                    # Delete button
+                    if st.button("🗑️", key=f"del_{entry_id}_{i}", help="Slett"):
+                        delete_history_entry(entry_id)
+                        st.toast("🗑️ Slettet fra historikk")
+                        st.rerun()
                 
                 st.markdown(f"""
-                <div class="history-item">
-                    <div class="history-topic">{entry["topic"][:30]}...</div>
-                    <div class="history-meta">{entry["grade"]} • {time_str}</div>
+                <div style="color: #606070; font-size: 0.7rem; margin-top: -0.5rem; margin-bottom: 0.5rem; padding-left: 0.25rem;">
+                    {grade} • {time_str}
                 </div>
                 """, unsafe_allow_html=True)
         else:
-            st.markdown("""
+            st.markdown(f"""
             <div style="
                 text-align: center;
                 padding: 2rem 1rem;
@@ -941,22 +1031,22 @@ def render_sidebar():
                 font-size: 0.85rem;
             ">
                 <div style="font-size: 2rem; margin-bottom: 0.5rem;">📭</div>
-                Ingen genererte dokumenter ennå
+                {t("no_history")}
             </div>
             """, unsafe_allow_html=True)
         
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
         # Quick links
-        st.markdown("""
-        <p class="section-label">🔗 Lenker</p>
+        st.markdown(f"""
+        <p class="section-label">🔗 {t("links")}</p>
         """, unsafe_allow_html=True)
         
-        st.markdown("""
+        st.markdown(f"""
         <div style="font-size: 0.85rem; color: #9090a0;">
             <a href="https://www.udir.no/lk20/mat01-05" target="_blank" 
                style="color: #f0b429; text-decoration: none;">
-                📚 LK20 Læreplan
+                📚 {t("curriculum_link")}
             </a>
         </div>
         """, unsafe_allow_html=True)
@@ -1262,24 +1352,25 @@ def render_progress_indicator(current_step: int):
 
 
 def render_results():
-    """Render the results section."""
+    """Render the results section with download, edit, and export options."""
     st.markdown("""
     <div class="results-container">
         <div class="results-header">
             <div class="results-icon">✨</div>
             <div>
                 <p class="results-title">Materiale generert!</p>
-                <p class="results-subtitle">Last ned filene nedenfor</p>
+                <p class="results-subtitle">Last ned, rediger eller eksporter</p>
             </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    col1, col2, col3 = st.columns(3)
+    # Download buttons row
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         st.download_button(
-            "📄 Last ned LaTeX (.tex)",
+            "📄 LaTeX (.tex)",
             data=st.session_state.latex_result,
             file_name=f"matematikk_{datetime.now().strftime('%Y%m%d_%H%M%S')}.tex",
             mime="text/plain",
@@ -1290,29 +1381,50 @@ def render_results():
         if st.session_state.pdf_path and Path(st.session_state.pdf_path).exists():
             with open(st.session_state.pdf_path, "rb") as f:
                 st.download_button(
-                    "📕 Last ned PDF",
+                    "📕 PDF",
                     data=f.read(),
                     file_name=Path(st.session_state.pdf_path).name,
                     mime="application/pdf",
                     use_container_width=True
                 )
         else:
-            st.info("💡 PDF krever pdflatex")
+            st.button("📕 PDF", disabled=True, use_container_width=True, help="Krever pdflatex")
     
     with col3:
-        # Copy to clipboard button using Streamlit's native functionality
-        if st.button("📋 Kopier LaTeX", use_container_width=True):
-            st.session_state.copied = True
-            st.toast("✅ LaTeX-kode kopiert til utklippstavlen!")
-        
-        # JavaScript for clipboard (fallback)
-        st.markdown(f"""
-        <script>
-        function copyLatex() {{
-            navigator.clipboard.writeText(`{st.session_state.latex_result[:500]}...`);
-        }}
-        </script>
-        """, unsafe_allow_html=True)
+        # Word export
+        try:
+            from src.tools import is_word_export_available, latex_to_word
+            if is_word_export_available():
+                if st.button("📘 Word (.docx)", use_container_width=True):
+                    with st.spinner("Konverterer til Word..."):
+                        output_path = Path("output") / f"matematikk_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+                        output_path.parent.mkdir(exist_ok=True)
+                        word_path = latex_to_word(st.session_state.latex_result, str(output_path))
+                        if word_path and Path(word_path).exists():
+                            st.session_state.word_path = word_path
+                            st.rerun()
+            else:
+                st.button("📘 Word", disabled=True, use_container_width=True, help="Installer python-docx")
+        except ImportError:
+            st.button("📘 Word", disabled=True, use_container_width=True, help="Installer python-docx")
+    
+    # Show Word download if available
+    if hasattr(st.session_state, 'word_path') and st.session_state.word_path:
+        word_path = Path(st.session_state.word_path)
+        if word_path.exists():
+            with col3:
+                with open(word_path, "rb") as f:
+                    st.download_button(
+                        "⬇️ Last ned Word",
+                        data=f.read(),
+                        file_name=word_path.name,
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True
+                    )
+    
+    with col4:
+        if st.button("📋 Kopier kode", use_container_width=True):
+            st.toast("✅ LaTeX-kode kopiert!")
     
     # PDF Preview
     if st.session_state.pdf_bytes:
@@ -1331,14 +1443,43 @@ def render_results():
         </div>
         ''', unsafe_allow_html=True)
     
-    # LaTeX code expander with copy functionality
-    with st.expander("👁️ Se LaTeX-kode"):
-        st.code(st.session_state.latex_result, language="latex")
+    # LaTeX Editor
+    with st.expander("✏️ Rediger LaTeX-kode", expanded=False):
+        edited_latex = st.text_area(
+            "LaTeX-kode",
+            value=st.session_state.latex_result,
+            height=400,
+            label_visibility="collapsed",
+            key="latex_editor"
+        )
         
-        # Stats about the generated content
-        lines = st.session_state.latex_result.count('\n')
-        chars = len(st.session_state.latex_result)
-        exercises = st.session_state.latex_result.count('\\begin{taskbox}')
+        col_save, col_compile = st.columns(2)
+        
+        with col_save:
+            if st.button("💾 Lagre endringer", use_container_width=True):
+                st.session_state.latex_result = edited_latex
+                st.toast("✅ Endringer lagret!")
+        
+        with col_compile:
+            if st.button("🔄 Kompiler PDF på nytt", use_container_width=True):
+                st.session_state.latex_result = edited_latex
+                with st.spinner("Kompilerer..."):
+                    try:
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        pdf_path = generate_pdf(edited_latex, f"redigert_{timestamp}")
+                        if pdf_path:
+                            st.session_state.pdf_path = pdf_path
+                            with open(pdf_path, "rb") as f:
+                                st.session_state.pdf_bytes = f.read()
+                            st.toast("✅ PDF kompilert!")
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Kompilering feilet: {e}")
+        
+        # Stats
+        lines = edited_latex.count('\n')
+        chars = len(edited_latex)
+        exercises = edited_latex.count('\\begin{taskbox}')
         
         st.markdown(f"""
         <div class="stats-row" style="margin-top: 1rem;">
@@ -1347,6 +1488,10 @@ def render_results():
             <span class="stat-badge"><strong>{exercises}</strong> oppgaver</span>
         </div>
         """, unsafe_allow_html=True)
+    
+    # View-only LaTeX code
+    with st.expander("👁️ Se LaTeX-kode (kun visning)"):
+        st.code(st.session_state.latex_result, language="latex")
 
 
 # ============================================================================
