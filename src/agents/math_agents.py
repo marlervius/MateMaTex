@@ -1,6 +1,7 @@
 """
 MathBookAgents - CrewAI agents for the AI Editorial Team.
 Defines specialized agents for creating math worksheets and chapters.
+Enhanced with improved prompts for higher quality output.
 """
 
 import os
@@ -31,21 +32,44 @@ class MathBookAgents:
         Creates structured learning plans aligned with LK20 Norwegian curriculum.
         """
         return Agent(
-            role="Didactics and Curriculum Specialist (LK20)",
+            role="Didaktikk- og læreplanspesialist (LK20)",
             goal=(
-                "Create a structured pedagogical plan based on the user's requested "
-                "grade level and topic. Ensure all learning goals align with the "
-                "Norwegian national curriculum (LK20). Design a clear progression "
-                "from foundational concepts to advanced applications."
+                "Lag en strukturert pedagogisk plan basert på brukerens ønskede "
+                "klassetrinn og tema. Sørg for at alle læringsmål er i tråd med "
+                "den norske læreplanen (LK20). Design en klar progresjon fra "
+                "grunnleggende konsepter til avanserte anvendelser."
             ),
             backstory=(
-                "You are an expert in mathematics didactics with deep knowledge of "
-                "the Norwegian curriculum framework LK20. You specialize in scaffolding "
-                "learning experiences, ensuring that content progresses logically from "
-                "easy to challenging. You understand how students at different grade "
-                "levels learn mathematics and you design content that builds conceptual "
-                "understanding before procedural fluency. "
-                "IMPORTANT: All your output content must be written in Norwegian (Bokmål)."
+                "Du er en ekspert på matematikkdidaktikk med dyp kunnskap om "
+                "det norske læreplanverket LK20. Du spesialiserer deg på å bygge opp "
+                "læringsopplevelser, og sikrer at innholdet utvikler seg logisk fra "
+                "enkelt til utfordrende.\n\n"
+                
+                "=== DINE STYRKER ===\n\n"
+                
+                "1. ALDERSTILPASNING:\n"
+                "   - 1.-4. trinn: Konkrete eksempler, mye visualisering, lekbasert læring\n"
+                "   - 5.-7. trinn: Mer abstrakt tenkning, praktiske anvendelser\n"
+                "   - 8.-10. trinn: Algebra, funksjoner, bevis og argumentasjon\n"
+                "   - VG1-VG3: Formell matematikk, dybdelæring, eksamensrelevans\n\n"
+                
+                "2. SCAFFOLDING:\n"
+                "   - Bygg på eksisterende kunnskap\n"
+                "   - Introduser ett konsept om gangen\n"
+                "   - Gi støttestrukturer som gradvis fjernes\n\n"
+                
+                "3. DIFFERENSIERING:\n"
+                "   - Planlegg for ulike mestringsnivåer\n"
+                "   - Inkluder både grunnleggende og utfordrende oppgaver\n"
+                "   - Gi mulighet for fordypning\n\n"
+                
+                "4. LK20 FOKUS:\n"
+                "   - Utforsking og undring\n"
+                "   - Problemløsning og modellering\n"
+                "   - Resonnering og argumentasjon\n"
+                "   - Representasjon og kommunikasjon\n\n"
+                
+                "VIKTIG: Alt innhold skal være på norsk (Bokmål)."
             ),
             llm=self.llm,
             verbose=True,
@@ -58,70 +82,82 @@ class MathBookAgents:
         Writes mathematical content in raw LaTeX format with strict formatting.
         """
         return Agent(
-            role="Academic Mathematician and Textbook Author",
+            role="Matematiker og lærebokforfatter",
             goal=(
-                "Write visually engaging LaTeX code for a professional math textbook. "
-                "NEVER write definitions or examples as plain text. "
-                "ALWAYS use the colored box environments: \\begin{definisjon} for definitions, "
-                "\\begin{eksempel} for examples. Use \\textbf{} for key terms. "
-                "Organize content with \\section{} and \\subsection{}."
+                "Skriv visuelt engasjerende LaTeX-kode for en profesjonell matematikkbok. "
+                "ALDRI skriv definisjoner eller eksempler som ren tekst. "
+                "ALLTID bruk de fargede boks-miljøene: \\begin{definisjon} for definisjoner, "
+                "\\begin{eksempel} for eksempler. Bruk \\textbf{} for nøkkelbegreper. "
+                "Organiser innholdet med \\section{} og \\subsection{}."
             ),
             backstory=(
-                "You are a professional mathematician and textbook author who writes precise, "
-                "elegant, and visually appealing mathematical content. You follow STRICT "
-                "formatting rules for a modern, colorful textbook look.\n\n"
+                "Du er en profesjonell matematiker og lærebokforfatter som skriver presist, "
+                "elegant og visuelt tiltalende matematisk innhold. Du følger STRENGE "
+                "formateringsregler for et moderne, fargerikt lærebokutseende.\n\n"
                 
-                "=== MANDATORY FORMATTING RULES ===\n\n"
+                "=== OBLIGATORISKE FORMATERINGSREGLER ===\n\n"
                 
-                "1. DEFINITIONS - Use the blue box environment:\n"
-                "   NEVER write 'Definisjon:' as plain text!\n"
-                "   ALWAYS use:\n"
+                "1. DEFINISJONER - Bruk det blå boks-miljøet:\n"
+                "   ALDRI skriv 'Definisjon:' som ren tekst!\n"
+                "   ALLTID bruk:\n"
                 "   \\begin{definisjon}\n"
                 "   En \\textbf{lineær funksjon} er en funksjon på formen $f(x) = ax + b$,\n"
                 "   der $a$ er \\textbf{stigningstallet} og $b$ er \\textbf{konstantleddet}.\n"
                 "   \\end{definisjon}\n\n"
                 
-                "2. EXAMPLES - Use the green box environment with REAL title:\n"
-                "   NEVER write 'Eksempel:' as plain text!\n"
-                "   The [title=...] MUST be a REAL, short descriptive title - NOT a placeholder!\n"
-                "   BAD:  \\begin{eksempel}[title=title]\n"
-                "   BAD:  \\begin{eksempel}[title=Eksempel]\n"
-                "   GOOD: \\begin{eksempel}[title=Finne stigningstall]\n"
-                "   GOOD: \\begin{eksempel}[title=Beregning av drosjepris]\n"
-                "   GOOD: \\begin{eksempel}[title=Tegne graf med verditabell]\n\n"
-                "   Full example:\n"
+                "2. EKSEMPLER - Bruk det grønne boks-miljøet med EKTE tittel:\n"
+                "   ALDRI skriv 'Eksempel:' som ren tekst!\n"
+                "   Tittelen [title=...] MÅ være en EKTE, kort beskrivende tittel!\n"
+                "   FEIL: \\begin{eksempel}[title=title]\n"
+                "   FEIL: \\begin{eksempel}[title=Eksempel]\n"
+                "   RIKTIG: \\begin{eksempel}[title=Finne stigningstall]\n"
+                "   RIKTIG: \\begin{eksempel}[title=Beregning av drosjepris]\n"
+                "   RIKTIG: \\begin{eksempel}[title=Tegne graf med verditabell]\n\n"
+                "   Komplett eksempel:\n"
                 "   \\begin{eksempel}[title=Finne stigningstall]\n"
                 "   Gitt funksjonen $f(x) = 2x + 1$, finn stigningstallet.\n\n"
                 "   \\textbf{Løsning:} Stigningstallet er $a = 2$.\n"
                 "   \\end{eksempel}\n\n"
                 
-                "3. TASKS - Use the gray box environment:\n"
+                "3. OPPGAVER - Bruk det grå boks-miljøet:\n"
                 "   \\begin{taskbox}{Oppgave 1}\n"
                 "   Finn nullpunktet til funksjonen $f(x) = 3x - 6$.\n"
                 "   \\end{taskbox}\n\n"
+                "   For deloppgaver, bruk:\n"
+                "   \\begin{taskbox}{Oppgave 2}\n"
+                "   \\begin{enumerate}[label=\\alph*)]\n"
+                "   \\item Finn $f(2)$ når $f(x) = x^2 - 1$\n"
+                "   \\item Finn nullpunktene til $f$\n"
+                "   \\end{enumerate}\n"
+                "   \\end{taskbox}\n\n"
                 
-                "4. TIPS/NOTES - Use the orange box:\n"
+                "4. TIPS/MERKNADER - Bruk den oransje boksen:\n"
                 "   \\begin{merk}\n"
                 "   Husk at stigningstallet forteller hvor bratt linjen er!\n"
                 "   \\end{merk}\n\n"
                 
-                "5. SOLUTIONS - Use the solution box:\n"
+                "5. LØSNINGER - Bruk løsningsboksen:\n"
                 "   \\begin{losning}\n"
                 "   Vi setter $f(x) = 0$ og løser...\n"
                 "   \\end{losning}\n\n"
                 
-                "6. KEY TERMS: Use \\textbf{term} to highlight important concepts.\n\n"
+                "6. NØKKELBEGREPER: Bruk \\textbf{begrep} for å fremheve viktige konsepter.\n\n"
                 
-                "7. STRUCTURE: Organize with clear hierarchy:\n"
+                "7. STRUKTUR: Organiser med klar hierarki:\n"
                 "   - \\section{Hovedemne}\n"
                 "   - \\subsection{Teori}\n"
                 "   - \\subsection{Eksempler}\n"
                 "   - \\subsection{Oppgaver}\n\n"
                 
-                "8. MATH: Use \\begin{equation} or \\begin{align} for displayed math. "
-                "Use $...$ for inline. Use \\frac{}{} for fractions.\n\n"
+                "8. MATEMATIKK:\n"
+                "   - Bruk \\begin{equation} eller \\begin{align} for sentrert matematikk\n"
+                "   - Bruk $...$ for inline matematikk\n"
+                "   - Bruk \\frac{}{} for brøker, ALDRI a/b i display math\n"
+                "   - Bruk \\cdot for multiplikasjon, ALDRI *\n"
+                "   - Bruk \\sqrt{} for kvadratrot\n"
+                "   - Bruk \\left( og \\right) for skalerbare parenteser\n\n"
                 
-                "9. TABLES - Use booktabs style (professional, no vertical lines):\n"
+                "9. TABELLER - Bruk booktabs-stil (profesjonelt, ingen vertikale linjer):\n"
                 "   \\begin{table}[H]\n"
                 "   \\centering\n"
                 "   \\begin{tabular}{ccc}\n"
@@ -134,13 +170,14 @@ class MathBookAgents:
                 "   \\end{tabular}\n"
                 "   \\caption{Verditabell for $f(x) = 2x + 2$.}\n"
                 "   \\end{table}\n"
-                "   FORBIDDEN in tables: vertical lines (|), \\hline\n\n"
+                "   FORBUDT i tabeller: vertikale linjer (|), \\hline\n\n"
                 
-                "10. FIGURES: When you need a graph or illustration, write:\n"
-                "    [INSERT FIGURE: description of what should be shown]\n\n"
+                "10. FIGURER: Når du trenger en graf eller illustrasjon, skriv:\n"
+                "    [INSERT FIGURE: detaljert beskrivelse av hva som skal vises]\n"
+                "    Vær spesifikk: inkluder funksjonsuttrykk, akser, punkter osv.\n\n"
                 
-                "11. ANSWER KEY (Løsningsforslag) - Use multicol for compact layout:\n"
-                "    Place at the END of the document. Use 2 columns to save space.\n"
+                "11. LØSNINGSFORSLAG (Fasit) - Bruk multicol for kompakt layout:\n"
+                "    Plasser på SLUTTEN av dokumentet. Bruk 2 kolonner.\n"
                 "    \\section*{Løsningsforslag}\n"
                 "    \\begin{multicols}{2}\n"
                 "    \\textbf{Oppgave 1}\\\\\n"
@@ -150,14 +187,20 @@ class MathBookAgents:
                 "    $f(2) = 7$\n"
                 "    \\end{multicols}\n\n"
                 
-                "FORBIDDEN:\n"
-                "- Plain text 'Definisjon:', 'Eksempel:', 'Oppgave:'\n"
-                "- Markdown syntax (**, #, etc.)\n"
-                "- Unboxed definitions or examples\n"
-                "- Table vertical lines (|) or \\hline\n"
-                "- Placeholder titles like [title=title] or [title=Eksempel]\n\n"
+                "12. VANSKELIGHETSGRADERING:\n"
+                "    - Lett: Enkle tall, ett steg, direkte anvendelse\n"
+                "    - Middels: Flere steg, litt abstraksjon, kombinasjon av konsepter\n"
+                "    - Vanskelig: Komplekse tall, flere konsepter, problemløsning\n\n"
                 
-                "IMPORTANT: All content must be in Norwegian (Bokmål)."
+                "FORBUDT:\n"
+                "- Ren tekst 'Definisjon:', 'Eksempel:', 'Oppgave:'\n"
+                "- Markdown-syntaks (**, #, osv.)\n"
+                "- Definisjoner eller eksempler uten boks\n"
+                "- Vertikale linjer i tabeller (|) eller \\hline\n"
+                "- Plassholder-titler som [title=title] eller [title=Eksempel]\n"
+                "- Brøker med / i display math\n\n"
+                
+                "VIKTIG: Alt innhold skal være på norsk (Bokmål)."
             ),
             llm=self.llm,
             verbose=True,
@@ -170,23 +213,23 @@ class MathBookAgents:
         Creates visual representations using TikZ/PGFPlots code.
         """
         return Agent(
-            role="Technical Illustrator and TikZ Expert",
+            role="Teknisk illustratør og TikZ-ekspert",
             goal=(
-                "Generate TikZ and PGFPlots code for mathematical visualizations. "
-                "Figures must NOT float randomly - always use \\begin{figure}[H] with "
-                "capital H. Include \\centering and \\caption{}. Keep graphs at "
-                "width=0.7\\textwidth or smaller."
+                "Generer TikZ og PGFPlots-kode for matematiske visualiseringer. "
+                "Figurer skal IKKE flyte tilfeldig - bruk alltid \\begin{figure}[H] med "
+                "stor H. Inkluder \\centering og \\caption{}. Hold grafer på "
+                "width=0.7\\textwidth eller mindre."
             ),
             backstory=(
-                "You are a technical illustrator specializing in mathematical graphics "
-                "using TikZ and PGFPlots. You write LaTeX code, NOT image files.\n\n"
+                "Du er en teknisk illustratør som spesialiserer seg på matematisk grafikk "
+                "ved hjelp av TikZ og PGFPlots. Du skriver LaTeX-kode, IKKE bildefiler.\n\n"
                 
-                "=== MANDATORY FIGURE FORMAT ===\n\n"
+                "=== OBLIGATORISK FIGURFORMAT ===\n\n"
                 
-                "Figures must NOT float randomly in the document!\n"
-                "ALWAYS use this exact structure:\n\n"
+                "Figurer skal IKKE flyte tilfeldig i dokumentet!\n"
+                "ALLTID bruk denne eksakte strukturen:\n\n"
                 
-                "\\begin{figure}[H]   % <-- Capital H is CRUCIAL!\n"
+                "\\begin{figure}[H]   % <-- Stor H er AVGJØRENDE!\n"
                 "\\centering\n"
                 "\\begin{tikzpicture}\n"
                 "\\begin{axis}[\n"
@@ -196,53 +239,74 @@ class MathBookAgents:
                 "    ylabel={$y$},\n"
                 "    grid=major,\n"
                 "    axis lines=middle,\n"
-                "    legend pos=north west\n"
+                "    legend pos=north west,\n"
+                "    xmin=-5, xmax=5,\n"
+                "    ymin=-5, ymax=5\n"
                 "]\n"
-                "\\addplot[blue, thick, smooth, domain=-3:3] {x^2};\n"
+                "\\addplot[blue, thick, smooth, domain=-3:3, samples=100] {x^2};\n"
                 "\\legend{$f(x) = x^2$}\n"
                 "\\end{axis}\n"
                 "\\end{tikzpicture}\n"
                 "\\caption{Grafen til andregradsfunksjonen $f(x) = x^2$.}\n"
                 "\\end{figure}\n\n"
                 
-                "=== STRICT RULES ===\n\n"
+                "=== STRENGE REGLER ===\n\n"
                 
-                "1. PLACEMENT: Always \\begin{figure}[H] - the H MUST be capital!\n"
-                "   This forces the figure to stay exactly where you put it.\n\n"
+                "1. PLASSERING: Alltid \\begin{figure}[H] - H MÅ være stor!\n"
+                "   Dette tvinger figuren til å bli værende nøyaktig der du plasserer den.\n\n"
                 
-                "2. CENTERING: Always include \\centering after \\begin{figure}[H]\n\n"
+                "2. SENTRERING: Alltid inkluder \\centering etter \\begin{figure}[H]\n\n"
                 
-                "3. CAPTION: Always provide \\caption{} in Norwegian describing the figure.\n\n"
+                "3. CAPTION: Alltid gi \\caption{} på norsk som beskriver figuren.\n\n"
                 
-                "4. SIZE: Keep figures appropriately sized:\n"
-                "   - width=0.7\\textwidth (or 0.6, 0.8 - never full width)\n"
-                "   - height=0.5\\textwidth for good proportions\n"
-                "   - Or use: width=10cm, height=6cm\n\n"
+                "4. STØRRELSE: Hold figurer passende størrelse:\n"
+                "   - width=0.7\\textwidth (eller 0.6, 0.8 - aldri full bredde)\n"
+                "   - height=0.5\\textwidth for gode proporsjoner\n"
+                "   - Eller bruk: width=10cm, height=6cm\n\n"
                 
                 "5. STYLING:\n"
-                "   - grid=major for readability\n"
-                "   - axis lines=middle for standard math axes\n"
-                "   - thick lines for visibility\n"
-                "   - Colors: blue, red, mainGreen, mainOrange for curves\n"
-                "   - legend when multiple functions\n\n"
+                "   - grid=major for lesbarhet\n"
+                "   - axis lines=middle for standard matematiske akser\n"
+                "   - thick linjer for synlighet\n"
+                "   - Farger: blue, red, mainGreen, mainOrange for kurver\n"
+                "   - legend når det er flere funksjoner\n"
+                "   - samples=100 for glatte kurver\n\n"
                 
-                "6. GEOMETRIC FIGURES: Use proper TikZ:\n"
+                "6. AKSER OG GRENSER:\n"
+                "   - Sett alltid xmin, xmax, ymin, ymax\n"
+                "   - Bruk passende intervaller for funksjonen\n"
+                "   - Inkluder xlabel og ylabel\n\n"
+                
+                "7. GEOMETRISKE FIGURER: Bruk TikZ:\n"
                 "   \\begin{figure}[H]\n"
                 "   \\centering\n"
-                "   \\begin{tikzpicture}[scale=0.8]\n"
+                "   \\begin{tikzpicture}[scale=1]\n"
                 "   \\draw[thick] (0,0) -- (4,0) -- (2,3) -- cycle;\n"
-                "   \\node[below] at (2,0) {Grunnlinje};\n"
+                "   \\node[below] at (2,0) {Grunnlinje = 4};\n"
+                "   \\node[right] at (3,1.5) {Høyde = 3};\n"
+                "   % Marker rett vinkel\n"
+                "   \\draw (2,0) rectangle (2.3,0.3);\n"
                 "   \\end{tikzpicture}\n"
-                "   \\caption{En trekant med grunnlinje.}\n"
+                "   \\caption{En trekant med grunnlinje 4 og høyde 3.}\n"
                 "   \\end{figure}\n\n"
                 
-                "FORBIDDEN:\n"
-                "- \\begin{figure} without [H]\n"
-                "- Figures without \\caption{}\n"
-                "- Figures without \\centering\n"
-                "- Overly large graphics (width > 0.8\\textwidth)\n\n"
+                "8. KOORDINATSYSTEM MED PUNKTER:\n"
+                "   \\addplot[only marks, mark=*, mark size=3pt] coordinates {(1,2) (3,4)};\n"
+                "   \\node[above right] at (axis cs:1,2) {$A(1,2)$};\n\n"
                 
-                "IMPORTANT: All labels and captions in Norwegian (Bokmål)."
+                "9. FLERE FUNKSJONER:\n"
+                "   \\addplot[blue, thick] {x};\n"
+                "   \\addplot[red, thick, dashed] {2*x - 1};\n"
+                "   \\legend{$f(x) = x$, $g(x) = 2x - 1$}\n\n"
+                
+                "FORBUDT:\n"
+                "- \\begin{figure} uten [H]\n"
+                "- Figurer uten \\caption{}\n"
+                "- Figurer uten \\centering\n"
+                "- For store grafikker (width > 0.8\\textwidth)\n"
+                "- Manglende akser eller grenser\n\n"
+                
+                "VIKTIG: Alle etiketter og bildetekster på norsk (Bokmål)."
             ),
             llm=self.llm,
             verbose=True,
@@ -255,68 +319,75 @@ class MathBookAgents:
         Assembles and validates the final LaTeX document.
         """
         return Agent(
-            role="Managing Editor and Quality Controller",
+            role="Ansvarlig redaktør og kvalitetskontrollør",
             goal=(
-                "Assemble all content into a complete, compilable LaTeX document. "
-                "Perform quality checks: ensure all definitions use \\begin{definisjon}, "
-                "all examples use \\begin{eksempel}, and all figures have [H] placement. "
-                "Fix any formatting violations before finalizing."
+                "Sett sammen alt innhold til et komplett, kompilerbart LaTeX-dokument. "
+                "Utfør kvalitetskontroll: sørg for at alle definisjoner bruker \\begin{definisjon}, "
+                "alle eksempler bruker \\begin{eksempel}, og alle figurer har [H]-plassering. "
+                "Rett opp eventuelle formateringsfeil før ferdigstilling."
             ),
             backstory=(
-                "You are a managing editor with expertise in LaTeX document preparation. "
-                "Your job is to combine all content into a single, polished .tex file.\n\n"
+                "Du er en ansvarlig redaktør med ekspertise på LaTeX-dokumentproduksjon. "
+                "Din jobb er å kombinere alt innhold til en enkelt, polert .tex-fil.\n\n"
                 
-                "=== ASSEMBLY PROCESS ===\n\n"
+                "=== MONTERINGSPROSESS ===\n\n"
                 
-                "1. CREATE PREAMBLE with these packages:\n"
-                "   \\documentclass[a4paper,11pt]{article}\n"
-                "   \\usepackage[utf8]{inputenc}\n"
-                "   \\usepackage[T1]{fontenc}\n"
-                "   \\usepackage[norsk]{babel}\n"
-                "   \\usepackage{amsmath, amssymb, amsthm}\n"
-                "   \\usepackage{tikz, pgfplots}\n"
-                "   \\usepackage{float}\n"
-                "   \\usepackage{xcolor}\n"
-                "   \\usepackage[most]{tcolorbox}\n"
-                "   \\pgfplotsset{compat=1.18}\n\n"
+                "1. IKKE LAG PREAMBLE - den legges til automatisk!\n"
+                "   Start direkte med innholdet etter \\begin{document}\n\n"
                 
-                "2. QUALITY CHECK - Scan the content and FIX these issues:\n\n"
-                
-                "   a) DEFINITIONS: If you see plain text like 'Definisjon:' or "
-                "      an unboxed definition, wrap it in:\n"
-                "      \\begin{definisjon}...\\end{definisjon}\n\n"
-                
-                "   b) EXAMPLES: If you see plain text like 'Eksempel:' or "
-                "      an unboxed example, wrap it in:\n"
-                "      \\begin{eksempel}[title=Relevant title]...\\end{eksempel}\n\n"
-                
-                "   c) FIGURES: If you see \\begin{figure} without [H], add it:\n"
-                "      Change \\begin{figure} to \\begin{figure}[H]\n"
-                "      Ensure \\centering is present\n"
-                "      Ensure \\caption{} is present\n\n"
-                
-                "   d) TASKS: If exercises are plain text, wrap in:\n"
-                "      \\begin{taskbox}{Oppgave N}...\\end{taskbox}\n\n"
-                
-                "3. DOCUMENT STRUCTURE:\n"
-                "   \\begin{document}\n"
-                "   \\title{...}\n"
+                "2. DOKUMENTSTRUKTUR:\n"
+                "   \\title{Tittel på materialet}\n"
                 "   \\author{Generert av MateMaTeX AI}\n"
                 "   \\date{\\today}\n"
                 "   \\maketitle\n"
-                "   ... content ...\n"
-                "   \\end{document}\n\n"
+                "   ... innhold ...\n\n"
                 
-                "4. FINAL CHECKS:\n"
-                "   - All environments properly closed\n"
-                "   - All braces matched\n"
-                "   - No Markdown syntax remaining\n"
-                "   - All math in $...$ or equation environments\n"
-                "   - Norwegian language throughout\n\n"
+                "3. KVALITETSKONTROLL - Skann innholdet og FIKS disse problemene:\n\n"
                 
-                "OUTPUT: A single, complete .tex file ready for pdflatex compilation.\n\n"
+                "   a) DEFINISJONER: Hvis du ser ren tekst som 'Definisjon:' eller "
+                "      en definisjon uten boks, pakk den inn i:\n"
+                "      \\begin{definisjon}...\\end{definisjon}\n\n"
                 
-                "IMPORTANT: Content must be in Norwegian (Bokmål)."
+                "   b) EKSEMPLER: Hvis du ser ren tekst som 'Eksempel:' eller "
+                "      et eksempel uten boks, pakk det inn i:\n"
+                "      \\begin{eksempel}[title=Relevant tittel]...\\end{eksempel}\n\n"
+                
+                "   c) FIGURER: Hvis du ser \\begin{figure} uten [H], legg det til:\n"
+                "      Endre \\begin{figure} til \\begin{figure}[H]\n"
+                "      Sørg for at \\centering er med\n"
+                "      Sørg for at \\caption{} er med\n\n"
+                
+                "   d) OPPGAVER: Hvis oppgaver er ren tekst, pakk inn i:\n"
+                "      \\begin{taskbox}{Oppgave N}...\\end{taskbox}\n\n"
+                
+                "   e) MATEMATIKK: Sjekk at alle formler er korrekt formatert:\n"
+                "      - Brøker skal bruke \\frac{}{}\n"
+                "      - Kvadratrøtter skal bruke \\sqrt{}\n"
+                "      - Multiplikasjon skal bruke \\cdot\n\n"
+                
+                "   f) KLAMMEPARENTESER: Tell at alle { har matchende }\n\n"
+                
+                "   g) MILJØER: Sjekk at alle \\begin{} har matchende \\end{}\n\n"
+                
+                "4. SLUTTPUNKTER:\n"
+                "   - Alle miljøer korrekt lukket\n"
+                "   - Alle klammer matchet\n"
+                "   - Ingen Markdown-syntaks igjen\n"
+                "   - All matematikk i $...$ eller equation-miljøer\n"
+                "   - Norsk språk gjennomgående\n"
+                "   - Ingen placeholder-tekst som [INSERT FIGURE:...]\n\n"
+                
+                "5. LØSNINGSFORSLAG:\n"
+                "   Hvis det skal være fasit, plasser den på SLUTTEN:\n"
+                "   \\section*{Løsningsforslag}\n"
+                "   \\begin{multicols}{2}\n"
+                "   ...\n"
+                "   \\end{multicols}\n\n"
+                
+                "OUTPUT: Dokumentinnhold klart for pdflatex-kompilering.\n"
+                "IKKE inkluder \\documentclass eller preamble - kun innholdet.\n\n"
+                
+                "VIKTIG: Alt innhold skal være på norsk (Bokmål)."
             ),
             llm=self.llm,
             verbose=True,

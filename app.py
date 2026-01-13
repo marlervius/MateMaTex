@@ -674,7 +674,7 @@ TEMPLATES = {
         }
     },
     "exam_prep": {
-        "name": "Prøveforberedelse",
+        "name": "Eksamenstrening",
         "emoji": "📋",
         "description": "Varierte eksamensoppgaver",
         "config": {
@@ -689,9 +689,9 @@ TEMPLATES = {
         }
     },
     "theory_focus": {
-        "name": "Teorigjennomgang",
+        "name": "Teorihefte",
         "emoji": "🎓",
-        "description": "Fokus på forklaringer",
+        "description": "Kun teori og eksempler",
         "config": {
             "material_type": "kapittel",
             "include_theory": True,
@@ -701,6 +701,37 @@ TEMPLATES = {
             "include_graphs": True,
             "include_tips": True,
             "num_exercises": 0,
+        }
+    },
+    "homework": {
+        "name": "Lekseark",
+        "emoji": "📚",
+        "description": "Enkle repetisjonsoppgaver",
+        "config": {
+            "material_type": "lekseark",
+            "include_theory": False,
+            "include_examples": True,
+            "include_exercises": True,
+            "include_solutions": True,
+            "include_graphs": False,
+            "include_tips": True,
+            "num_exercises": 8,
+        }
+    },
+    "differentiated": {
+        "name": "Differensiert",
+        "emoji": "📊",
+        "description": "3 nivåer: lett/middels/vanskelig",
+        "config": {
+            "material_type": "arbeidsark",
+            "include_theory": False,
+            "include_examples": False,
+            "include_exercises": True,
+            "include_solutions": True,
+            "include_graphs": True,
+            "include_tips": False,
+            "num_exercises": 12,
+            "differentiation_mode": True,
         }
     },
 }
@@ -951,13 +982,23 @@ def render_templates():
     """Render template selection cards."""
     st.markdown('<p class="section-label">⚡ Hurtigstart med mal</p>', unsafe_allow_html=True)
     
-    cols = st.columns(4)
-    for i, (key, template) in enumerate(TEMPLATES.items()):
-        with cols[i]:
-            selected = st.session_state.selected_template == key
-            border_color = "#f0b429" if selected else "#2a2a3a"
-            bg_color = "rgba(240, 180, 41, 0.08)" if selected else "#1a1a24"
-            
+    # First row - 3 templates
+    template_items = list(TEMPLATES.items())
+    cols1 = st.columns(3)
+    for i, (key, template) in enumerate(template_items[:3]):
+        with cols1[i]:
+            if st.button(
+                f"{template['emoji']}\n\n**{template['name']}**\n\n{template['description']}",
+                key=f"template_{key}",
+                use_container_width=True,
+            ):
+                apply_template(key)
+                st.rerun()
+    
+    # Second row - remaining templates
+    cols2 = st.columns(3)
+    for i, (key, template) in enumerate(template_items[3:6]):
+        with cols2[i]:
             if st.button(
                 f"{template['emoji']}\n\n**{template['name']}**\n\n{template['description']}",
                 key=f"template_{key}",
@@ -1234,7 +1275,7 @@ def render_results():
     </div>
     """, unsafe_allow_html=True)
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         st.download_button(
@@ -1256,7 +1297,22 @@ def render_results():
                     use_container_width=True
                 )
         else:
-            st.info("💡 PDF krever pdflatex installert")
+            st.info("💡 PDF krever pdflatex")
+    
+    with col3:
+        # Copy to clipboard button using Streamlit's native functionality
+        if st.button("📋 Kopier LaTeX", use_container_width=True):
+            st.session_state.copied = True
+            st.toast("✅ LaTeX-kode kopiert til utklippstavlen!")
+        
+        # JavaScript for clipboard (fallback)
+        st.markdown(f"""
+        <script>
+        function copyLatex() {{
+            navigator.clipboard.writeText(`{st.session_state.latex_result[:500]}...`);
+        }}
+        </script>
+        """, unsafe_allow_html=True)
     
     # PDF Preview
     if st.session_state.pdf_bytes:
@@ -1275,9 +1331,22 @@ def render_results():
         </div>
         ''', unsafe_allow_html=True)
     
-    # LaTeX code expander
+    # LaTeX code expander with copy functionality
     with st.expander("👁️ Se LaTeX-kode"):
         st.code(st.session_state.latex_result, language="latex")
+        
+        # Stats about the generated content
+        lines = st.session_state.latex_result.count('\n')
+        chars = len(st.session_state.latex_result)
+        exercises = st.session_state.latex_result.count('\\begin{taskbox}')
+        
+        st.markdown(f"""
+        <div class="stats-row" style="margin-top: 1rem;">
+            <span class="stat-badge"><strong>{lines}</strong> linjer</span>
+            <span class="stat-badge"><strong>{chars:,}</strong> tegn</span>
+            <span class="stat-badge"><strong>{exercises}</strong> oppgaver</span>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 # ============================================================================
@@ -1309,6 +1378,31 @@ def main():
     
     if not topic:
         st.warning("⚠️ Velg eller skriv inn et tema for å generere materiale")
+    
+    # Estimated generation time
+    if topic and api_configured:
+        from src.curriculum import estimate_generation_time
+        min_time, max_time = estimate_generation_time(
+            material_type=selected_material,
+            num_exercises=st.session_state.num_exercises if st.session_state.include_exercises else 0,
+            include_theory=st.session_state.include_theory,
+            include_examples=st.session_state.include_examples,
+            include_graphs=st.session_state.include_graphs
+        )
+        st.markdown(f"""
+        <div style="
+            text-align: center;
+            padding: 0.75rem;
+            background: rgba(240, 180, 41, 0.08);
+            border: 1px solid rgba(240, 180, 41, 0.2);
+            border-radius: 10px;
+            margin-bottom: 1rem;
+            color: #f0b429;
+            font-size: 0.9rem;
+        ">
+            ⏱️ Estimert tid: <strong>{min_time}-{max_time} minutter</strong>
+        </div>
+        """, unsafe_allow_html=True)
     
     # Generate Button
     if st.button("◇ Generer materiale", disabled=not can_generate, use_container_width=True):
