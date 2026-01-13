@@ -1162,6 +1162,78 @@ def render_sidebar():
                 Ingen favoritter ennå
             </div>
             """, unsafe_allow_html=True)
+        
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        
+        # Exercise bank section
+        st.markdown("""
+        <p class="section-label">🏦 Oppgavebank</p>
+        """, unsafe_allow_html=True)
+        
+        from src.tools import load_exercises, get_exercise, delete_exercise, get_exercise_stats
+        
+        exercises = load_exercises()
+        stats = get_exercise_stats()
+        
+        if exercises:
+            st.markdown(f"""
+            <div style="
+                background: rgba(240, 180, 41, 0.1);
+                border-radius: 8px;
+                padding: 0.5rem;
+                margin-bottom: 0.75rem;
+            ">
+                <span style="color: #f0b429; font-weight: 500;">{stats['total']}</span>
+                <span style="color: #9090a0; font-size: 0.85rem;"> oppgaver lagret</span>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Show recent exercises
+            for ex in exercises[:5]:
+                difficulty_emoji = {"lett": "🟢", "middels": "🟡", "vanskelig": "🔴"}.get(ex.difficulty, "⚪")
+                
+                col_e1, col_e2 = st.columns([4, 1])
+                with col_e1:
+                    if st.button(
+                        f"{difficulty_emoji} {ex.title[:25]}...",
+                        key=f"ex_{ex.id}",
+                        use_container_width=True,
+                        help=f"{ex.topic} | Brukt {ex.usage_count}x"
+                    ):
+                        # Show exercise content
+                        st.session_state.show_exercise = ex.id
+                        st.rerun()
+                with col_e2:
+                    if st.button("🗑️", key=f"del_ex_{ex.id}", help="Slett"):
+                        delete_exercise(ex.id)
+                        st.toast("🗑️ Oppgave slettet")
+                        st.rerun()
+            
+            if len(exercises) > 5:
+                st.markdown(f"""
+                <p style="color: #9090a0; font-size: 0.8rem; text-align: center;">
+                    +{len(exercises) - 5} flere oppgaver
+                </p>
+                """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div style="
+                text-align: center;
+                color: #9090a0;
+                padding: 1rem;
+                font-size: 0.85rem;
+            ">
+                <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">🏦</div>
+                Ingen oppgaver lagret ennå
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Keyboard shortcuts help
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        
+        from src.tools import get_shortcuts_help_html
+        with st.expander("⌨️ Hurtigtaster", expanded=False):
+            st.markdown(get_shortcuts_help_html(), unsafe_allow_html=True)
 
 
 def render_hero():
@@ -1553,9 +1625,11 @@ def render_results():
     with col2:
         if st.session_state.pdf_path and Path(st.session_state.pdf_path).exists():
             with open(st.session_state.pdf_path, "rb") as f:
+                pdf_bytes = f.read()
+                st.session_state.pdf_bytes = pdf_bytes
                 st.download_button(
                     "📕 PDF",
-                    data=f.read(),
+                    data=pdf_bytes,
                     file_name=Path(st.session_state.pdf_path).name,
                     mime="application/pdf",
                     use_container_width=True
@@ -1599,22 +1673,20 @@ def render_results():
         if st.button("📋 Kopier kode", use_container_width=True):
             st.toast("✅ LaTeX-kode kopiert!")
     
-    # PDF Preview
-    if st.session_state.pdf_bytes:
-        import base64
-        st.markdown('<p class="section-label" style="margin-top: 1.5rem;">👁️ Forhåndsvisning</p>', unsafe_allow_html=True)
+    # PDF Preview with controls
+    if hasattr(st.session_state, 'pdf_bytes') and st.session_state.pdf_bytes:
+        from src.tools import create_pdf_preview_with_controls, get_pdf_bytes_base64
         
-        pdf_base64 = base64.b64encode(st.session_state.pdf_bytes).decode('utf-8')
-        st.markdown(f'''
-        <div class="pdf-preview">
-            <iframe 
-                src="data:application/pdf;base64,{pdf_base64}" 
-                width="100%" 
-                height="600px" 
-                style="border: none; background: #fff;"
-            ></iframe>
-        </div>
-        ''', unsafe_allow_html=True)
+        st.markdown('<p class="section-label" style="margin-top: 1.5rem;">📄 PDF Forhåndsvisning</p>', unsafe_allow_html=True)
+        
+        # Add toggle for preview
+        show_preview = st.checkbox("Vis forhåndsvisning", value=True, key="show_pdf_preview")
+        
+        if show_preview:
+            pdf_base64 = get_pdf_bytes_base64(st.session_state.pdf_bytes)
+            filename = f"matematikk_{datetime.now().strftime('%Y%m%d')}.pdf"
+            preview_html = create_pdf_preview_with_controls(pdf_base64, height=600, filename=filename)
+            st.markdown(preview_html, unsafe_allow_html=True)
     
     # LaTeX Editor
     with st.expander("✏️ Rediger LaTeX-kode", expanded=False):
@@ -2004,6 +2076,74 @@ def render_results():
                 rating=4
             )
             st.toast(f"⭐ Lagret som favoritt: {fav_name}")
+    
+    # Add to Exercise Bank
+    with st.expander("🏦 Lagre til oppgavebank", expanded=False):
+        st.markdown("""
+        <p style="color: #9090a0; font-size: 0.85rem; margin-bottom: 1rem;">
+            Ekstraher enkeltoppgaver fra genereringen og lagre dem for gjenbruk.
+        </p>
+        """, unsafe_allow_html=True)
+        
+        col_bank1, col_bank2 = st.columns(2)
+        
+        with col_bank1:
+            if st.button("🔍 Finn oppgaver", use_container_width=True):
+                from src.tools import extract_exercises_from_latex
+                
+                extracted = extract_exercises_from_latex(st.session_state.latex_result)
+                
+                if extracted:
+                    st.session_state.extracted_exercises = extracted
+                    st.toast(f"✅ Fant {len(extracted)} oppgaver")
+                    st.rerun()
+                else:
+                    st.warning("Fant ingen oppgaver i dokumentet")
+        
+        with col_bank2:
+            if st.button("💾 Lagre alle", use_container_width=True):
+                from src.tools import add_exercises_from_latex
+                
+                saved = add_exercises_from_latex(
+                    st.session_state.latex_result,
+                    st.session_state.get("selected_topic", "Matematikk"),
+                    st.session_state.get("selected_grade", "8. trinn")
+                )
+                
+                if saved:
+                    st.toast(f"✅ Lagret {len(saved)} oppgaver til banken")
+                else:
+                    st.warning("Fant ingen oppgaver å lagre")
+        
+        # Show extracted exercises
+        if hasattr(st.session_state, 'extracted_exercises') and st.session_state.extracted_exercises:
+            st.markdown("---")
+            st.markdown("**Funne oppgaver:**")
+            
+            for i, ex in enumerate(st.session_state.extracted_exercises):
+                difficulty_emoji = {"lett": "🟢", "middels": "🟡", "vanskelig": "🔴"}.get(ex.get("difficulty", "middels"), "⚪")
+                
+                with st.container():
+                    col_ex1, col_ex2 = st.columns([4, 1])
+                    with col_ex1:
+                        st.markdown(f"{difficulty_emoji} **{ex['title']}**")
+                        # Show preview of content
+                        preview = ex['content'][:100].replace('\n', ' ')
+                        st.caption(f"{preview}...")
+                    with col_ex2:
+                        if st.button("💾", key=f"save_ex_{i}", help="Lagre denne"):
+                            from src.tools import add_exercise
+                            
+                            add_exercise(
+                                title=ex['title'],
+                                topic=st.session_state.get("selected_topic", "Matematikk"),
+                                grade_level=st.session_state.get("selected_grade", "8. trinn"),
+                                latex_content=ex['full_latex'],
+                                difficulty=ex.get('difficulty', 'middels'),
+                                solution=ex.get('solution'),
+                                source="generated"
+                            )
+                            st.toast(f"✅ Lagret: {ex['title']}")
 
 
 # ============================================================================
@@ -2062,6 +2202,10 @@ def render_batch_generation():
 def main():
     """Main application function."""
     initialize_session_state()
+    
+    # Add keyboard shortcuts
+    from src.tools import get_shortcut_js
+    st.markdown(get_shortcut_js(), unsafe_allow_html=True)
     
     # Render sidebar
     render_sidebar()

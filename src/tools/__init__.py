@@ -156,6 +156,44 @@ from .favorites import (
     format_favorite_card,
 )
 
+from .exercise_bank import (
+    Exercise,
+    load_exercises,
+    save_exercises,
+    extract_exercises_from_latex,
+    add_exercise,
+    add_exercises_from_latex,
+    get_exercise,
+    delete_exercise,
+    update_exercise,
+    search_exercises,
+    get_exercises_by_topic,
+    get_exercises_by_difficulty,
+    get_popular_exercises,
+    get_recent_exercises,
+    get_all_topics,
+    get_exercise_stats,
+    create_worksheet_from_exercises,
+    format_exercise_preview,
+)
+
+from .keyboard_shortcuts import (
+    SHORTCUTS,
+    get_shortcut_js,
+    get_shortcuts_help_html,
+    get_shortcut_list,
+)
+
+from .pdf_preview import (
+    get_pdf_base64,
+    get_pdf_bytes_base64,
+    create_pdf_preview_html,
+    create_pdf_preview_with_controls,
+    create_pdf_fallback_html,
+    get_pdf_page_count,
+    create_preview_thumbnail_html,
+)
+
 __all__ = [
     # PDF tools
     "compile_latex_to_pdf",
@@ -282,4 +320,36 @@ __all__ = [
     "get_favorites_stats",
     "render_star_rating",
     "format_favorite_card",
+    # Exercise bank
+    "Exercise",
+    "load_exercises",
+    "save_exercises",
+    "extract_exercises_from_latex",
+    "add_exercise",
+    "add_exercises_from_latex",
+    "get_exercise",
+    "delete_exercise",
+    "update_exercise",
+    "search_exercises",
+    "get_exercises_by_topic",
+    "get_exercises_by_difficulty",
+    "get_popular_exercises",
+    "get_recent_exercises",
+    "get_all_topics",
+    "get_exercise_stats",
+    "create_worksheet_from_exercises",
+    "format_exercise_preview",
+    # Keyboard shortcuts
+    "SHORTCUTS",
+    "get_shortcut_js",
+    "get_shortcuts_help_html",
+    "get_shortcut_list",
+    # PDF preview
+    "get_pdf_base64",
+    "get_pdf_bytes_base64",
+    "create_pdf_preview_html",
+    "create_pdf_preview_with_controls",
+    "create_pdf_fallback_html",
+    "get_pdf_page_count",
+    "create_preview_thumbnail_html",
 ]
