@@ -50,6 +50,55 @@ from .batch_generator import (
     estimate_batch_time,
 )
 
+from .formula_library import (
+    Formula,
+    FORMULA_LIBRARY,
+    get_all_formulas,
+    get_formulas_by_category,
+    get_categories,
+    search_formulas,
+    get_formula_latex_block,
+    get_formula_for_topic,
+)
+
+from .qr_generator import (
+    is_qr_available,
+    generate_qr_code,
+    generate_answer_qr,
+    decode_answer_qr,
+    extract_answers_from_latex,
+    generate_qr_for_worksheet,
+    get_qr_latex_code,
+)
+
+from .difficulty_analyzer import (
+    ExerciseAnalysis,
+    ContentAnalysis,
+    analyze_exercise,
+    analyze_content,
+    get_difficulty_distribution_chart_data,
+    get_difficulty_emoji,
+    format_analysis_summary,
+)
+
+from .template_builder import (
+    CustomTemplate,
+    load_custom_templates,
+    save_custom_templates,
+    create_template,
+    update_template,
+    delete_template,
+    get_template,
+    increment_usage,
+    get_popular_templates,
+    get_recent_templates,
+    search_templates,
+    export_template,
+    import_template,
+    get_preset_templates,
+    PRESET_TEMPLATES,
+)
+
 __all__ = [
     # PDF tools
     "compile_latex_to_pdf",
@@ -86,4 +135,45 @@ __all__ = [
     "merge_batch_results",
     "get_batch_summary",
     "estimate_batch_time",
+    # Formula library
+    "Formula",
+    "FORMULA_LIBRARY",
+    "get_all_formulas",
+    "get_formulas_by_category",
+    "get_categories",
+    "search_formulas",
+    "get_formula_latex_block",
+    "get_formula_for_topic",
+    # QR generator
+    "is_qr_available",
+    "generate_qr_code",
+    "generate_answer_qr",
+    "decode_answer_qr",
+    "extract_answers_from_latex",
+    "generate_qr_for_worksheet",
+    "get_qr_latex_code",
+    # Difficulty analyzer
+    "ExerciseAnalysis",
+    "ContentAnalysis",
+    "analyze_exercise",
+    "analyze_content",
+    "get_difficulty_distribution_chart_data",
+    "get_difficulty_emoji",
+    "format_analysis_summary",
+    # Template builder
+    "CustomTemplate",
+    "load_custom_templates",
+    "save_custom_templates",
+    "create_template",
+    "update_template",
+    "delete_template",
+    "get_template",
+    "increment_usage",
+    "get_popular_templates",
+    "get_recent_templates",
+    "search_templates",
+    "export_template",
+    "import_template",
+    "get_preset_templates",
+    "PRESET_TEMPLATES",
 ]

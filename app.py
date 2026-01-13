@@ -1050,6 +1050,64 @@ def render_sidebar():
             </a>
         </div>
         """, unsafe_allow_html=True)
+        
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        
+        # Template builder
+        st.markdown("""
+        <p class="section-label">🎨 Mine maler</p>
+        """, unsafe_allow_html=True)
+        
+        from src.tools import load_custom_templates, create_template, delete_template
+        
+        custom_templates = load_custom_templates()
+        
+        if custom_templates:
+            for template in custom_templates[:5]:
+                col_t1, col_t2 = st.columns([4, 1])
+                with col_t1:
+                    if st.button(
+                        f"{template.emoji} {template.name}",
+                        key=f"tmpl_{template.id}",
+                        use_container_width=True,
+                        help=template.description
+                    ):
+                        # Apply template config
+                        for key, value in template.config.items():
+                            if hasattr(st.session_state, key):
+                                setattr(st.session_state, key, value)
+                        st.toast(f"✅ Mal '{template.name}' lastet")
+                        st.rerun()
+                with col_t2:
+                    if st.button("🗑️", key=f"del_tmpl_{template.id}", help="Slett"):
+                        delete_template(template.id)
+                        st.toast("🗑️ Mal slettet")
+                        st.rerun()
+        
+        # Create new template button
+        with st.expander("➕ Lag ny mal", expanded=False):
+            new_name = st.text_input("Navn", placeholder="Min mal", key="new_tmpl_name")
+            new_desc = st.text_input("Beskrivelse", placeholder="Kort beskrivelse", key="new_tmpl_desc")
+            new_emoji = st.selectbox("Emoji", ["📝", "📖", "📋", "🎓", "📚", "📊", "⚡", "🎯"], key="new_tmpl_emoji")
+            
+            if st.button("💾 Lagre som mal", use_container_width=True):
+                if new_name:
+                    # Get current config
+                    config = {
+                        "material_type": st.session_state.get("material_type", "arbeidsark"),
+                        "include_theory": st.session_state.get("include_theory", True),
+                        "include_examples": st.session_state.get("include_examples", True),
+                        "include_exercises": st.session_state.get("include_exercises", True),
+                        "include_solutions": st.session_state.get("include_solutions", True),
+                        "include_graphs": st.session_state.get("include_graphs", True),
+                        "include_tips": st.session_state.get("include_tips", False),
+                        "num_exercises": st.session_state.get("num_exercises", 10),
+                    }
+                    create_template(new_name, new_desc or "Egendefinert mal", config, new_emoji)
+                    st.toast(f"✅ Mal '{new_name}' opprettet!")
+                    st.rerun()
+                else:
+                    st.warning("Skriv inn et navn for malen")
 
 
 def render_hero():
@@ -1233,6 +1291,38 @@ def render_configuration():
                         selected_goals.append(goal)
                 
                 st.session_state.selected_competency_goals = selected_goals
+        
+        # Formula library
+        with st.expander("📐 Formelbibliotek", expanded=False):
+            from src.tools import get_categories, get_formulas_by_category
+            
+            st.markdown("""
+            <p style="color: #9090a0; font-size: 0.85rem; margin-bottom: 0.5rem;">
+                Klikk for å kopiere formler til bruk i oppgaver.
+            </p>
+            """, unsafe_allow_html=True)
+            
+            # Category selector
+            categories = get_categories()
+            selected_category = st.selectbox(
+                "Kategori",
+                options=categories,
+                label_visibility="collapsed"
+            )
+            
+            # Show formulas in category
+            formulas = get_formulas_by_category(selected_category)
+            
+            for formula in formulas[:8]:  # Limit to 8 per category
+                col_f1, col_f2 = st.columns([3, 1])
+                with col_f1:
+                    st.markdown(f"**{formula.name}**")
+                    st.latex(formula.latex)
+                    st.caption(formula.description)
+                with col_f2:
+                    if st.button("📋", key=f"copy_{formula.name}", help="Kopier LaTeX"):
+                        st.session_state.copied_formula = formula.latex
+                        st.toast(f"✅ Kopierte {formula.name}")
     
     with col2:
         # Content options
@@ -1623,6 +1713,100 @@ def render_results():
                 st.info("Ingen seksjoner funnet i dokumentet")
         else:
             st.info("Kunne ikke analysere dokumentet")
+    
+    # Difficulty analysis
+    with st.expander("📊 Vanskelighetsanalyse", expanded=False):
+        from src.tools import analyze_content, get_difficulty_emoji
+        
+        analysis = analyze_content(st.session_state.latex_result)
+        
+        if analysis.total_exercises > 0:
+            # Distribution bar
+            total = analysis.total_exercises
+            easy_pct = analysis.easy_count / total * 100
+            medium_pct = analysis.medium_count / total * 100
+            hard_pct = analysis.hard_count / total * 100
+            
+            st.markdown(f"""
+            <div style="margin-bottom: 1rem;">
+                <div style="display: flex; height: 24px; border-radius: 12px; overflow: hidden; background: #1a1a24;">
+                    <div style="width: {easy_pct}%; background: #10b981;" title="Lett: {analysis.easy_count}"></div>
+                    <div style="width: {medium_pct}%; background: #f59e0b;" title="Middels: {analysis.medium_count}"></div>
+                    <div style="width: {hard_pct}%; background: #f43f5e;" title="Vanskelig: {analysis.hard_count}"></div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Stats row
+            col_a1, col_a2, col_a3, col_a4 = st.columns(4)
+            with col_a1:
+                st.metric("🟢 Lett", analysis.easy_count)
+            with col_a2:
+                st.metric("🟡 Middels", analysis.medium_count)
+            with col_a3:
+                st.metric("🔴 Vanskelig", analysis.hard_count)
+            with col_a4:
+                st.metric("⏱️ Est. tid", f"{analysis.estimated_time_minutes} min")
+            
+            # Concepts
+            if analysis.concepts_covered:
+                st.markdown(f"**📚 Konsepter:** {', '.join(analysis.concepts_covered)}")
+            
+            # Recommendations
+            if analysis.recommendations:
+                st.markdown("**💡 Anbefalinger:**")
+                for rec in analysis.recommendations:
+                    st.markdown(f"- {rec}")
+            
+            # Exercise details
+            with st.expander("Se alle oppgaver"):
+                for ex in analysis.exercises:
+                    emoji = get_difficulty_emoji(ex.difficulty)
+                    factors = ", ".join(ex.factors) if ex.factors else "Standard"
+                    st.markdown(f"{emoji} **{ex.title}** - {ex.difficulty.capitalize()} ({factors})")
+        else:
+            st.info("Ingen oppgaver funnet å analysere")
+    
+    # QR code for answers
+    with st.expander("📲 QR-kode til fasit", expanded=False):
+        from src.tools import is_qr_available, generate_qr_for_worksheet
+        
+        if is_qr_available():
+            st.markdown("""
+            <p style="color: #9090a0; font-size: 0.85rem; margin-bottom: 1rem;">
+                Generer en QR-kode som elever kan skanne for å se fasit.
+            </p>
+            """, unsafe_allow_html=True)
+            
+            if st.button("📲 Generer QR-kode", use_container_width=True):
+                qr_data = generate_qr_for_worksheet(st.session_state.latex_result, "Matematikk Fasit")
+                
+                if qr_data:
+                    st.session_state.qr_image = qr_data["image"]
+                    st.session_state.qr_answers = qr_data["answers"]
+                    st.toast("✅ QR-kode generert!")
+                    st.rerun()
+                else:
+                    st.warning("Kunne ikke finne svar i dokumentet")
+            
+            # Show QR code if generated
+            if hasattr(st.session_state, 'qr_image') and st.session_state.qr_image:
+                st.image(st.session_state.qr_image, caption="Skann for fasit", width=200)
+                
+                st.download_button(
+                    "⬇️ Last ned QR-kode",
+                    data=st.session_state.qr_image,
+                    file_name="fasit_qr.png",
+                    mime="image/png",
+                    use_container_width=True
+                )
+                
+                if hasattr(st.session_state, 'qr_answers'):
+                    st.markdown("**Svar i QR-koden:**")
+                    for num, ans in list(st.session_state.qr_answers.items())[:5]:
+                        st.markdown(f"- Oppgave {num}: {ans[:50]}...")
+        else:
+            st.info("📦 QR-kode krever `qrcode`-pakken. Kjør: `pip install qrcode[pil]`")
 
 
 # ============================================================================
