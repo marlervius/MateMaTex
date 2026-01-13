@@ -259,6 +259,16 @@ from .geogebra import (
     GEOGEBRA_COMMAND_REFERENCE,
 )
 
+from .content_index import (
+    load_content_index,
+    save_content_index,
+    get_item_folder,
+    set_item_folder,
+    remove_item_from_index,
+    get_folder_counts,
+    filter_by_folder,
+)
+
 from .usage_dashboard import (
     UsageStats,
     record_generation,
@@ -503,6 +513,14 @@ __all__ = [
     "get_template_list",
     "render_template_selector_html",
     "GEOGEBRA_COMMAND_REFERENCE",
+    # Content index (folders mapping)
+    "load_content_index",
+    "save_content_index",
+    "get_item_folder",
+    "set_item_folder",
+    "remove_item_from_index",
+    "get_folder_counts",
+    "filter_by_folder",
     # Usage dashboard
     "UsageStats",
     "record_generation",
