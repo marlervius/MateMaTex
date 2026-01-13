@@ -1301,48 +1301,48 @@ def render_configuration():
             </div>
         """, unsafe_allow_html=True)
         
-    grade_options = {
-        "1.-4. trinn": "1-4. trinn",
-        "5.-7. trinn": "5-7. trinn",
-        "8. trinn": "8. trinn",
-        "9. trinn": "9. trinn",
-        "10. trinn": "10. trinn",
-        "VG1 1T": "VG1 1T",
-        "VG1 1P": "VG1 1P",
-        "VG2 R1": "VG2 R1",
-        "VG3 R2": "VG3 R2",
-    }
+        grade_options = {
+            "1.-4. trinn": "1-4. trinn",
+            "5.-7. trinn": "5-7. trinn",
+            "8. trinn": "8. trinn",
+            "9. trinn": "9. trinn",
+            "10. trinn": "10. trinn",
+            "VG1 1T": "VG1 1T",
+            "VG1 1P": "VG1 1P",
+            "VG2 R1": "VG2 R1",
+            "VG3 R2": "VG3 R2",
+        }
         
-    selected_grade = st.selectbox(
-        "Klassetrinn",
-        options=list(grade_options.keys()),
-        index=4,
-        label_visibility="collapsed"
-    )
-    
-        # Topic selection
-    topics_by_category = get_topics_for_grade(selected_grade)
-    topic_choices = ["-- Velg tema --", "✍️ Skriv eget tema..."]
-    for category, topics in topics_by_category.items():
-        for t in topics:
-            topic_choices.append(f"{t}")
-    
-    selected_topic_choice = st.selectbox(
-        "Velg tema",
-        options=topic_choices,
-        label_visibility="collapsed"
-    )
-    
-    topic = ""
-    if selected_topic_choice == "✍️ Skriv eget tema...":
-        topic = st.text_input(
-            "Skriv tema",
-            placeholder="f.eks. Lineære funksjoner, Pytagoras, Brøk...",
+        selected_grade = st.selectbox(
+            "Klassetrinn",
+            options=list(grade_options.keys()),
+            index=4,
             label_visibility="collapsed"
         )
-    elif selected_topic_choice != "-- Velg tema --":
-        topic = selected_topic_choice
-    
+        
+        # Topic selection
+        topics_by_category = get_topics_for_grade(selected_grade)
+        topic_choices = ["-- Velg tema --", "✍️ Skriv eget tema..."]
+        for category, topics in topics_by_category.items():
+            for t in topics:
+                topic_choices.append(f"{t}")
+        
+        selected_topic_choice = st.selectbox(
+            "Velg tema",
+            options=topic_choices,
+            label_visibility="collapsed"
+        )
+        
+        topic = ""
+        if selected_topic_choice == "✍️ Skriv eget tema...":
+            topic = st.text_input(
+                "Skriv tema",
+                placeholder="f.eks. Lineære funksjoner, Pytagoras, Brøk...",
+                label_visibility="collapsed"
+            )
+        elif selected_topic_choice != "-- Velg tema --":
+            topic = selected_topic_choice
+        
         # Topic suggestions
         from src.tools import get_topic_suggestions
         suggestions = get_topic_suggestions(selected_grade, topic, num_suggestions=4)
