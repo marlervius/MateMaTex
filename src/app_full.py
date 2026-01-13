@@ -24,619 +24,13 @@ st.set_page_config(
 )
 
 # ============================================================================
-# CUSTOM CSS - Modern, Distinctive Design
+# INJECT CSS STYLES FROM FILE
 # ============================================================================
-st.markdown("""
-<style>
-    /* Import distinctive fonts */
-    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
-    
-    /* CSS Variables for theming */
-    :root {
-        --bg-primary: #0a0a0f;
-        --bg-secondary: #12121a;
-        --bg-card: #1a1a24;
-        --bg-card-hover: #22222e;
-        --border-subtle: #2a2a3a;
-        --border-accent: #3d3d52;
-        --text-primary: #f0f0f5;
-        --text-secondary: #9090a0;
-        --text-muted: #606070;
-        --accent-gold: #f0b429;
-        --accent-gold-dim: #c4941f;
-        --accent-amber: #f59e0b;
-        --accent-emerald: #10b981;
-        --accent-rose: #f43f5e;
-        --accent-violet: #8b5cf6;
-        --gradient-gold: linear-gradient(135deg, #f0b429 0%, #f59e0b 50%, #d97706 100%);
-        --gradient-dark: linear-gradient(180deg, #0a0a0f 0%, #12121a 100%);
-        --shadow-lg: 0 10px 40px rgba(0,0,0,0.4);
-        --shadow-glow: 0 0 30px rgba(240,180,41,0.15);
-    }
-    
-    /* Global styles */
-    .stApp {
-        background: var(--gradient-dark);
-        font-family: 'Outfit', sans-serif;
-    }
-    
-    /* Hide Streamlit branding */
-    #MainMenu, footer, header, .stDeployButton {
-        visibility: hidden;
-    }
-    
-    /* Sidebar styling */
-    section[data-testid="stSidebar"] {
-        background: var(--bg-secondary);
-        border-right: 1px solid var(--border-subtle);
-    }
-    
-    section[data-testid="stSidebar"] .stMarkdown {
-        color: var(--text-primary);
-    }
-    
-    /* Main content area */
-    .main .block-container {
-        padding: 2rem 3rem;
-        max-width: 1200px;
-    }
-    
-    /* Hero section */
-    .hero-container {
-        text-align: center;
-        padding: 2rem 0 3rem 0;
-        margin-bottom: 2rem;
-    }
-    
-    .hero-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        background: rgba(240, 180, 41, 0.1);
-        border: 1px solid rgba(240, 180, 41, 0.2);
-        padding: 0.4rem 1rem;
-        border-radius: 100px;
-        font-size: 0.8rem;
-        color: var(--accent-gold);
-        margin-bottom: 1.5rem;
-        font-weight: 500;
-        letter-spacing: 0.5px;
-    }
-    
-    .hero-title {
-        font-size: 3.5rem;
-        font-weight: 800;
-        background: linear-gradient(135deg, #fff 0%, #f0b429 50%, #f59e0b 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        margin: 0 0 1rem 0;
-        letter-spacing: -1px;
-    }
-    
-    .hero-subtitle {
-        font-size: 1.15rem;
-        color: var(--text-secondary);
-        max-width: 500px;
-        margin: 0 auto;
-        line-height: 1.6;
-    }
-    
-    /* Card components */
-    .config-card {
-        background: var(--bg-card);
-        border: 1px solid var(--border-subtle);
-        border-radius: 16px;
-        padding: 1.5rem;
-        margin-bottom: 1.25rem;
-        transition: all 0.2s ease;
-    }
-    
-    .config-card:hover {
-        border-color: var(--border-accent);
-        background: var(--bg-card-hover);
-    }
-    
-    .card-header {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        margin-bottom: 1rem;
-    }
-    
-    .card-icon {
-        width: 36px;
-        height: 36px;
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.1rem;
-    }
-    
-    .card-icon.gold { background: rgba(240, 180, 41, 0.15); }
-    .card-icon.emerald { background: rgba(16, 185, 129, 0.15); }
-    .card-icon.violet { background: rgba(139, 92, 246, 0.15); }
-    .card-icon.rose { background: rgba(244, 63, 94, 0.15); }
-    
-    .card-title {
-        font-size: 0.95rem;
-        font-weight: 600;
-        color: var(--text-primary);
-        margin: 0;
-    }
-    
-    .card-description {
-        font-size: 0.8rem;
-        color: var(--text-muted);
-        margin: 0;
-    }
-    
-    /* Template cards */
-    .template-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 1rem;
-        margin: 1rem 0;
-    }
-    
-    .template-card {
-        background: var(--bg-card);
-        border: 1px solid var(--border-subtle);
-        border-radius: 12px;
-        padding: 1.25rem;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        position: relative;
-        overflow: hidden;
-    }
-    
-    .template-card::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 3px;
-        background: var(--gradient-gold);
-        opacity: 0;
-        transition: opacity 0.2s ease;
-    }
-    
-    .template-card:hover {
-        border-color: var(--accent-gold);
-        transform: translateY(-2px);
-        box-shadow: var(--shadow-glow);
-    }
-    
-    .template-card:hover::before {
-        opacity: 1;
-    }
-    
-    .template-emoji {
-        font-size: 2rem;
-        margin-bottom: 0.75rem;
-    }
-    
-    .template-name {
-        font-weight: 600;
-        color: var(--text-primary);
-        margin-bottom: 0.25rem;
-    }
-    
-    .template-desc {
-        font-size: 0.8rem;
-        color: var(--text-muted);
-    }
-    
-    /* Form elements */
-    .stSelectbox > div > div,
-    .stMultiSelect > div > div {
-        background: var(--bg-secondary) !important;
-        border: 1px solid var(--border-subtle) !important;
-        border-radius: 10px !important;
-        color: var(--text-primary) !important;
-    }
-    
-    .stSelectbox > div > div:hover,
-    .stMultiSelect > div > div:hover {
-        border-color: var(--accent-gold) !important;
-    }
-    
-    .stTextInput > div > div > input,
-    .stTextArea > div > div > textarea {
-        background: var(--bg-secondary) !important;
-        border: 1px solid var(--border-subtle) !important;
-        border-radius: 10px !important;
-        color: var(--text-primary) !important;
-        font-family: 'Outfit', sans-serif !important;
-    }
-    
-    .stTextInput > div > div > input:focus,
-    .stTextArea > div > div > textarea:focus {
-        border-color: var(--accent-gold) !important;
-        box-shadow: 0 0 0 2px rgba(240, 180, 41, 0.15) !important;
-    }
-    
-    .stTextInput > div > div > input::placeholder {
-        color: var(--text-muted) !important;
-    }
-    
-    /* Slider */
-    .stSlider > div > div > div {
-        background: var(--border-subtle) !important;
-    }
-    
-    .stSlider > div > div > div > div {
-        background: var(--accent-gold) !important;
-    }
-    
-    /* Checkbox styling */
-    .stCheckbox {
-        background: var(--bg-secondary);
-        border: 1px solid var(--border-subtle);
-        border-radius: 10px;
-        padding: 0.75rem 1rem;
-        margin-bottom: 0.5rem;
-        transition: all 0.2s ease;
-    }
-    
-    .stCheckbox:hover {
-        border-color: var(--border-accent);
-    }
-    
-    .stCheckbox:has(input:checked) {
-        background: rgba(240, 180, 41, 0.08);
-        border-color: rgba(240, 180, 41, 0.3);
-    }
-    
-    .stCheckbox label {
-        color: var(--text-primary) !important;
-        font-weight: 500 !important;
-    }
-    
-    /* Radio buttons */
-    .stRadio > div {
-        background: var(--bg-secondary);
-        border: 1px solid var(--border-subtle);
-        border-radius: 10px;
-        padding: 0.75rem;
-    }
-    
-    .stRadio label {
-        color: var(--text-primary) !important;
-    }
-    
-    /* Generate button */
-    .stButton > button {
-        background: var(--gradient-gold) !important;
-        color: #0a0a0f !important;
-        border: none !important;
-        border-radius: 12px !important;
-        padding: 0.875rem 2rem !important;
-        font-weight: 700 !important;
-        font-size: 1rem !important;
-        font-family: 'Outfit', sans-serif !important;
-        letter-spacing: 0.3px !important;
-        width: 100% !important;
-        transition: all 0.3s ease !important;
-        box-shadow: 0 4px 20px rgba(240, 180, 41, 0.25) !important;
-    }
-    
-    .stButton > button:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 8px 30px rgba(240, 180, 41, 0.35) !important;
-    }
-    
-    .stButton > button:active {
-        transform: translateY(0) !important;
-    }
-    
-    /* Download buttons */
-    .stDownloadButton > button {
-        background: var(--bg-card) !important;
-        border: 1px solid var(--border-accent) !important;
-        color: var(--text-primary) !important;
-        border-radius: 10px !important;
-        font-family: 'Outfit', sans-serif !important;
-        transition: all 0.2s ease !important;
-    }
-    
-    .stDownloadButton > button:hover {
-        background: var(--bg-card-hover) !important;
-        border-color: var(--accent-gold) !important;
-    }
-    
-    /* Progress section */
-    .progress-container {
-        background: var(--bg-card);
-        border: 1px solid var(--border-subtle);
-        border-radius: 16px;
-        padding: 2rem;
-        margin: 1.5rem 0;
-    }
-    
-    .progress-title {
-        font-size: 1.1rem;
-        font-weight: 600;
-        color: var(--text-primary);
-        margin-bottom: 1.5rem;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    
-    .progress-steps {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-    }
-    
-    .progress-step {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        padding: 0.75rem 1rem;
-        border-radius: 10px;
-        background: var(--bg-secondary);
-        border: 1px solid transparent;
-        transition: all 0.3s ease;
-    }
-    
-    .progress-step.active {
-        border-color: var(--accent-gold);
-        background: rgba(240, 180, 41, 0.08);
-    }
-    
-    .progress-step.done {
-        border-color: var(--accent-emerald);
-        background: rgba(16, 185, 129, 0.08);
-    }
-    
-    .step-indicator {
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 600;
-        font-size: 0.85rem;
-        background: var(--bg-card);
-        color: var(--text-muted);
-        border: 2px solid var(--border-subtle);
-        transition: all 0.3s ease;
-    }
-    
-    .progress-step.active .step-indicator {
-        background: var(--accent-gold);
-        color: #0a0a0f;
-        border-color: var(--accent-gold);
-        animation: pulse 1.5s infinite;
-    }
-    
-    .progress-step.done .step-indicator {
-        background: var(--accent-emerald);
-        color: white;
-        border-color: var(--accent-emerald);
-    }
-    
-    @keyframes pulse {
-        0%, 100% { box-shadow: 0 0 0 0 rgba(240, 180, 41, 0.4); }
-        50% { box-shadow: 0 0 0 8px rgba(240, 180, 41, 0); }
-    }
-    
-    .step-content {
-        flex: 1;
-    }
-    
-    .step-title {
-        font-weight: 600;
-        color: var(--text-primary);
-        font-size: 0.9rem;
-    }
-    
-    .step-desc {
-        font-size: 0.8rem;
-        color: var(--text-muted);
-    }
-    
-    .progress-step.active .step-title {
-        color: var(--accent-gold);
-    }
-    
-    .progress-step.done .step-title {
-        color: var(--accent-emerald);
-    }
-    
-    /* Results section */
-    .results-container {
-        background: var(--bg-card);
-        border: 1px solid var(--accent-emerald);
-        border-radius: 16px;
-        padding: 2rem;
-        margin: 1.5rem 0;
-    }
-    
-    .results-header {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        margin-bottom: 1.5rem;
-    }
-    
-    .results-icon {
-        width: 48px;
-        height: 48px;
-        background: rgba(16, 185, 129, 0.15);
-        border-radius: 12px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.5rem;
-    }
-    
-    .results-title {
-        font-size: 1.25rem;
-        font-weight: 700;
-        color: var(--text-primary);
-        margin: 0;
-    }
-    
-    .results-subtitle {
-        font-size: 0.85rem;
-        color: var(--text-secondary);
-        margin: 0;
-    }
-    
-    /* History sidebar */
-    .history-item {
-        background: var(--bg-card);
-        border: 1px solid var(--border-subtle);
-        border-radius: 10px;
-        padding: 0.875rem;
-        margin-bottom: 0.75rem;
-        cursor: pointer;
-        transition: all 0.2s ease;
-    }
-    
-    .history-item:hover {
-        border-color: var(--border-accent);
-        background: var(--bg-card-hover);
-    }
-    
-    .history-topic {
-        font-weight: 600;
-        color: var(--text-primary);
-        font-size: 0.85rem;
-        margin-bottom: 0.25rem;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    
-    .history-meta {
-        font-size: 0.75rem;
-        color: var(--text-muted);
-    }
-    
-    /* Expander */
-    .streamlit-expanderHeader {
-        background: var(--bg-card) !important;
-        border-radius: 10px !important;
-        color: var(--text-primary) !important;
-        font-family: 'Outfit', sans-serif !important;
-    }
-    
-    .streamlit-expanderContent {
-        background: var(--bg-card) !important;
-        border: 1px solid var(--border-subtle) !important;
-        border-top: none !important;
-        border-radius: 0 0 10px 10px !important;
-    }
-    
-    /* Code blocks */
-    .stCodeBlock {
-        background: var(--bg-secondary) !important;
-        border: 1px solid var(--border-subtle) !important;
-        border-radius: 10px !important;
-    }
-    
-    code {
-        font-family: 'JetBrains Mono', monospace !important;
-    }
-    
-    /* Status messages */
-    .stSuccess, .stInfo, .stWarning, .stError {
-        background: var(--bg-card) !important;
-        border-radius: 10px !important;
-        font-family: 'Outfit', sans-serif !important;
-    }
-    
-    /* PDF iframe */
-    .pdf-preview {
-        border: 1px solid var(--border-subtle);
-        border-radius: 12px;
-        overflow: hidden;
-        margin-top: 1rem;
-    }
-    
-    /* Section labels */
-    .section-label {
-        font-size: 0.8rem;
-        font-weight: 600;
-        color: var(--text-secondary);
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        margin-bottom: 0.75rem;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    
-    /* Divider */
-    .divider {
-        height: 1px;
-        background: var(--border-subtle);
-        margin: 1.5rem 0;
-    }
-    
-    /* Stats badges */
-    .stats-row {
-        display: flex;
-        gap: 0.75rem;
-        margin-bottom: 1rem;
-    }
-    
-    .stat-badge {
-        background: var(--bg-secondary);
-        border: 1px solid var(--border-subtle);
-        border-radius: 8px;
-        padding: 0.5rem 0.875rem;
-        font-size: 0.8rem;
-        color: var(--text-secondary);
-    }
-    
-    .stat-badge strong {
-        color: var(--accent-gold);
-    }
-    
-    /* Footer */
-    .footer {
-        text-align: center;
-        padding: 2rem 0;
-        color: var(--text-muted);
-        font-size: 0.8rem;
-        border-top: 1px solid var(--border-subtle);
-        margin-top: 3rem;
-    }
-    
-    .footer a {
-        color: var(--accent-gold);
-        text-decoration: none;
-    }
-    
-    /* Scrollbar styling */
-    ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-    }
-    
-    ::-webkit-scrollbar-track {
-        background: var(--bg-secondary);
-    }
-    
-    ::-webkit-scrollbar-thumb {
-        background: var(--border-accent);
-        border-radius: 4px;
-    }
-    
-    ::-webkit-scrollbar-thumb:hover {
-        background: var(--text-muted);
-    }
-</style>
-""", unsafe_allow_html=True)
+from src.ui import inject_styles
+inject_styles()
+
+
+# CSS is now loaded from src/ui/styles.css
 
 
 # ============================================================================
@@ -882,8 +276,9 @@ def save_tex_file(latex_content: str, filename: str) -> str:
 # ============================================================================
 def render_sidebar():
     """Render the sidebar with history, settings, and language selection."""
-    # Import storage and translations
-    from src.storage import load_history, load_settings, save_settings, get_tex_content, delete_history_entry
+    # Import storage, translations, and cached functions
+    from src.storage import save_settings, get_tex_content, delete_history_entry
+    from src.cache import get_history, get_settings, invalidate_history_cache
     from src.translations import LANGUAGES, get_translator
     
     with st.sidebar:
@@ -977,7 +372,7 @@ def render_sidebar():
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
         # Language selection
-        settings = load_settings()
+        settings = get_settings()
         current_lang = settings.get("language", "no")
         
         lang_options = list(LANGUAGES.keys())
@@ -1051,8 +446,8 @@ def render_sidebar():
         </p>
         """, unsafe_allow_html=True)
         
-        # Load persistent history
-        persistent_history = load_history()
+        # Load persistent history (cached)
+        persistent_history = get_history()
         
         # Merge with session history
         all_history = st.session_state.history + [h for h in persistent_history if h not in st.session_state.history]
@@ -1130,13 +525,14 @@ def render_sidebar():
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
         # Template builder
-        st.markdown("""
-        <p class="section-label">🎨 Mine maler</p>
+        st.markdown(f"""
+        <p class="section-label">🎨 {t("my_templates")}</p>
         """, unsafe_allow_html=True)
         
-        from src.tools import load_custom_templates, create_template, delete_template
+        from src.tools import create_template, delete_template
+        from src.cache import get_custom_templates, invalidate_templates_cache
         
-        custom_templates = load_custom_templates()
+        custom_templates = get_custom_templates()
         
         if custom_templates:
             for template in custom_templates[:5]:
@@ -1188,20 +584,20 @@ def render_sidebar():
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
         # Favorites section
-        st.markdown("""
-        <p class="section-label">⭐ Favoritter</p>
+        st.markdown(f"""
+        <p class="section-label">⭐ {t("favorites")}</p>
         """, unsafe_allow_html=True)
         
         from src.tools import (
-            load_favorites,
             get_favorite,
             delete_favorite,
             render_star_rating,
             get_item_folder,
             remove_item_from_index,
         )
+        from src.cache import get_favorites, invalidate_favorites_cache
         
-        favorites = load_favorites()
+        favorites = get_favorites()
         
         # Apply folder/tag filters if set
         selected_folder_filter = st.session_state.get("filter_folder_id")
@@ -1375,13 +771,14 @@ def render_sidebar():
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
         # Exercise bank section
-        st.markdown("""
-        <p class="section-label">🏦 Oppgavebank</p>
+        st.markdown(f"""
+        <p class="section-label">🏦 {t("exercise_bank")}</p>
         """, unsafe_allow_html=True)
         
-        from src.tools import load_exercises, get_exercise, delete_exercise, get_exercise_stats, get_item_folder, remove_item_from_index
+        from src.tools import get_exercise, delete_exercise, get_exercise_stats, get_item_folder, remove_item_from_index
+        from src.cache import get_exercises, invalidate_exercises_cache
         
-        exercises = load_exercises()
+        exercises = get_exercises()
         stats = get_exercise_stats()
         
         selected_folder_filter = st.session_state.get("filter_folder_id")
@@ -1575,7 +972,7 @@ def render_templates():
 
 def render_configuration():
     """Render the main configuration section."""
-    from src.curriculum import get_topics_for_grade, get_competency_goals, get_exercise_types
+    from src.cache import get_curriculum_topics, get_curriculum_goals, get_all_exercise_types
     
     # Initialize return values to avoid UnboundLocalError
     selected_grade = "8. trinn"
@@ -1618,7 +1015,7 @@ def render_configuration():
         )
         
         # Topic selection
-        topics_by_category = get_topics_for_grade(selected_grade)
+        topics_by_category = get_curriculum_topics(selected_grade)
         topic_choices = ["-- Velg tema --", "✍️ Skriv eget tema..."]
         for category, topics in topics_by_category.items():
             for t in topics:
@@ -1699,7 +1096,7 @@ def render_configuration():
         st.markdown("</div>", unsafe_allow_html=True)
         
         # Competency goals
-        competency_goals = get_competency_goals(selected_grade)
+        competency_goals = get_curriculum_goals(selected_grade)
         if competency_goals:
             with st.expander("🎯 Kompetansemål (LK20)", expanded=False):
                 st.markdown("""
@@ -1717,7 +1114,7 @@ def render_configuration():
         
         # Formula library
         with st.expander("📐 Formelbibliotek", expanded=False):
-            from src.tools import get_categories, get_formulas_by_category
+            from src.cache import get_formula_categories, get_formulas_for_category
             
             st.markdown("""
             <p style="color: #9090a0; font-size: 0.85rem; margin-bottom: 0.5rem;">
@@ -1725,16 +1122,16 @@ def render_configuration():
             </p>
             """, unsafe_allow_html=True)
             
-            # Category selector
-            categories = get_categories()
+            # Category selector (cached)
+            categories = get_formula_categories()
             selected_category = st.selectbox(
                 "Kategori",
                 options=categories,
                 label_visibility="collapsed"
             )
             
-            # Show formulas in category
-            formulas = get_formulas_by_category(selected_category)
+            # Show formulas in category (cached)
+            formulas = get_formulas_for_category(selected_category)
             
             for formula in formulas[:8]:  # Limit to 8 per category
                 col_f1, col_f2 = st.columns([3, 1])
@@ -1827,8 +1224,8 @@ def render_configuration():
             
             st.markdown("</div>", unsafe_allow_html=True)
             
-            # Exercise types
-            exercise_types = get_exercise_types()
+            # Exercise types (cached)
+            exercise_types = get_all_exercise_types()
             with st.expander("📝 Oppgavetyper", expanded=False):
                 selected_types = []
                 cols = st.columns(2)
@@ -2477,8 +1874,9 @@ def render_results():
                 folder_id = st.session_state.get("filter_folder_id")
                 if folder_id and fav:
                     set_item_folder("favorite", fav.id, folder_id)
-            except Exception:
-                pass
+            except Exception as e:
+                import logging
+                logging.warning(f"Kunne ikke tilordne mappe til favoritt: {e}")
             st.toast(f"⭐ Lagret som favoritt: {fav_name}")
     
     # Add to Exercise Bank
@@ -2522,8 +1920,9 @@ def render_results():
                         if folder_id:
                             for ex_obj in saved:
                                 set_item_folder("exercise", ex_obj.id, folder_id)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        import logging
+                        logging.warning(f"Kunne ikke tilordne mappe til oppgaver: {e}")
                     st.toast(f"✅ Lagret {len(saved)} oppgaver til banken")
                 else:
                     st.warning("Fant ingen oppgaver å lagre")
@@ -2562,8 +1961,9 @@ def render_results():
                                 folder_id = st.session_state.get("filter_folder_id")
                                 if folder_id and ex_obj:
                                     set_item_folder("exercise", ex_obj.id, folder_id)
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                import logging
+                                logging.warning(f"Kunne ikke tilordne mappe til oppgave: {e}")
                             st.toast(f"✅ Lagret: {ex['title']}")
 
 
@@ -2696,8 +2096,8 @@ def main():
         filename = f"{safe_topic}_{selected_grade.replace(' ', '_').replace('.', '')}_{timestamp}"
         
         # Build content options
-        from src.curriculum import get_exercise_types
-        exercise_types = get_exercise_types()
+        from src.cache import get_all_exercise_types
+        exercise_types = get_all_exercise_types()
         exercise_type_instructions = []
         for etype in st.session_state.selected_exercise_types:
             if etype in exercise_types:

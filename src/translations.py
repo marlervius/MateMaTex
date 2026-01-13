@@ -412,6 +412,222 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "no": "Lagrer filer...",
         "en": "Saving files...",
     },
+    
+    # Sidebar sections
+    "my_templates": {
+        "no": "Mine maler",
+        "en": "My templates",
+    },
+    "favorites": {
+        "no": "Favoritter",
+        "en": "Favorites",
+    },
+    "no_favorites": {
+        "no": "Ingen favoritter ennå",
+        "en": "No favorites yet",
+    },
+    "folders_and_tags": {
+        "no": "Mapper og tags",
+        "en": "Folders and tags",
+    },
+    "folders": {
+        "no": "Mapper",
+        "en": "Folders",
+    },
+    "tags": {
+        "no": "Tags",
+        "en": "Tags",
+    },
+    "new_folder": {
+        "no": "Ny mappe",
+        "en": "New folder",
+    },
+    "create_folder": {
+        "no": "Lag mappe",
+        "en": "Create folder",
+    },
+    "new_tag": {
+        "no": "Ny tag",
+        "en": "New tag",
+    },
+    "create_tag": {
+        "no": "Lag tag",
+        "en": "Create tag",
+    },
+    "exercise_bank": {
+        "no": "Oppgavebank",
+        "en": "Exercise bank",
+    },
+    "exercises_saved": {
+        "no": "oppgaver lagret",
+        "en": "exercises saved",
+    },
+    "no_exercises_saved": {
+        "no": "Ingen oppgaver lagret ennå",
+        "en": "No exercises saved yet",
+    },
+    "usage_dashboard": {
+        "no": "Bruksdashboard",
+        "en": "Usage dashboard",
+    },
+    "watermark_logo": {
+        "no": "Vannmerke / Logo",
+        "en": "Watermark / Logo",
+    },
+    "school_name": {
+        "no": "Skolenavn",
+        "en": "School name",
+    },
+    "delete": {
+        "no": "Slett",
+        "en": "Delete",
+    },
+    "save": {
+        "no": "Lagre",
+        "en": "Save",
+    },
+    "load": {
+        "no": "Last inn",
+        "en": "Load",
+    },
+    "loaded": {
+        "no": "Lastet",
+        "en": "Loaded",
+    },
+    "deleted": {
+        "no": "Slettet",
+        "en": "Deleted",
+    },
+    "saved": {
+        "no": "Lagret",
+        "en": "Saved",
+    },
+    "search": {
+        "no": "Søk",
+        "en": "Search",
+    },
+    "search_all_content": {
+        "no": "Søk i alt innhold...",
+        "en": "Search all content...",
+    },
+    "found_results": {
+        "no": "Fant {count} resultater",
+        "en": "Found {count} results",
+    },
+    "no_results": {
+        "no": "Ingen resultater funnet",
+        "en": "No results found",
+    },
+    "filter_folder": {
+        "no": "Filtrer etter mappe",
+        "en": "Filter by folder",
+    },
+    "all_folders": {
+        "no": "Alle mapper",
+        "en": "All folders",
+    },
+    "filter_tags": {
+        "no": "Filtrer etter tags",
+        "en": "Filter by tags",
+    },
+    
+    # Results section
+    "pdf_preview": {
+        "no": "PDF Forhåndsvisning",
+        "en": "PDF Preview",
+    },
+    "show_preview": {
+        "no": "Vis forhåndsvisning",
+        "en": "Show preview",
+    },
+    "print_friendly": {
+        "no": "Utskriftsvennlig versjon",
+        "en": "Print-friendly version",
+    },
+    "create_print_version": {
+        "no": "Lag utskriftsversjon",
+        "en": "Create print version",
+    },
+    "create_answer_sheet": {
+        "no": "Lag kun fasit-ark",
+        "en": "Create answer sheet only",
+    },
+    "regenerate_section": {
+        "no": "Regenerer seksjon",
+        "en": "Regenerate section",
+    },
+    "difficulty_analysis": {
+        "no": "Vanskelighetsanalyse",
+        "en": "Difficulty analysis",
+    },
+    "qr_code_answers": {
+        "no": "QR-kode til fasit",
+        "en": "QR code for answers",
+    },
+    "geogebra_graphs": {
+        "no": "GeoGebra Grafer",
+        "en": "GeoGebra Graphs",
+    },
+    "assessment_rubrics": {
+        "no": "Vurderingsrubrikker",
+        "en": "Assessment rubrics",
+    },
+    "lk20_coverage": {
+        "no": "LK20 Dekningsrapport",
+        "en": "Curriculum coverage report",
+    },
+    "differentiation_assistant": {
+        "no": "Differensiering",
+        "en": "Differentiation",
+    },
+    "save_as_favorite": {
+        "no": "Lagre som favoritt",
+        "en": "Save as favorite",
+    },
+    "give_name": {
+        "no": "Gi favoritten et navn...",
+        "en": "Give the favorite a name...",
+    },
+    "save_to_bank": {
+        "no": "Lagre til oppgavebank",
+        "en": "Save to exercise bank",
+    },
+    "find_exercises": {
+        "no": "Finn oppgaver",
+        "en": "Find exercises",
+    },
+    "save_all": {
+        "no": "Lagre alle",
+        "en": "Save all",
+    },
+    "found_exercises": {
+        "no": "Funne oppgaver:",
+        "en": "Found exercises:",
+    },
+    
+    # Topic suggestions
+    "suggested_topics": {
+        "no": "Foreslåtte emner:",
+        "en": "Suggested topics:",
+    },
+    
+    # Formula library
+    "formula_library": {
+        "no": "Formelbibliotek",
+        "en": "Formula library",
+    },
+    "click_to_copy": {
+        "no": "Klikk for å kopiere formler til bruk i oppgaver.",
+        "en": "Click to copy formulas for use in exercises.",
+    },
+    "category": {
+        "no": "Kategori",
+        "en": "Category",
+    },
+    "copy_latex": {
+        "no": "Kopier LaTeX",
+        "en": "Copy LaTeX",
+    },
 }
 
 
