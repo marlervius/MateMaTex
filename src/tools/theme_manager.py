@@ -39,23 +39,23 @@ class ThemeColors:
     border_light: str
 
 
-# Dark theme (current default)
+# Dark theme (refined - less intense amber)
 DARK_THEME = ThemeColors(
-    bg_primary="#0f172a",
-    bg_secondary="#1e293b",
-    bg_card="#1a1a2e",
-    bg_hover="#2a2a4e",
-    text_primary="#ffffff",
-    text_secondary="#e2e8f0",
-    text_muted="#9090a0",
-    accent_primary="#f0b429",
-    accent_secondary="#fbbf24",
+    bg_primary="#0c0c14",
+    bg_secondary="#10101a",
+    bg_card="#16161f",
+    bg_hover="#1c1c28",
+    text_primary="#f1f5f9",
+    text_secondary="#94a3b8",
+    text_muted="#64748b",
+    accent_primary="#f59e0b",
+    accent_secondary="#d97706",
     success="#10b981",
     warning="#f59e0b",
-    error="#ef4444",
+    error="#f43f5e",
     info="#3b82f6",
-    border="#374151",
-    border_light="#4b5563",
+    border="#2a2a3d",
+    border_light="#3d3d52",
 )
 
 # Light theme

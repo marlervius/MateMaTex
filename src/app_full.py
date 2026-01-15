@@ -289,42 +289,63 @@ def render_sidebar():
     from src.translations import LANGUAGES, get_translator
     
     with st.sidebar:
+        # Brand header
         st.markdown("""
-        <div style="padding: 1rem 0;">
-            <h2 style="color: #f0b429; font-weight: 700; margin: 0; font-size: 1.4rem;">
-                ◇ MateMaTeX
-            </h2>
-            <p style="color: #9090a0; font-size: 0.8rem; margin-top: 0.25rem;">
-                AI-drevet oppgavegenerator
-            </p>
+        <div class="sidebar-brand">
+            <h2>◇ MateMaTeX</h2>
+            <p>AI-drevet oppgavegenerator</p>
         </div>
         """, unsafe_allow_html=True)
         
-        # Theme toggle
-        from src.tools import get_theme, generate_theme_css, DARK_THEME, LIGHT_THEME
+        # Theme and language in compact row
+        from src.tools import get_theme, generate_theme_css
         
         col_theme, col_lang = st.columns(2)
         with col_theme:
             theme_mode = st.selectbox(
-                "🎨",
-                options=["Mørk", "Lys"],
+                "Tema",
+                options=["🌙 Mørk", "☀️ Lys"],
                 index=0 if st.session_state.get("theme_mode", "dark") == "dark" else 1,
                 label_visibility="collapsed"
             )
-            st.session_state.theme_mode = "dark" if theme_mode == "Mørk" else "light"
+            st.session_state.theme_mode = "dark" if "Mørk" in theme_mode else "light"
+        
+        with col_lang:
+            settings = get_settings()
+            current_lang = settings.get("language", "no")
+            lang_options = list(LANGUAGES.keys())
+            current_idx = lang_options.index(current_lang) if current_lang in lang_options else 0
+            
+            selected_lang = st.selectbox(
+                "Språk",
+                options=lang_options,
+                format_func=lambda x: LANGUAGES[x],
+                index=current_idx,
+                label_visibility="collapsed",
+                key="language_selector"
+            )
+            
+            if selected_lang != current_lang:
+                settings["language"] = selected_lang
+                save_settings(settings)
+                st.session_state.language = selected_lang
+                st.rerun()
         
         # Apply theme CSS
         theme = get_theme(st.session_state.get("theme_mode", "dark"))
         st.markdown(generate_theme_css(theme), unsafe_allow_html=True)
         
+        # Get translator
+        t = get_translator(selected_lang)
+        
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
-        # Global search
+        # Global search - always visible
         from src.tools import global_search, get_type_icon, get_type_label
         
         search_query = st.text_input(
             "🔍 Søk",
-            placeholder="Søk i alt innhold...",
+            placeholder="Søk i historikk, favoritter...",
             label_visibility="collapsed",
             key="global_search_input"
         )
@@ -333,21 +354,16 @@ def render_sidebar():
             search_results = global_search(search_query, limit=5)
             
             if search_results:
-                st.markdown(f"""
-                <p style="color: #9090a0; font-size: 0.75rem; margin: 0.5rem 0;">
-                    Fant {len(search_results)} resultater
-                </p>
-                """, unsafe_allow_html=True)
+                st.caption(f"Fant {len(search_results)} resultater")
                 
                 for result in search_results[:5]:
                     icon = get_type_icon(result.type)
                     if st.button(
-                        f"{icon} {result.title[:30]}...",
+                        f"{icon} {result.title[:28]}{'...' if len(result.title) > 28 else ''}",
                         key=f"sr_{result.id}",
                         use_container_width=True,
                         help=f"{get_type_label(result.type)}: {result.snippet[:50]}..."
                     ):
-                        # Handle result click based on type
                         if result.type == "favorite":
                             from src.tools import get_favorite
                             fav = get_favorite(result.id)
@@ -370,57 +386,26 @@ def render_sidebar():
                                 st.toast(f"📜 Lastet fra historikk")
                                 st.rerun()
             else:
-                st.markdown("""
-                <p style="color: #606070; font-size: 0.8rem; text-align: center; padding: 0.5rem;">
-                    Ingen resultater funnet
-                </p>
-                """, unsafe_allow_html=True)
+                st.caption("Ingen resultater funnet")
         
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
-        # Language selection
-        settings = get_settings()
-        current_lang = settings.get("language", "no")
-        
-        lang_options = list(LANGUAGES.keys())
-        lang_labels = list(LANGUAGES.values())
-        current_idx = lang_options.index(current_lang) if current_lang in lang_options else 0
-        
-        selected_lang = st.selectbox(
-            "🌐 Språk / Language",
-            options=lang_options,
-            format_func=lambda x: LANGUAGES[x],
-            index=current_idx,
-            key="language_selector"
-        )
-        
-        if selected_lang != current_lang:
-            settings["language"] = selected_lang
-            save_settings(settings)
-            st.session_state.language = selected_lang
-            st.rerun()
-        
-        # Get translator
-        t = get_translator(selected_lang)
-        
-        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-        
-        # API Status
+        # API Status - compact
         api_configured = bool(os.getenv("GOOGLE_API_KEY"))
         model_name = os.getenv("GOOGLE_MODEL", "gemini-2.0-flash")
         
         if api_configured:
             st.markdown(f"""
             <div style="
-                background: rgba(16, 185, 129, 0.1);
+                background: rgba(16, 185, 129, 0.08);
                 border: 1px solid rgba(16, 185, 129, 0.2);
                 border-radius: 8px;
-                padding: 0.75rem;
-                margin-bottom: 1rem;
+                padding: 0.6rem 0.75rem;
+                margin-bottom: 0.75rem;
             ">
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
                     <span style="color: #10b981;">●</span>
-                    <span style="color: #10b981; font-size: 0.85rem; font-weight: 500;">{t("connected")}</span>
+                    <span style="color: #10b981; font-size: 0.8rem; font-weight: 500;">{t("connected")}</span>
                 </div>
                 <div style="color: #9090a0; font-size: 0.75rem; margin-top: 0.25rem;">
                     {model_name}
@@ -446,147 +431,109 @@ def render_sidebar():
             </div>
             """, unsafe_allow_html=True)
         
-        # History section - load from persistent storage
-        st.markdown(f"""
-        <p class="section-label" style="margin-top: 1.5rem;">
-            📜 {t("history")}
-        </p>
-        """, unsafe_allow_html=True)
-        
-        # Load persistent history (cached)
+        # History section - in expander for cleaner UI
         persistent_history = get_history()
-        
-        # Merge with session history
         all_history = st.session_state.history + [h for h in persistent_history if h not in st.session_state.history]
+        history_count = len(all_history)
         
-        if all_history:
-            for i, entry in enumerate(all_history[:8]):
-                try:
-                    timestamp = datetime.fromisoformat(entry["timestamp"])
-                    time_str = timestamp.strftime("%d.%m %H:%M")
-                except (ValueError, KeyError):
-                    time_str = "Ukjent"
-                
-                topic = entry.get("topic", "Ukjent emne")
-                grade = entry.get("grade", "")
-                entry_id = entry.get("id", "")
-                
-                col1, col2 = st.columns([4, 1])
-                
-                with col1:
-                    # Clickable history item
-                    if st.button(
-                        f"📄 {topic[:25]}{'...' if len(topic) > 25 else ''}",
-                        key=f"hist_{entry_id}_{i}",
-                        use_container_width=True
-                    ):
-                        # Load this entry
-                        tex_content = get_tex_content(entry_id)
-                        if tex_content:
-                            st.session_state.latex_result = tex_content
-                            st.session_state.generation_complete = True
-                            st.toast(f"📄 Lastet: {topic}")
+        with st.expander(f"📜 {t('history')} ({history_count})", expanded=False):
+            if all_history:
+                for i, entry in enumerate(all_history[:6]):
+                    try:
+                        timestamp = datetime.fromisoformat(entry["timestamp"])
+                        time_str = timestamp.strftime("%d.%m %H:%M")
+                    except (ValueError, KeyError):
+                        time_str = ""
+                    
+                    topic = entry.get("topic", "Ukjent emne")
+                    grade = entry.get("grade", "")
+                    entry_id = entry.get("id", "")
+                    
+                    col1, col2 = st.columns([5, 1])
+                    
+                    with col1:
+                        if st.button(
+                            f"📄 {topic[:22]}{'...' if len(topic) > 22 else ''}",
+                            key=f"hist_{entry_id}_{i}",
+                            use_container_width=True,
+                            help=f"{grade} • {time_str}"
+                        ):
+                            tex_content = get_tex_content(entry_id)
+                            if tex_content:
+                                st.session_state.latex_result = tex_content
+                                st.session_state.generation_complete = True
+                                st.toast(f"📄 Lastet: {topic}")
+                                st.rerun()
+                    
+                    with col2:
+                        if st.button("🗑️", key=f"del_{entry_id}_{i}", help="Slett"):
+                            delete_history_entry(entry_id)
+                            st.toast("🗑️ Slettet")
                             st.rerun()
-                
-                with col2:
-                    # Delete button
-                    if st.button("🗑️", key=f"del_{entry_id}_{i}", help="Slett"):
-                        delete_history_entry(entry_id)
-                        st.toast("🗑️ Slettet fra historikk")
-                        st.rerun()
-                
-                st.markdown(f"""
-                <div style="color: #606070; font-size: 0.7rem; margin-top: -0.5rem; margin-bottom: 0.5rem; padding-left: 0.25rem;">
-                    {grade} • {time_str}
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-            <div style="
-                text-align: center;
-                padding: 2rem 1rem;
-                color: #606070;
-                font-size: 0.85rem;
-            ">
-                <div style="font-size: 2rem; margin-bottom: 0.5rem;">📭</div>
-                {t("no_history")}
-            </div>
-            """, unsafe_allow_html=True)
+            else:
+                st.caption(f"📭 {t('no_history')}")
         
-        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-        
-        # Quick links
-        st.markdown(f"""
-        <p class="section-label">🔗 {t("links")}</p>
-        """, unsafe_allow_html=True)
-        
-        st.markdown(f"""
-        <div style="font-size: 0.85rem; color: #9090a0;">
-            <a href="https://www.udir.no/lk20/mat01-05" target="_blank" 
-               style="color: #f0b429; text-decoration: none;">
-                📚 {t("curriculum_link")}
-            </a>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-        
-        # Template builder
-        st.markdown(f"""
-        <p class="section-label">🎨 {t("my_templates")}</p>
-        """, unsafe_allow_html=True)
-        
+        # My templates - in expander
         from src.tools import create_template, delete_template
-        from src.cache import get_custom_templates, invalidate_templates_cache
-        
+        from src.cache import get_custom_templates
         custom_templates = get_custom_templates()
         
-        if custom_templates:
-            for template in custom_templates[:5]:
-                col_t1, col_t2 = st.columns([4, 1])
-                with col_t1:
-                    if st.button(
-                        f"{template.emoji} {template.name}",
-                        key=f"tmpl_{template.id}",
-                        use_container_width=True,
-                        help=template.description
-                    ):
-                        # Apply template config
-                        for key, value in template.config.items():
-                            if hasattr(st.session_state, key):
-                                setattr(st.session_state, key, value)
-                        st.toast(f"✅ Mal '{template.name}' lastet")
-                        st.rerun()
-                with col_t2:
-                    if st.button("🗑️", key=f"del_tmpl_{template.id}", help="Slett"):
-                        delete_template(template.id)
-                        st.toast("🗑️ Mal slettet")
-                        st.rerun()
-        
-        # Create new template button
-        with st.expander("➕ Lag ny mal", expanded=False):
-            new_name = st.text_input("Navn", placeholder="Min mal", key="new_tmpl_name")
-            new_desc = st.text_input("Beskrivelse", placeholder="Kort beskrivelse", key="new_tmpl_desc")
-            new_emoji = st.selectbox("Emoji", ["📝", "📖", "📋", "🎓", "📚", "📊", "⚡", "🎯"], key="new_tmpl_emoji")
+        with st.expander(f"🎨 {t('my_templates')} ({len(custom_templates)})", expanded=False):
+            if custom_templates:
+                for template in custom_templates[:5]:
+                    col_t1, col_t2 = st.columns([5, 1])
+                    with col_t1:
+                        if st.button(
+                            f"{template.emoji} {template.name}",
+                            key=f"tmpl_{template.id}",
+                            use_container_width=True,
+                            help=template.description
+                        ):
+                            for key, value in template.config.items():
+                                if hasattr(st.session_state, key):
+                                    setattr(st.session_state, key, value)
+                            st.toast(f"✅ Mal '{template.name}' lastet")
+                            st.rerun()
+                    with col_t2:
+                        if st.button("🗑️", key=f"del_tmpl_{template.id}", help="Slett"):
+                            delete_template(template.id)
+                            st.toast("🗑️ Slettet")
+                            st.rerun()
             
-            if st.button("💾 Lagre som mal", use_container_width=True):
-                if new_name:
-                    # Get current config
-                    config = {
-                        "material_type": st.session_state.get("material_type", "arbeidsark"),
-                        "include_theory": st.session_state.get("include_theory", True),
-                        "include_examples": st.session_state.get("include_examples", True),
-                        "include_exercises": st.session_state.get("include_exercises", True),
-                        "include_solutions": st.session_state.get("include_solutions", True),
-                        "include_graphs": st.session_state.get("include_graphs", True),
-                        "include_tips": st.session_state.get("include_tips", False),
-                        "num_exercises": st.session_state.get("num_exercises", 10),
-                    }
-                    create_template(new_name, new_desc or "Egendefinert mal", config, new_emoji)
-                    st.toast(f"✅ Mal '{new_name}' opprettet!")
-                    st.rerun()
-                else:
-                    st.warning("Skriv inn et navn for malen")
+            st.markdown("---")
+            st.caption("➕ Lag ny mal")
+            new_name = st.text_input("Navn", placeholder="Min mal", key="new_tmpl_name", label_visibility="collapsed")
+            col_emoji, col_save = st.columns([1, 2])
+            with col_emoji:
+                new_emoji = st.selectbox("Emoji", ["📝", "📖", "📋", "🎓", "📚"], key="new_tmpl_emoji", label_visibility="collapsed")
+            with col_save:
+                if st.button("💾 Lagre", use_container_width=True):
+                    if new_name:
+                        config = {
+                            "material_type": st.session_state.get("material_type", "arbeidsark"),
+                            "include_theory": st.session_state.get("include_theory", True),
+                            "include_examples": st.session_state.get("include_examples", True),
+                            "include_exercises": st.session_state.get("include_exercises", True),
+                            "include_solutions": st.session_state.get("include_solutions", True),
+                            "include_graphs": st.session_state.get("include_graphs", True),
+                            "include_tips": st.session_state.get("include_tips", False),
+                            "num_exercises": st.session_state.get("num_exercises", 10),
+                        }
+                        create_template(new_name, "Egendefinert mal", config, new_emoji)
+                        st.toast(f"✅ Opprettet!")
+                        st.rerun()
+                    else:
+                        st.warning("Skriv navn")
+        
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        
+        # Quick link to LK20
+        st.markdown(f"""
+        <a href="https://www.udir.no/lk20/mat01-05" target="_blank" 
+           style="color: var(--accent-primary); text-decoration: none; font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem;">
+            📚 {t("curriculum_link")} ↗
+        </a>
+        """, unsafe_allow_html=True)
         
         st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
@@ -1052,221 +999,164 @@ def render_templates():
 
 
 def render_configuration():
-    """Render the main configuration section."""
+    """Render the main configuration section with tabs for cleaner UX."""
     from src.cache import get_curriculum_topics, get_curriculum_goals, get_all_exercise_types
     
-    # Initialize return values to avoid UnboundLocalError
+    # Initialize return values
     selected_grade = "8. trinn"
     grade_options = {}
     topic = ""
     selected_material = "arbeidsark"
     
-    col1, col2 = st.columns([1.2, 0.8])
+    # Grade options
+    grade_options = {
+        "1.-4. trinn": "1-4. trinn",
+        "5.-7. trinn": "5-7. trinn",
+        "8. trinn": "8. trinn",
+        "9. trinn": "9. trinn",
+        "10. trinn": "10. trinn",
+        "VG1 1T": "VG1 1T",
+        "VG1 1P": "VG1 1P",
+        "VG2 R1": "VG2 R1",
+        "VG3 R2": "VG3 R2",
+    }
     
-    with col1:
-        # Grade and Topic selection
-        st.markdown("""
-        <div class="config-card">
-            <div class="card-header">
-                <div class="card-icon gold">📚</div>
-                <div>
-                    <p class="card-title">Velg klassetrinn og tema</p>
-                    <p class="card-description">Basert på LK20 læreplan</p>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
+    # Use tabs for organized configuration
+    tab1, tab2, tab3 = st.tabs(["📚 Innhold & Tema", "⚙️ Oppsett", "🎯 Avansert"])
+    
+    # ============================================
+    # TAB 1: Content & Topic
+    # ============================================
+    with tab1:
+        col1, col2 = st.columns([1.2, 0.8])
         
-        grade_options = {
-            "1.-4. trinn": "1-4. trinn",
-            "5.-7. trinn": "5-7. trinn",
-            "8. trinn": "8. trinn",
-            "9. trinn": "9. trinn",
-            "10. trinn": "10. trinn",
-            "VG1 1T": "VG1 1T",
-            "VG1 1P": "VG1 1P",
-            "VG2 R1": "VG2 R1",
-            "VG3 R2": "VG3 R2",
-        }
-        
-        selected_grade = st.selectbox(
-            "Klassetrinn",
-            options=list(grade_options.keys()),
-            index=4,
-            label_visibility="collapsed"
-        )
-        
-        # Topic selection
-        topics_by_category = get_curriculum_topics(selected_grade)
-        topic_choices = ["-- Velg tema --", "✍️ Skriv eget tema..."]
-        for category, topics in topics_by_category.items():
-            for t in topics:
-                topic_choices.append(f"{t}")
-        
-        selected_topic_choice = st.selectbox(
-            "Velg tema",
-            options=topic_choices,
-            label_visibility="collapsed"
-        )
-        
-        topic = ""
-        if selected_topic_choice == "✍️ Skriv eget tema...":
-            topic = st.text_input(
-                "Skriv tema",
-                placeholder="f.eks. Lineære funksjoner, Pytagoras, Brøk...",
-                label_visibility="collapsed"
-            )
-        elif selected_topic_choice != "-- Velg tema --":
-            topic = selected_topic_choice
-        
-        # Topic suggestions
-        from src.tools import get_topic_suggestions
-        suggestions = get_topic_suggestions(selected_grade, topic, num_suggestions=4)
-        
-        if suggestions:
+        with col1:
             st.markdown("""
-            <p style="color: #9090a0; font-size: 0.8rem; margin-top: 0.5rem; margin-bottom: 0.3rem;">
-                💡 Foreslåtte emner:
-            </p>
+            <div class="config-card">
+                <div class="card-header">
+                    <div class="card-icon gold">📚</div>
+                    <div>
+                        <p class="card-title">Klassetrinn og tema</p>
+                        <p class="card-description">Basert på LK20 læreplan</p>
+                    </div>
+                </div>
             """, unsafe_allow_html=True)
             
-            suggestion_cols = st.columns(4)
-            for i, sugg in enumerate(suggestions[:4]):
-                with suggestion_cols[i]:
-                    difficulty_emoji = {"lett": "🟢", "middels": "🟡", "vanskelig": "🔴"}.get(sugg.get("difficulty", ""), "")
-                    if st.button(
-                        f"{difficulty_emoji} {sugg['topic'][:15]}{'...' if len(sugg['topic']) > 15 else ''}",
-                        key=f"sugg_{i}",
-                        help=sugg.get("description", ""),
-                        use_container_width=True
-                    ):
-                        st.session_state.suggested_topic = sugg['topic']
-                        st.rerun()
-            
-            # Apply suggested topic if selected
-            if hasattr(st.session_state, 'suggested_topic') and st.session_state.suggested_topic:
-                topic = st.session_state.suggested_topic
-                st.session_state.suggested_topic = None
-        
-        st.markdown("</div>", unsafe_allow_html=True)
-        
-        # Material type
-        st.markdown("""
-        <div class="config-card">
-            <div class="card-header">
-                <div class="card-icon emerald">📄</div>
-                <div>
-                    <p class="card-title">Materialtype</p>
-                    <p class="card-description">Hva skal genereres?</p>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        material_options = {
-            "📖 Kapittel / Lærestoff": "kapittel",
-            "📝 Arbeidsark": "arbeidsark",
-            "📋 Prøve / Eksamen": "prøve",
-            "📚 Lekseark": "lekseark",
-        }
-        selected_material_display = st.selectbox(
-            "Materialtype",
-            options=list(material_options.keys()),
-            label_visibility="collapsed"
-        )
-        selected_material = material_options[selected_material_display]
-        
-        st.markdown("</div>", unsafe_allow_html=True)
-        
-        # Competency goals
-        competency_goals = get_curriculum_goals(selected_grade)
-        if competency_goals:
-            with st.expander("🎯 Kompetansemål (LK20)", expanded=False):
-                st.markdown("""
-                    <p style="color: #9090a0; font-size: 0.85rem; margin-bottom: 1rem;">
-                    Velg hvilke kompetansemål materialet skal dekke.
-                </p>
-                """, unsafe_allow_html=True)
-                
-                selected_goals = []
-                for i, goal in enumerate(competency_goals):
-                    if st.checkbox(goal, key=f"goal_{i}"):
-                        selected_goals.append(goal)
-                
-                st.session_state.selected_competency_goals = selected_goals
-        
-        # Formula library
-        with st.expander("📐 Formelbibliotek", expanded=False):
-            from src.cache import get_formula_categories, get_formulas_for_category
-            
-            st.markdown("""
-            <p style="color: #9090a0; font-size: 0.85rem; margin-bottom: 0.5rem;">
-                Klikk for å kopiere formler til bruk i oppgaver.
-            </p>
-            """, unsafe_allow_html=True)
-            
-            # Category selector (cached)
-            categories = get_formula_categories()
-            selected_category = st.selectbox(
-                "Kategori",
-                options=categories,
+            selected_grade = st.selectbox(
+                "Klassetrinn",
+                options=list(grade_options.keys()),
+                index=4,
                 label_visibility="collapsed"
             )
             
-            # Show formulas in category (cached)
-            formulas = get_formulas_for_category(selected_category)
+            # Topic selection
+            topics_by_category = get_curriculum_topics(selected_grade)
+            topic_choices = ["-- Velg tema --", "✍️ Skriv eget tema..."]
+            for category, topics in topics_by_category.items():
+                for t in topics:
+                    topic_choices.append(f"{t}")
             
-            for formula in formulas[:8]:  # Limit to 8 per category
-                col_f1, col_f2 = st.columns([3, 1])
-                with col_f1:
-                    st.markdown(f"**{formula.name}**")
-                    st.latex(formula.latex)
-                    st.caption(formula.description)
-                with col_f2:
-                    if st.button("📋", key=f"copy_{formula.name}", help="Kopier LaTeX"):
-                        st.session_state.copied_formula = formula.latex
-                        st.toast(f"✅ Kopierte {formula.name}")
-    
-    with col2:
-        # Content options
-        st.markdown("""
-        <div class="config-card">
-            <div class="card-header">
-                <div class="card-icon violet">⚙️</div>
-                <div>
-                    <p class="card-title">Innhold</p>
-                    <p class="card-description">Tilpass hva som inkluderes</p>
+            selected_topic_choice = st.selectbox(
+                "Velg tema",
+                options=topic_choices,
+                label_visibility="collapsed"
+            )
+            
+            topic = ""
+            if selected_topic_choice == "✍️ Skriv eget tema...":
+                topic = st.text_input(
+                    "Skriv tema",
+                    placeholder="f.eks. Lineære funksjoner, Pytagoras, Brøk...",
+                    label_visibility="collapsed"
+                )
+            elif selected_topic_choice != "-- Velg tema --":
+                topic = selected_topic_choice
+            
+            # Topic suggestions
+            from src.tools import get_topic_suggestions
+            suggestions = get_topic_suggestions(selected_grade, topic, num_suggestions=4)
+            
+            if suggestions:
+                st.caption("💡 Foreslåtte emner:")
+                suggestion_cols = st.columns(2)
+                for i, sugg in enumerate(suggestions[:4]):
+                    with suggestion_cols[i % 2]:
+                        difficulty_emoji = {"lett": "🟢", "middels": "🟡", "vanskelig": "🔴"}.get(sugg.get("difficulty", ""), "")
+                        if st.button(
+                            f"{difficulty_emoji} {sugg['topic']}",
+                            key=f"sugg_{i}",
+                            help=sugg.get("description", ""),
+                            use_container_width=True
+                        ):
+                            st.session_state.suggested_topic = sugg['topic']
+                            st.rerun()
+                
+                if hasattr(st.session_state, 'suggested_topic') and st.session_state.suggested_topic:
+                    topic = st.session_state.suggested_topic
+                    st.session_state.suggested_topic = None
+            
+            st.markdown("</div>", unsafe_allow_html=True)
+        
+        with col2:
+            # Material type
+            st.markdown("""
+            <div class="config-card">
+                <div class="card-header">
+                    <div class="card-icon emerald">📄</div>
+                    <div>
+                        <p class="card-title">Materialtype</p>
+                        <p class="card-description">Hva skal genereres?</p>
+                    </div>
                 </div>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        st.session_state.include_theory = st.checkbox(
-            "📘 Teori og definisjoner",
-            value=st.session_state.include_theory
-        )
-        st.session_state.include_examples = st.checkbox(
-            "💡 Eksempler", 
-            value=st.session_state.include_examples
-        )
-        st.session_state.include_exercises = st.checkbox(
-            "✍️ Oppgaver",
-            value=st.session_state.include_exercises
-        )
-        st.session_state.include_solutions = st.checkbox(
-            "🔑 Fasit",
-            value=st.session_state.include_solutions
-        )
-        st.session_state.include_graphs = st.checkbox(
-            "📊 Grafer/Figurer",
-            value=st.session_state.include_graphs
-        )
-        st.session_state.include_tips = st.checkbox(
-            "💬 Tips og hint",
-            value=st.session_state.include_tips
-        )
+            """, unsafe_allow_html=True)
+            
+            material_options = {
+                "📖 Kapittel / Lærestoff": "kapittel",
+                "📝 Arbeidsark": "arbeidsark",
+                "📋 Prøve / Eksamen": "prøve",
+                "📚 Lekseark": "lekseark",
+            }
+            selected_material_display = st.selectbox(
+                "Materialtype",
+                options=list(material_options.keys()),
+                label_visibility="collapsed"
+            )
+            selected_material = material_options[selected_material_display]
+            
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            # Quick content toggles
+            st.markdown("""
+            <div class="config-card">
+                <div class="card-header">
+                    <div class="card-icon violet">✨</div>
+                    <div>
+                        <p class="card-title">Inkluder</p>
+                        <p class="card-description">Velg innholdstyper</p>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.session_state.include_theory = st.checkbox("📘 Teori", value=st.session_state.include_theory)
+                st.session_state.include_examples = st.checkbox("💡 Eksempler", value=st.session_state.include_examples)
+                st.session_state.include_exercises = st.checkbox("✍️ Oppgaver", value=st.session_state.include_exercises)
+            with col_b:
+                st.session_state.include_solutions = st.checkbox("🔑 Fasit", value=st.session_state.include_solutions)
+                st.session_state.include_graphs = st.checkbox("📊 Grafer", value=st.session_state.include_graphs)
+                st.session_state.include_tips = st.checkbox("💬 Tips", value=st.session_state.include_tips)
+            
+            st.markdown("</div>", unsafe_allow_html=True)
     
-        st.markdown("</div>", unsafe_allow_html=True)
+    # ============================================
+    # TAB 2: Settings
+    # ============================================
+    with tab2:
+        col1, col2 = st.columns(2)
         
-        # Difficulty and exercise count
-    if st.session_state.include_exercises:
+        with col1:
+            # Exercise settings
             st.markdown("""
             <div class="config-card">
                 <div class="card-header">
@@ -1278,52 +1168,136 @@ def render_configuration():
                 </div>
             """, unsafe_allow_html=True)
             
-            st.session_state.num_exercises = st.slider(
-                "Antall oppgaver",
-                min_value=3,
-                max_value=25,
-                value=st.session_state.num_exercises,
-                step=1
-            )
-            
-            difficulty_options = ["🟢 Lett", "🟡 Middels", "🔴 Vanskelig"]
-            difficulty_index = {"Lett": 0, "Middels": 1, "Vanskelig": 2}.get(
-                st.session_state.difficulty_level, 1
-            )
-            selected_difficulty = st.radio(
-                "Vanskelighetsgrad",
-                options=difficulty_options,
-                index=difficulty_index,
-                horizontal=True
-            )
-            st.session_state.difficulty_level = selected_difficulty.split(" ")[1]
-            
-            st.session_state.differentiation_mode = st.checkbox(
-                "📊 Generer 3 nivåer (differensiering)",
-                value=st.session_state.differentiation_mode
-            )
+            if st.session_state.include_exercises:
+                st.session_state.num_exercises = st.slider(
+                    "Antall oppgaver",
+                    min_value=3,
+                    max_value=25,
+                    value=st.session_state.num_exercises,
+                    step=1
+                )
+                
+                difficulty_options = ["🟢 Lett", "🟡 Middels", "🔴 Vanskelig"]
+                difficulty_index = {"Lett": 0, "Middels": 1, "Vanskelig": 2}.get(
+                    st.session_state.difficulty_level, 1
+                )
+                selected_difficulty = st.radio(
+                    "Vanskelighetsgrad",
+                    options=difficulty_options,
+                    index=difficulty_index,
+                    horizontal=True
+                )
+                st.session_state.difficulty_level = selected_difficulty.split(" ")[1]
+                
+                st.session_state.differentiation_mode = st.checkbox(
+                    "📊 Generer 3 nivåer (differensiering)",
+                    value=st.session_state.differentiation_mode
+                )
+            else:
+                st.caption("Aktiver 'Oppgaver' i Innhold-fanen for å se innstillinger.")
             
             st.markdown("</div>", unsafe_allow_html=True)
+        
+        with col2:
+            # Exercise types
+            st.markdown("""
+            <div class="config-card">
+                <div class="card-header">
+                    <div class="card-icon blue">📝</div>
+                    <div>
+                        <p class="card-title">Oppgavetyper</p>
+                        <p class="card-description">Velg hvilke typer oppgaver</p>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
             
-            # Exercise types (cached)
-            exercise_types = get_all_exercise_types()
-            with st.expander("📝 Oppgavetyper", expanded=False):
+            if st.session_state.include_exercises:
+                exercise_types = get_all_exercise_types()
                 selected_types = []
-                cols = st.columns(2)
-                for i, (type_key, type_info) in enumerate(exercise_types.items()):
-                    with cols[i % 2]:
-                        if st.checkbox(
-                            type_info["name"],
-                            value=type_key in st.session_state.selected_exercise_types,
-                            help=type_info["description"],
-                            key=f"extype_{type_key}"
-                        ):
-                            selected_types.append(type_key)
+                for type_key, type_info in list(exercise_types.items())[:6]:
+                    if st.checkbox(
+                        type_info["name"],
+                        value=type_key in st.session_state.selected_exercise_types,
+                        help=type_info["description"],
+                        key=f"extype_{type_key}"
+                    ):
+                        selected_types.append(type_key)
                 
                 if selected_types:
                     st.session_state.selected_exercise_types = selected_types
                 else:
                     st.session_state.selected_exercise_types = ["standard"]
+            else:
+                st.caption("Aktiver 'Oppgaver' først.")
+            
+            st.markdown("</div>", unsafe_allow_html=True)
+    
+    # ============================================
+    # TAB 3: Advanced
+    # ============================================
+    with tab3:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Competency goals
+            st.markdown("""
+            <div class="config-card">
+                <div class="card-header">
+                    <div class="card-icon gold">🎯</div>
+                    <div>
+                        <p class="card-title">Kompetansemål (LK20)</p>
+                        <p class="card-description">Velg mål materialet skal dekke</p>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            competency_goals = get_curriculum_goals(selected_grade)
+            if competency_goals:
+                selected_goals = []
+                for i, goal in enumerate(competency_goals[:8]):
+                    if st.checkbox(goal[:60] + "..." if len(goal) > 60 else goal, key=f"goal_{i}", help=goal):
+                        selected_goals.append(goal)
+                st.session_state.selected_competency_goals = selected_goals
+            else:
+                st.caption("Ingen kompetansemål tilgjengelig for dette trinnet.")
+            
+            st.markdown("</div>", unsafe_allow_html=True)
+        
+        with col2:
+            # Formula library
+            st.markdown("""
+            <div class="config-card">
+                <div class="card-header">
+                    <div class="card-icon emerald">📐</div>
+                    <div>
+                        <p class="card-title">Formelbibliotek</p>
+                        <p class="card-description">Kopier formler til oppgaver</p>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            from src.cache import get_formula_categories, get_formulas_for_category
+            
+            categories = get_formula_categories()
+            selected_category = st.selectbox(
+                "Kategori",
+                options=categories,
+                label_visibility="collapsed"
+            )
+            
+            formulas = get_formulas_for_category(selected_category)
+            
+            for formula in formulas[:5]:
+                col_f1, col_f2 = st.columns([4, 1])
+                with col_f1:
+                    st.markdown(f"**{formula.name}**")
+                    st.latex(formula.latex)
+                with col_f2:
+                    if st.button("📋", key=f"copy_{formula.name}", help="Kopier"):
+                        st.session_state.copied_formula = formula.latex
+                        st.toast(f"✅ Kopiert!")
+            
+            st.markdown("</div>", unsafe_allow_html=True)
     
     return selected_grade, grade_options, topic, selected_material
 
