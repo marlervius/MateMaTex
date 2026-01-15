@@ -85,12 +85,12 @@ CONCEPT_PATTERNS = {
     "brøk": [r'brøk', r'\\frac', r'nevner', r'teller'],
     "prosent": [r'prosent', r'\\%', r'vekstfaktor'],
     "likning": [r'likning', r'løs', r'x\s*='],
-    "funksjon": [r'funksjon', r'f\\(x\\)', r'graf'],
+    "funksjon": [r'funksjon', r'f\(x\)', r'graf'],
     "geometri": [r'areal', r'omkrets', r'volum', r'vinkel'],
     "trigonometri": [r'sin', r'cos', r'tan', r'vinkel'],
     "derivasjon": [r'derivert', r"f'", r'stigningstall'],
     "integrasjon": [r'integral', r'\\int', r'areal under'],
-    "sannsynlighet": [r'sannsynlighet', r'P\\(', r'utfall'],
+    "sannsynlighet": [r'sannsynlighet', r'P\(', r'utfall'],
     "statistikk": [r'gjennomsnitt', r'median', r'standardavvik'],
 }
 
