@@ -229,10 +229,11 @@ def run_crew(grade: str, topic: str, material_type: str, instructions: str, cont
     
     agents = MathBookAgents()
     tasks = MathTasks()
-    
-    pedagogue = agents.pedagogue()
-    mathematician = agents.mathematician()
-    illustrator = agents.illustrator(grade=grade)  # Pass grade for age-appropriate illustrations
+
+    # Pass grade to all agents for level-appropriate content
+    pedagogue = agents.pedagogue(grade=grade)
+    mathematician = agents.mathematician(grade=grade)
+    illustrator = agents.illustrator(grade=grade)
     chief_editor = agents.chief_editor()
     
     full_topic = topic
