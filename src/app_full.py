@@ -1303,46 +1303,29 @@ def render_configuration():
 
 
 def render_progress_indicator(current_step: int):
-    """Render an animated progress indicator."""
+    """Render an animated progress indicator using native Streamlit components."""
     steps = [
-        {"title": "Pedagogen planlegger", "desc": "Analyserer læreplan og strukturerer innhold"},
-        {"title": "Matematikeren skriver", "desc": "Genererer oppgaver og forklaringer"},
-        {"title": "Illustratøren tegner", "desc": "Lager figurer og grafer"},
-        {"title": "Redaktøren ferdigstiller", "desc": "Setter sammen og kvalitetssikrer"},
+        {"emoji": "🎓", "title": "Pedagogen planlegger", "desc": "Analyserer læreplan og strukturerer innhold"},
+        {"emoji": "📐", "title": "Matematikeren skriver", "desc": "Genererer oppgaver og forklaringer"},
+        {"emoji": "🎨", "title": "Illustratøren tegner", "desc": "Lager figurer og grafer"},
+        {"emoji": "📝", "title": "Redaktøren ferdigstiller", "desc": "Setter sammen og kvalitetssikrer"},
     ]
     
-    steps_html = ""
+    st.markdown("### 🔄 AI-teamet arbeider...")
+    st.caption("Dette kan ta 30-60 sekunder")
+    
+    st.markdown("---")
+    
     for i, step in enumerate(steps):
         if i < current_step:
-            status = "done"
-            indicator = "✓"
+            # Done
+            st.success(f"✅ **{step['title']}** — {step['desc']}")
         elif i == current_step:
-            status = "active"
-            indicator = str(i + 1)
+            # Active
+            st.info(f"{step['emoji']} **{step['title']}** — {step['desc']}")
         else:
-            status = ""
-            indicator = str(i + 1)
-        
-        steps_html += f"""
-        <div class="progress-step {status}">
-            <div class="step-indicator">{indicator}</div>
-            <div class="step-content">
-                <div class="step-title">{step['title']}</div>
-                <div class="step-desc">{step['desc']}</div>
-            </div>
-        </div>
-        """
-    
-    st.markdown(f"""
-    <div class="progress-container">
-        <div class="progress-title">
-            <span>🔄</span> AI-teamet arbeider...
-        </div>
-        <div class="progress-steps">
-            {steps_html}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+            # Pending
+            st.markdown(f"⏳ {step['title']} — _{step['desc']}_")
 
 
 def render_results():
