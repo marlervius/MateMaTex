@@ -51,13 +51,17 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
 
 % --- Custom Color Definitions ---
 \definecolor{mainBlue}{RGB}{0, 102, 204}
-\definecolor{lightBlue}{RGB}{235, 245, 255}
+\definecolor{lightBlue}{RGB}{230, 242, 255}
 \definecolor{mainGreen}{RGB}{0, 153, 76}
-\definecolor{lightGreen}{RGB}{235, 250, 235}
+\definecolor{lightGreen}{RGB}{232, 250, 240}
 \definecolor{mainOrange}{RGB}{230, 126, 34}
 \definecolor{lightOrange}{RGB}{255, 245, 235}
-\definecolor{mainGray}{RGB}{100, 100, 100}
-\definecolor{lightGray}{RGB}{245, 245, 245}
+\definecolor{mainPurple}{RGB}{102, 51, 153}
+\definecolor{lightPurple}{RGB}{245, 240, 255}
+\definecolor{mainTeal}{RGB}{0, 128, 128}
+\definecolor{lightTeal}{RGB}{235, 250, 250}
+\definecolor{mainGray}{RGB}{80, 80, 90}
+\definecolor{lightGray}{RGB}{248, 248, 252}
 
 % --- Definition Box (Blue) - Modern Style ---
 \newtcolorbox{definitionbox}[1][]{
@@ -119,17 +123,19 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
   #1
 }
 
-% --- Task Box (Gray) - Clean Style ---
+% --- Task Box (Purple/Blue) - Elegant Worksheet Style ---
 \newtcolorbox{taskbox}[1][]{
   enhanced,
-  colback=lightGray,
-  colframe=mainGray,
-  fonttitle=\bfseries\sffamily,
+  colback=lightPurple,
+  colframe=mainPurple,
+  fonttitle=\bfseries\sffamily\color{white},
   title={#1},
   attach boxed title to top left={yshift*=-\tcboxedtitleheight/2, xshift=5mm},
-  boxed title style={colback=mainGray, colframe=mainGray},
+  boxed title style={colback=mainPurple, colframe=mainPurple},
+  sharp corners=downhill,
   arc=3mm,
-  left=8pt, right=8pt, top=8pt, bottom=8pt
+  left=10pt, right=10pt, top=10pt, bottom=10pt,
+  shadow={2mm}{-2mm}{0mm}{black!20}
 }
 
 % --- Tip/Note Box (Orange/Yellow) ---
@@ -158,17 +164,18 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
   #1
 }
 
-% --- Solution Box (for answers) ---
+% --- Solution Box (for answers) - Teal Style ---
 \newtcolorbox{losning}[1][]{
   enhanced,
-  colback=white,
-  colframe=mainBlue!50,
-  fonttitle=\bfseries\sffamily,
+  colback=lightTeal,
+  colframe=mainTeal,
+  fonttitle=\bfseries\sffamily\color{white},
   title={Løsning},
   attach boxed title to top left={yshift*=-\tcboxedtitleheight/2, xshift=5mm},
-  boxed title style={colback=mainBlue!50, colframe=mainBlue!50},
+  boxed title style={colback=mainTeal, colframe=mainTeal},
+  sharp corners=downhill,
   arc=3mm,
-  left=8pt, right=8pt, top=8pt, bottom=8pt,
+  left=10pt, right=10pt, top=10pt, bottom=10pt,
   #1
 }
 
@@ -186,8 +193,29 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
 
 % Section styling
 \usepackage{titlesec}
-\titleformat{\section}{\Large\bfseries\sffamily\color{mainBlue}}{\thesection}{1em}{}
-\titleformat{\subsection}{\large\bfseries\sffamily\color{mainBlue!80}}{\thesubsection}{1em}{}
+\titleformat{\section}{\Large\bfseries\sffamily\color{mainBlue}}{\thesection}{1em}{}[\color{mainBlue}\titlerule]
+\titleformat{\subsection}{\large\bfseries\sffamily\color{mainPurple}}{\thesubsection}{1em}{}
+
+% Colored graph defaults
+\pgfplotsset{
+    every axis/.append style={
+        line width=1pt,
+        tick style={line width=0.8pt}
+    },
+    every axis plot/.append style={
+        line width=1.5pt
+    }
+}
+
+% Header/Footer styling for worksheets
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{mainGray}\textit{Generert av MateMaTeX AI}}
+\fancyhead[R]{\small\color{mainGray}\today}
+\fancyfoot[C]{\small\color{mainGray}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
 
 """
 
