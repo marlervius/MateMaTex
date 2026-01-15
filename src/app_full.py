@@ -159,6 +159,13 @@ def initialize_session_state():
         "current_step": 0,
         "is_generating": False,
         "selected_template": None,
+        "school_name_data": "",
+        "watermark_template": "generic",
+        "watermark_active": False,
+        "cover_page_active": False,
+        "cover_style_id": "standard",
+        "cover_teacher_name": "",
+        "cover_class_name": "",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -886,20 +893,30 @@ def render_sidebar():
             # School name
             school_name = st.text_input(
                 "Skolenavn",
-                value=st.session_state.get("school_name", ""),
+                value=st.session_state.school_name_data,
                 placeholder="F.eks. Trondheim videregående skole",
-                key="watermark_school_name"
+                key="watermark_school_name_select"
             )
-            st.session_state.school_name = school_name
+            st.session_state.school_name_data = school_name
             
             # Template selection
             from src.tools import SCHOOL_TEMPLATES, render_watermark_preview_html
             
             template_options = {t["name"]: key for key, t in SCHOOL_TEMPLATES.items()}
+            
+            # Find current index for selectbox
+            current_template_id = st.session_state.get("watermark_template", "generic")
+            template_names = list(template_options.keys())
+            try:
+                current_index = [template_options[name] for name in template_names].index(current_template_id)
+            except ValueError:
+                current_index = 0
+
             selected_template_name = st.selectbox(
                 "Mal",
-                options=list(template_options.keys()),
-                key="watermark_template"
+                options=template_names,
+                index=current_index,
+                key="watermark_template_select"
             )
             st.session_state.watermark_template = template_options.get(selected_template_name, "generic")
             
@@ -910,11 +927,12 @@ def render_sidebar():
                 st.markdown(preview_html, unsafe_allow_html=True)
             
             # Enable watermark checkbox
-            st.session_state.enable_watermark = st.checkbox(
+            watermark_active = st.checkbox(
                 "Aktiver vannmerke på PDF",
-                value=st.session_state.get("enable_watermark", False),
-                key="watermark_enabled"
+                value=st.session_state.watermark_active,
+                key="watermark_active_toggle"
             )
+            st.session_state.watermark_active = watermark_active
         
         # Cover page settings
         with st.expander("📄 Forside", expanded=False):
@@ -927,43 +945,48 @@ def render_sidebar():
             from src.tools import COVER_STYLES
             
             # Enable cover page
-            st.session_state.enable_cover_page = st.checkbox(
+            cover_page_active = st.checkbox(
                 "Inkluder forside",
-                value=st.session_state.get("enable_cover_page", False),
-                key="cover_page_enabled"
+                value=st.session_state.cover_page_active,
+                key="cover_page_active_toggle"
             )
+            st.session_state.cover_page_active = cover_page_active
             
-            if st.session_state.enable_cover_page:
+            if st.session_state.cover_page_active:
                 # Style selection
                 style_options = list(COVER_STYLES.keys())
-                style_labels = list(COVER_STYLES.values())
                 
+                try:
+                    style_index = style_options.index(st.session_state.cover_style_id)
+                except (ValueError, AttributeError):
+                    style_index = 0
+
                 selected_style = st.selectbox(
                     "Forsidestil",
                     options=style_options,
                     format_func=lambda x: COVER_STYLES[x],
-                    index=0,
-                    key="cover_style"
+                    index=style_index,
+                    key="cover_style_select"
                 )
-                st.session_state.cover_style = selected_style
+                st.session_state.cover_style_id = selected_style
                 
                 # Optional teacher name
                 teacher_name = st.text_input(
                     "Lærernavn (valgfritt)",
-                    value=st.session_state.get("teacher_name", ""),
+                    value=st.session_state.cover_teacher_name,
                     placeholder="F.eks. Ola Nordmann",
-                    key="cover_teacher_name"
+                    key="cover_teacher_name_input"
                 )
-                st.session_state.teacher_name = teacher_name
+                st.session_state.cover_teacher_name = teacher_name
                 
                 # Class name override
                 class_name = st.text_input(
                     "Klasse (valgfritt)",
-                    value=st.session_state.get("class_name", ""),
+                    value=st.session_state.cover_class_name,
                     placeholder="F.eks. 10A eller Matte 2P",
-                    key="cover_class_name"
+                    key="cover_class_name_input"
                 )
-                st.session_state.class_name = class_name
+                st.session_state.cover_class_name = class_name
                 
                 # Preview style
                 style_previews = {
@@ -2212,28 +2235,28 @@ def main():
             progress_placeholder.empty()
             
             # Apply watermark if enabled
-            if st.session_state.get("enable_watermark") and st.session_state.get("school_name"):
+            if st.session_state.watermark_active and st.session_state.school_name_data:
                 from src.tools import apply_watermark_template
                 latex_result = apply_watermark_template(
                     latex_result,
-                    template_key=st.session_state.get("watermark_template", "generic"),
-                    school_name=st.session_state.school_name,
+                    template_key=st.session_state.watermark_template,
+                    school_name=st.session_state.school_name_data,
                     document_title=topic,
                     class_name=selected_grade
                 )
                 st.session_state.latex_result = latex_result
             
             # Apply cover page if enabled
-            if st.session_state.get("enable_cover_page"):
+            if st.session_state.cover_page_active:
                 from src.tools import CoverPageConfig, insert_cover_page
                 cover_config = CoverPageConfig(
                     title=topic,
                     subtitle=selected_material.title() if selected_material else None,
                     grade=selected_grade,
-                    school_name=st.session_state.get("school_name"),
-                    teacher_name=st.session_state.get("teacher_name"),
-                    class_name=st.session_state.get("class_name") or selected_grade,
-                    style=st.session_state.get("cover_style", "modern")
+                    school_name=st.session_state.school_name_data,
+                    teacher_name=st.session_state.cover_teacher_name,
+                    class_name=st.session_state.cover_class_name or selected_grade,
+                    style=st.session_state.cover_style_id
                 )
                 latex_result = insert_cover_page(latex_result, cover_config)
                 st.session_state.latex_result = latex_result
