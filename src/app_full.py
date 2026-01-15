@@ -2120,8 +2120,12 @@ def main():
         </div>
         """, unsafe_allow_html=True)
     
-    # Generate Button
-    if st.button("◇ Generer materiale", disabled=not can_generate, use_container_width=True):
+    # Generate Button - wrapped for gold styling
+    st.markdown('<div class="generate-button">', unsafe_allow_html=True)
+    generate_clicked = st.button("◇ Generer materiale", disabled=not can_generate, use_container_width=True, type="primary")
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    if generate_clicked:
         st.session_state.latex_result = None
         st.session_state.pdf_path = None
         st.session_state.pdf_bytes = None

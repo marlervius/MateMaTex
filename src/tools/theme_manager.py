@@ -139,14 +139,14 @@ def generate_theme_css(theme: ThemeColors) -> str:
             border-color: var(--border) !important;
         }}
         
-        /* Button styling */
-        .stButton > button {{
+        /* Primary action button only - template buttons styled in main CSS */
+        button[data-testid="baseButton-primary"] {{
             background-color: var(--accent-primary) !important;
             color: var(--bg-primary) !important;
             border: none !important;
         }}
         
-        .stButton > button:hover {{
+        button[data-testid="baseButton-primary"]:hover {{
             background-color: var(--accent-secondary) !important;
         }}
         
