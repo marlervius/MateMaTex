@@ -5,9 +5,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Installer systemavhengigheter (LaTeX og verktøy for PDF-generering)
-# Vi bruker texlive-latex-extra og texlive-fonts-recommended for å holde størrelsen nede, 
-# men nok til å dekke de fleste behov.
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     texlive-latex-base \
     texlive-latex-extra \
     texlive-fonts-recommended \
@@ -16,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     texlive-pictures \
     texlive-science \
     ghostscript \
+    ca-certificates \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
