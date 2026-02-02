@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: matematex
+    env: python
+    buildCommand: apt-get update && apt-get install -y texlive-full && pip install -r requirements.txt
+    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.1
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GOOGLE_MODEL
+        value: gemini-2.0-flash
