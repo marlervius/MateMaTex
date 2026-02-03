@@ -48,6 +48,7 @@ class MathTasks:
         competency_goals = content_options.get("competency_goals", [])
         exercise_type_instructions = content_options.get("exercise_type_instructions", [])
         differentiation_mode = content_options.get("differentiation_mode", False)
+        language_level = content_options.get("language_level", "standard")
         
         # Build content restrictions
         content_restrictions = []
@@ -87,6 +88,32 @@ Lag TRE separate nivåer av oppgaver:
 3. Nivå 3 (Vanskelig) - Utfordrende oppgaver for elever som trenger ekstra utfordring
 """
         
+        # Build language level text
+        language_level_text = ""
+        if language_level == "b2":
+            language_level_text = """
+
+**SPRÅKNIVÅ: B2 (Forenklet norsk)**
+Materialet er for elever med norsk som andrespråk. Bruk:
+- Korte setninger (15-20 ord maks)
+- Vanlige, konkrete ord
+- Forklar alle fagbegreper
+- Enkle oppgavetekster
+Det matematiske nivået skal være det samme - bare språket er enklere.
+"""
+        elif language_level == "b1":
+            language_level_text = """
+
+**SPRÅKNIVÅ: B1 (Enklere norsk)**
+Materialet er for elever som lærer norsk. Bruk:
+- Veldig korte setninger (10-15 ord maks)
+- De vanligste norske ordene
+- Forklar ALLE begreper som om eleven hører det første gang
+- Korte oppgavetekster med konkrete eksempler
+- Del komplekse oppgaver i små steg
+Det matematiske nivået skal være det samme - bare språket er enklere.
+"""
+        
         # Check if this is exercises-only mode
         exercises_only = include_exercises and not include_theory and not include_examples
         
@@ -103,6 +130,7 @@ Lag TRE separate nivåer av oppgaver:
 {competency_text}
 {exercise_types_text}
 {differentiation_text}
+{language_level_text}
 
 Dette er et RENT oppgaveark. Planen skal KUN inneholde oppgaver.
 
@@ -144,6 +172,7 @@ Analyze the following request and create a detailed pedagogical plan:
 **Antall oppgaver:** {num_exercises}
 **Vanskelighetsgrad:** {difficulty}
 {restrictions_text}
+{language_level_text}
 
 Your task:
 1. Identify the relevant competence goals from the Norwegian curriculum (LK20) for this grade and topic.
@@ -205,6 +234,32 @@ A structured outline in Norwegian (Bokmål) containing:
         competency_goals = content_options.get("competency_goals", [])
         exercise_type_instructions = content_options.get("exercise_type_instructions", [])
         differentiation_mode = content_options.get("differentiation_mode", False)
+        language_level = content_options.get("language_level", "standard")
+        
+        # Build language level instruction
+        language_instruction = ""
+        if language_level == "b2":
+            language_instruction = """
+
+**SPRÅKNIVÅ B2 - FORENKLET NORSK:**
+- Skriv korte setninger (15-20 ord)
+- Bruk vanlige ord, unngå idiomer
+- Forklar alle fagbegreper første gang
+- Enkle oppgavetekster med klar struktur
+- Matematisk nivå er UENDRET - bare språket er enklere
+"""
+        elif language_level == "b1":
+            language_instruction = """
+
+**SPRÅKNIVÅ B1 - ENKLERE NORSK:**
+- Skriv veldig korte setninger (10-15 ord)
+- Bruk de mest vanlige norske ordene
+- Forklar ALLE begreper enkelt
+- Korte oppgavetekster, én idé per setning
+- Del komplekse oppgaver i steg med "Steg 1:", "Steg 2:" osv.
+- Legg til "Tips:" der det hjelper
+- Matematisk nivå er UENDRET - bare språket er enklere
+"""
         
         # Build competency goals instruction
         competency_instruction = ""
@@ -274,6 +329,7 @@ VIKTIG: Dette er et RENT oppgaveark. Skriv KUN oppgaver i LaTeX-format.
 {competency_instruction}
 {exercise_types_instruction}
 {differentiation_instruction}
+{language_instruction}
 
 IKKE SKRIV:
 - Teori
@@ -349,13 +405,14 @@ INGEN teori, definisjoner eller eksempler.
         else:
             task_parts.append("6. SKIP answer key - do NOT include \\section*{Løsningsforslag}.")
         
-        task_parts.append("""
+        task_parts.append(f"""
 IMPORTANT FORMATTING RULES:
 - Use ONLY LaTeX syntax, NEVER Markdown.
-- All fractions must use \\frac{}{}, not a/b in display math.
+- All fractions must use \\frac{{}}{{}}, not a/b in display math.
 - Use \\cdot for multiplication, not *.
 - Tables: use booktabs (\\toprule, \\midrule, \\bottomrule), NO vertical lines.
-- All text must be in Norwegian (Bokmål).""")
+- All text must be in Norwegian (Bokmål).
+{language_instruction}""")
         
         # Build expected output based on options
         output_parts = ["Complete mathematical content in raw LaTeX format containing:"]

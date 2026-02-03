@@ -628,6 +628,40 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "no": "Kopier LaTeX",
         "en": "Copy LaTeX",
     },
+    
+    # Language level settings
+    "language_level": {
+        "no": "Språknivå",
+        "en": "Language level",
+    },
+    "language_level_desc": {
+        "no": "For elever med norsk som andrespråk",
+        "en": "For students with Norwegian as second language",
+    },
+    "select_language_level": {
+        "no": "Velg språknivå",
+        "en": "Select language level",
+    },
+    "language_standard": {
+        "no": "Standard norsk",
+        "en": "Standard Norwegian",
+    },
+    "language_b2": {
+        "no": "Forenklet norsk (B2)",
+        "en": "Simplified Norwegian (B2)",
+    },
+    "language_b1": {
+        "no": "Enklere norsk (B1)",
+        "en": "Simpler Norwegian (B1)",
+    },
+    "language_level_help": {
+        "no": "Velg enklere språk for elever som lærer norsk. Matematikknivået forblir det samme.",
+        "en": "Choose simpler language for students learning Norwegian. Math level stays the same.",
+    },
+    "language_level_note": {
+        "no": "Det matematiske innholdet er det samme - bare språket er tilpasset.",
+        "en": "The mathematical content is the same - only the language is adapted.",
+    },
 }
 
 

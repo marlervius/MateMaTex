@@ -166,6 +166,7 @@ def initialize_session_state():
         "cover_style_id": "standard",
         "cover_teacher_name": "",
         "cover_class_name": "",
+        "language_level": "standard",  # Language complexity: standard, b2, b1
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -227,7 +228,10 @@ def run_crew(grade: str, topic: str, material_type: str, instructions: str, cont
     from src.agents import MathBookAgents
     from src.tasks import MathTasks
     
-    agents = MathBookAgents()
+    # Get language level from content_options
+    language_level = content_options.get("language_level", "standard")
+    
+    agents = MathBookAgents(language_level=language_level)
     tasks = MathTasks()
 
     # Pass grade to all agents for level-appropriate content
@@ -1154,6 +1158,47 @@ def render_configuration():
     # TAB 2: Settings
     # ============================================
     with tab2:
+        # Language level selector (for students with Norwegian as second language)
+        st.markdown("""
+        <div class="config-card">
+            <div class="card-header">
+                <div class="card-icon blue">🌍</div>
+                <div>
+                    <p class="card-title">Språknivå</p>
+                    <p class="card-description">For elever med norsk som andrespråk</p>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        from src.agents.math_agents import LANGUAGE_LEVELS
+        
+        language_options = {
+            "🇳🇴 Standard norsk": "standard",
+            "📖 Forenklet norsk (B2)": "b2",
+            "📝 Enklere norsk (B1)": "b1",
+        }
+        
+        # Find current selection
+        current_lang_level = st.session_state.get("language_level", "standard")
+        current_lang_index = list(language_options.values()).index(current_lang_level) if current_lang_level in language_options.values() else 0
+        
+        selected_lang_display = st.selectbox(
+            "Velg språknivå",
+            options=list(language_options.keys()),
+            index=current_lang_index,
+            help="Velg enklere språk for elever som lærer norsk. Matematikknivået forblir det samme.",
+            label_visibility="collapsed"
+        )
+        st.session_state.language_level = language_options[selected_lang_display]
+        
+        # Show description of selected level
+        selected_level_info = LANGUAGE_LEVELS.get(st.session_state.language_level, {})
+        if st.session_state.language_level != "standard":
+            st.info(f"**{selected_level_info.get('code', '')}:** {selected_level_info.get('description', '')}")
+            st.caption("💡 Det matematiske innholdet er det samme - bare språket er tilpasset.")
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+        
         col1, col2 = st.columns(2)
         
         with col1:
@@ -2160,6 +2205,7 @@ def main():
             "exercise_types": st.session_state.selected_exercise_types,
             "exercise_type_instructions": exercise_type_instructions,
             "differentiation_mode": st.session_state.differentiation_mode,
+            "language_level": st.session_state.get("language_level", "standard"),
         }
         
         # Build instructions

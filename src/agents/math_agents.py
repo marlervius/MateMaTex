@@ -9,14 +9,125 @@ from crewai import Agent, LLM
 from src.curriculum import format_boundaries_for_prompt, get_grade_boundaries
 
 
+# Language level configurations for simplified Norwegian
+LANGUAGE_LEVELS = {
+    "standard": {
+        "name": "Standard norsk",
+        "code": "C1-C2",
+        "description": "Vanlig akademisk norsk",
+        "instructions": "",  # No special instructions for standard
+    },
+    "b2": {
+        "name": "Forenklet norsk (B2)",
+        "code": "B2",
+        "description": "For elever med norsk som andrespråk - øvre mellomnivå",
+        "instructions": """
+=== SPRÅKNIVÅ: B2 (Øvre mellomnivå) ===
+
+Du skriver for elever som lærer norsk. Tilpass språket til B2-nivå:
+
+1. SETNINGSSTRUKTUR:
+   - Bruk korte til middels lange setninger (15-20 ord maks)
+   - Unngå komplekse leddsetninger
+   - En idé per setning
+   - Bruk aktiv form, unngå passiv der mulig
+
+2. ORDVALG:
+   - Bruk vanlige, konkrete ord
+   - Unngå idiomer og metaforer
+   - Forklar fagbegreper første gang de brukes
+   - Bruk samme ord for samme begrep (ikke varier for stilens skyld)
+
+3. MATEMATISKE BEGREPER:
+   - Introduser hvert fagbegrep med en kort, enkel forklaring
+   - Bruk eksempler for å illustrere begreper
+   - Gjenta viktige begreper i ulike kontekster
+
+4. OPPGAVETEKSTER:
+   - Skriv korte, klare oppgavetekster
+   - Unngå unødvendig informasjon
+   - Bruk enkle hverdagskontekster
+   - Del opp komplekse oppgaver i flere steg
+
+EKSEMPEL - Standard vs B2:
+❌ Standard: "Bestem nullpunktene til funksjonen ved å løse den tilhørende likningen."
+✅ B2: "Finn nullpunktene. Nullpunkt er der grafen krysser x-aksen. Sett f(x) = 0 og løs."
+
+VIKTIG: Det matematiske nivået skal være det samme. Bare språket er enklere.
+""",
+    },
+    "b1": {
+        "name": "Enklere norsk (B1)",
+        "code": "B1",
+        "description": "For elever med norsk som andrespråk - nedre mellomnivå",
+        "instructions": """
+=== SPRÅKNIVÅ: B1 (Mellomnivå) ===
+
+Du skriver for elever som lærer norsk. Tilpass språket til B1-nivå:
+
+1. SETNINGSSTRUKTUR:
+   - Bruk korte setninger (10-15 ord maks)
+   - Én setning = én idé
+   - Unngå leddsetninger helt
+   - Bruk enkel ordstilling (subjekt-verb-objekt)
+
+2. ORDVALG:
+   - Bruk de 3000 vanligste norske ordene
+   - Unngå alle idiomer og uttrykk
+   - Forklar ALLE fagbegreper med enkle ord
+   - Repeter viktige ord ofte
+
+3. MATEMATISKE BEGREPER:
+   - Forklar hvert begrep som om eleven hører det for første gang
+   - Bruk konkrete eksempler med tall
+   - Vis steg-for-steg løsninger
+   - Bruk tegninger og figurer der mulig
+
+4. OPPGAVETEKSTER:
+   - Veldig korte oppgavetekster (1-2 setninger)
+   - Bruk tall direkte, unngå "ord-tall" (skriv "5", ikke "fem")
+   - Enkle kontekster: penger, tid, lengde
+   - Del ALLTID komplekse oppgaver i små steg
+
+5. HJELPETEKST:
+   - Legg til "Tips:" eller "Hint:" der det hjelper
+   - Vis formelen eleven skal bruke
+   - Gi eksempel på første steg
+
+EKSEMPEL - Standard vs B1:
+❌ Standard: "Bestem nullpunktene til funksjonen f(x) = 2x - 4 ved å løse likningen f(x) = 0."
+✅ B1: "Finn nullpunktet til f(x) = 2x - 4.
+       Nullpunkt: Der y = 0.
+       Steg 1: Sett f(x) = 0.
+       Steg 2: Løs 2x - 4 = 0."
+
+VIKTIG: Det matematiske nivået skal være det samme. Bare språket er enklere.
+""",
+    },
+}
+
+
+def get_language_level_instructions(language_level: str) -> str:
+    """Get language simplification instructions for the given level."""
+    if language_level in LANGUAGE_LEVELS:
+        return LANGUAGE_LEVELS[language_level]["instructions"]
+    return ""
+
+
 class MathBookAgents:
     """
     A class that creates and manages the AI Editorial Team agents.
     All agents produce their final output content in Norwegian (Bokmål).
+    Supports simplified language levels (B1/B2) for students learning Norwegian.
     """
 
-    def __init__(self):
-        """Initialize the LLM for all agents."""
+    def __init__(self, language_level: str = "standard"):
+        """
+        Initialize the LLM for all agents.
+        
+        Args:
+            language_level: Language complexity level ('standard', 'b2', or 'b1')
+        """
         model = os.getenv("GOOGLE_MODEL", "gemini-2.0-flash")
         api_key = os.getenv("GOOGLE_API_KEY")
         
@@ -26,6 +137,10 @@ class MathBookAgents:
             api_key=api_key,
             temperature=0.7
         )
+        
+        # Store language level for use in agent prompts
+        self.language_level = language_level
+        self.language_instructions = get_language_level_instructions(language_level)
 
     def pedagogue(self, grade: str = None) -> Agent:
         """
@@ -56,6 +171,10 @@ class MathBookAgents:
         
         if grade_context:
             backstory_base += f"{grade_context}\n\n"
+        
+        # Add language level instructions if not standard
+        if self.language_instructions:
+            backstory_base += f"{self.language_instructions}\n\n"
         
         backstory_base += (
             "=== DINE STYRKER ===\n\n"
@@ -134,6 +253,9 @@ class MathBookAgents:
                     for level, desc in difficulty_defs.items():
                         difficulty_context += f"  {level.capitalize()}: {desc}\n"
         
+        # Get language level context
+        language_context = self.language_instructions if self.language_instructions else ""
+        
         return Agent(
             role="Matematiker og lærebokforfatter",
             goal=(
@@ -156,6 +278,7 @@ class MathBookAgents:
                 "- Bruk konsepter og notasjon som elevene kjenner\n"
                 f"{grade_context}"
                 f"{difficulty_context}\n"
+                f"{language_context}\n"
                 
                 "=== OBLIGATORISKE FORMATERINGSREGLER ===\n\n"
                 
@@ -277,6 +400,16 @@ class MathBookAgents:
         # Age-specific instructions
         age_instructions = self._get_age_specific_illustration_instructions(grade)
         
+        # Language level instructions for labels and captions
+        language_context = ""
+        if self.language_instructions:
+            language_context = (
+                "\n=== SPRÅKTILPASNING FOR FIGURER ===\n"
+                "- Bruk enkle, klare etiketter\n"
+                "- Korte bildetekster (captions)\n"
+                "- Unngå kompliserte forklaringer i figurer\n\n"
+            )
+        
         return Agent(
             role="Teknisk illustratør og TikZ-ekspert",
             goal=(
@@ -291,6 +424,7 @@ class MathBookAgents:
                 "ved hjelp av TikZ og PGFPlots. Du skriver LaTeX-kode, IKKE bildefiler.\n\n"
                 
                 f"{age_instructions}\n\n"
+                f"{language_context}"
                 
                 "=== OBLIGATORISK FIGURFORMAT ===\n\n"
                 
@@ -505,6 +639,18 @@ For videregående, bruk:
         The Chief Editor - Quality & Compilation.
         Assembles and validates the final LaTeX document.
         """
+        # Language consistency check instructions
+        language_check = ""
+        if self.language_level != "standard":
+            level_name = LANGUAGE_LEVELS.get(self.language_level, {}).get("name", "Forenklet")
+            language_check = f"""
+   h) SPRÅKKONSISTENS ({level_name}):
+      - Sjekk at språket er enkelt og klart gjennom hele dokumentet
+      - Korte setninger, vanlige ord
+      - Fagbegreper skal være forklart
+      - Oppgavetekster skal være lette å forstå
+"""
+        
         return Agent(
             role="Ansvarlig redaktør og kvalitetskontrollør",
             goal=(
@@ -555,6 +701,8 @@ For videregående, bruk:
                 "   f) KLAMMEPARENTESER: Tell at alle { har matchende }\n\n"
                 
                 "   g) MILJØER: Sjekk at alle \\begin{} har matchende \\end{}\n\n"
+                
+                f"{language_check}"
                 
                 "4. SLUTTPUNKTER:\n"
                 "   - Alle miljøer korrekt lukket\n"
