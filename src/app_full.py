@@ -1815,8 +1815,8 @@ def render_results():
     with st.expander("📊 LK20 Kompetansemål-dekning", expanded=False):
         from src.tools import analyze_coverage, format_coverage_report, get_coverage_badge
         
-        grade = st.session_state.get("selected_grade", "8. trinn")
-        topic = st.session_state.get("selected_topic", "")
+        grade = st.session_state.get("selected_grade", "8. trinn") or "8. trinn"
+        topic = st.session_state.get("selected_topic", "") or ""
         
         report = analyze_coverage(st.session_state.latex_result, grade, topic)
         
@@ -1866,8 +1866,8 @@ def render_results():
         </p>
         """, unsafe_allow_html=True)
         
-        grade = st.session_state.get("selected_grade", "8. trinn")
-        topic = st.session_state.get("selected_topic", "Matematikk")
+        grade = st.session_state.get("selected_grade", "8. trinn") or "8. trinn"
+        topic = st.session_state.get("selected_topic", "Matematikk") or "Matematikk"
         
         rubric = generate_rubric(topic, grade, num_exercises=10)
         
@@ -1945,8 +1945,8 @@ def render_results():
             
             fav = add_favorite(
                 name=fav_name,
-                topic=st.session_state.get("selected_topic", "Matematikk"),
-                grade_level=st.session_state.get("selected_grade", "8. trinn"),
+                topic=st.session_state.get("selected_topic", "Matematikk") or "Matematikk",
+                grade_level=st.session_state.get("selected_grade", "8. trinn") or "8. trinn",
                 material_type=st.session_state.get("material_type", "arbeidsark"),
                 latex_content=st.session_state.latex_result,
                 pdf_path=st.session_state.get("pdf_path"),
@@ -1992,8 +1992,8 @@ def render_results():
                 
                 saved = add_exercises_from_latex(
                     st.session_state.latex_result,
-                    st.session_state.get("selected_topic", "Matematikk"),
-                    st.session_state.get("selected_grade", "8. trinn")
+                    st.session_state.get("selected_topic", "Matematikk") or "Matematikk",
+                    st.session_state.get("selected_grade", "8. trinn") or "8. trinn"
                 )
                 
                 if saved:
@@ -2032,8 +2032,8 @@ def render_results():
                             
                             ex_obj = add_exercise(
                                 title=ex['title'],
-                                topic=st.session_state.get("selected_topic", "Matematikk"),
-                                grade_level=st.session_state.get("selected_grade", "8. trinn"),
+                                topic=st.session_state.get("selected_topic", "Matematikk") or "Matematikk",
+                                grade_level=st.session_state.get("selected_grade", "8. trinn") or "8. trinn",
                                 latex_content=ex['full_latex'],
                                 difficulty=ex.get('difficulty', 'middels'),
                                 solution=ex.get('solution'),

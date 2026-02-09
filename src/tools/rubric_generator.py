@@ -141,6 +141,9 @@ def generate_rubric(
     """
     criteria = list(MATH_CRITERIA.values())
     
+    # Ensure topic is a string (can be None from session state)
+    topic = topic or ""
+    
     # Add topic-specific criteria
     if include_geometry or "geometri" in topic.lower():
         criteria.append(GEOMETRY_CRITERIA["visualization"])
