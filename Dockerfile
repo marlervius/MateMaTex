@@ -1,41 +1,32 @@
-# Bruk en offisiell Python-image som base
-FROM python:3.12-slim
+# Use full Debian (not slim) to ensure apt works correctly
+FROM python:3.12-bookworm
 
-# Sett arbeidskatalog
 WORKDIR /app
 
-# Installer systemavhengigheter (LaTeX og verktøy for PDF-generering)
-# Bruker retry-logikk for å håndtere ustabile apt-mirrors
-RUN for i in 1 2 3; do \
-        apt-get update && \
-        apt-get install -y --no-install-recommends \
-            texlive-latex-base \
-            texlive-latex-extra \
-            texlive-fonts-recommended \
-            texlive-fonts-extra \
-            texlive-lang-european \
-            texlive-pictures \
-            texlive-science \
-            texlive-binaries \
-            ghostscript \
-            ca-certificates \
-        && break || sleep 5; \
-    done && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+# Install TeX Live (using Debian's packaged version which is more reliable)
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        texlive-latex-base \
+        texlive-latex-extra \
+        texlive-fonts-recommended \
+        texlive-lang-european \
+        texlive-pictures \
+        texlive-science \
+    && rm -rf /var/lib/apt/lists/*
 
-# Kopier requirements først for å utnytte Docker cache
+# Verify pdflatex is available
+RUN pdflatex --version
+
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Kopier resten av applikasjonen
+# Copy application
 COPY . .
 
-# Opprett output-mappe og sett rettigheter
+# Create output directory
 RUN mkdir -p output && chmod 777 output
 
-# Eksponer porten Streamlit bruker
 EXPOSE 8501
 
-# Start-kommando
 CMD ["streamlit", "run", "app.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
