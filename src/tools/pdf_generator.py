@@ -223,88 +223,144 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
 def clean_ai_output(latex_content: str) -> str:
     """
     Clean up AI-generated LaTeX content.
-    Removes markdown code blocks and extracts clean LaTeX.
+    
+    1. Removes markdown code blocks
+    2. Strips any preamble the AI generated (documentclass, usepackage, etc.)
+    3. Extracts only the body content
+    
+    The system's STANDARD_PREAMBLE is always used, so AI-generated preambles
+    must be removed to prevent duplicates and compilation errors.
     
     Args:
         latex_content: Raw AI output that may contain markdown formatting.
     
     Returns:
-        Clean LaTeX content.
+        Clean LaTeX body content (no preamble).
     """
     import re
     
     content = latex_content.strip()
     
-    # Remove markdown code blocks (```latex ... ``` or ``` ... ```)
-    # Pattern matches ```latex or ``` at start and ``` at end
+    # Step 1: Remove markdown code blocks (```latex ... ``` or ``` ... ```)
     code_block_pattern = r'```(?:latex|tex)?\s*\n?(.*?)\n?```'
     matches = re.findall(code_block_pattern, content, re.DOTALL)
     
     if matches:
-        # If we found code blocks, use the content from the largest one
         content = max(matches, key=len).strip()
     
-    # If content still has markdown code fences, remove them
+    # Remove remaining markdown fences
     content = re.sub(r'^```(?:latex|tex)?\s*\n?', '', content)
     content = re.sub(r'\n?```\s*$', '', content)
     
-    # Check for duplicate document structure
-    # If there's \begin{document} followed by another \documentclass, extract inner content
-    doc_start_count = content.count(r'\begin{document}')
-    doc_class_count = content.count(r'\documentclass')
-    
-    if doc_start_count > 1 or doc_class_count > 1:
-        # There's a nested document - extract the inner content
-        # Find the LAST \begin{document} and LAST \end{document}
-        inner_match = re.search(
-            r'\\begin\{document\}(.*?)\\end\{document\}\s*$',
+    # Step 2: Strip AI-generated preamble
+    # If there's a \begin{document}, extract just the body content
+    if r'\begin{document}' in content:
+        # Find body content between \begin{document} and \end{document}
+        body_match = re.search(
+            r'\\begin\{document\}(.*?)(?:\\end\{document\}|$)',
             content,
             re.DOTALL
         )
-        if inner_match:
-            # Return just the body content (without the nested preamble)
-            inner_content = inner_match.group(1).strip()
+        if body_match:
+            content = body_match.group(1).strip()
             
-            # Check if inner content itself has another begin/end document
-            if r'\begin{document}' in inner_content:
-                # Extract from the innermost document
-                innermost = re.search(
-                    r'\\begin\{document\}(.*?)\\end\{document\}',
-                    inner_content,
+            # Handle nested documents (AI sometimes generates double wrapping)
+            if r'\begin{document}' in content:
+                inner_match = re.search(
+                    r'\\begin\{document\}(.*?)(?:\\end\{document\}|$)',
+                    content,
                     re.DOTALL
                 )
-                if innermost:
-                    inner_content = innermost.group(1).strip()
-            
-            return inner_content
+                if inner_match:
+                    content = inner_match.group(1).strip()
     
-    return content
+    # Step 3: Remove stray preamble commands that slipped through
+    # These should NEVER be in body content
+    preamble_patterns = [
+        r'\\documentclass\[?[^\]]*\]?\{[^}]*\}',
+        r'\\usepackage\[?[^\]]*\]?\{[^}]*\}',
+        r'\\newtcolorbox\{[^}]*\}.*?(?=\n\n|\n\\)',
+        r'\\newtcolorbox\[[^\]]*\]\{[^}]*\}.*?(?=\n\n|\n\\)',
+        r'\\definecolor\{[^}]*\}\{[^}]*\}\{[^}]*\}',
+        r'\\newtheorem\{[^}]*\}.*',
+        r'\\newtheorem\[[^\]]*\]\{[^}]*\}.*',
+        r'\\pgfplotsset\{compat=[^}]*\}',
+        r'\\usetikzlibrary\{[^}]*\}',
+        r'\\titleformat\{[^}]*\}.*',
+        r'\\pagestyle\{[^}]*\}',
+        r'\\fancyhf\{\}',
+        r'\\fancyhead\[?[^\]]*\]?\{[^}]*\}',
+        r'\\fancyfoot\[?[^\]]*\]?\{[^}]*\}',
+        r'\\renewcommand\{\\headrulewidth\}.*',
+        r'\\renewcommand\{\\footrulewidth\}.*',
+        r'\\setlength\{\\parskip\}.*',
+        r'\\setlength\{\\parindent\}.*',
+        r'\\floatplacement\{[^}]*\}\{[^}]*\}',
+    ]
+    
+    for pattern in preamble_patterns:
+        content = re.sub(pattern, '', content)
+    
+    # Remove any standalone \end{document} at the end
+    content = re.sub(r'\\end\{document\}\s*$', '', content)
+    
+    # Clean up multiple blank lines left after stripping
+    content = re.sub(r'\n{4,}', '\n\n\n', content)
+    
+    return content.strip()
 
 
 def ensure_preamble(latex_content: str) -> str:
     """
     Ensure the LaTeX content has a valid preamble.
-    If the content doesn't start with \\documentclass, prepend the standard preamble.
+    
+    After clean_ai_output(), the content should always be just body content.
+    This function wraps it with the STANDARD_PREAMBLE.
+    
+    If the content somehow still has a \\documentclass (legacy path),
+    we strip it and use our own preamble instead — our preamble defines
+    all the custom environments (definisjon, eksempel, taskbox, etc.).
 
     Args:
         latex_content: The LaTeX content to check.
 
     Returns:
-        LaTeX content with a guaranteed preamble.
+        Complete LaTeX document with standard preamble.
     """
+    import re
+    
     content_stripped = latex_content.strip()
 
-    # Check if content already has a documentclass
-    if content_stripped.startswith(r"\documentclass"):
-        # Content has preamble, but let's ensure critical packages are present
-        return _ensure_critical_packages(content_stripped)
+    # If content has a documentclass, it means clean_ai_output didn't fully strip it.
+    # Extract just the body and use our standard preamble.
+    if r"\documentclass" in content_stripped:
+        body_match = re.search(
+            r'\\begin\{document\}(.*?)(?:\\end\{document\}|$)',
+            content_stripped,
+            re.DOTALL
+        )
+        if body_match:
+            content_stripped = body_match.group(1).strip()
+        else:
+            # No \begin{document} found — try to skip everything before \title or \section
+            title_match = re.search(r'(\\(?:title|section|maketitle).*)', content_stripped, re.DOTALL)
+            if title_match:
+                content_stripped = title_match.group(1).strip()
 
-    # Check if content starts with \begin{document} (preamble missing entirely)
-    if content_stripped.startswith(r"\begin{document}"):
-        return STANDARD_PREAMBLE + content_stripped
+    # Remove any stray \begin{document} or \end{document}
+    content_stripped = re.sub(r'\\begin\{document\}', '', content_stripped)
+    content_stripped = re.sub(r'\\end\{document\}', '', content_stripped)
+    content_stripped = content_stripped.strip()
 
-    # Content is just the body - wrap it completely
-    return STANDARD_PREAMBLE + r"\begin{document}" + "\n\n" + content_stripped + "\n\n" + r"\end{document}"
+    # Wrap with standard preamble
+    return (
+        STANDARD_PREAMBLE
+        + r"\begin{document}"
+        + "\n\n"
+        + content_stripped
+        + "\n\n"
+        + r"\end{document}"
+    )
 
 
 def _ensure_critical_packages(latex_content: str) -> str:

@@ -124,7 +124,10 @@ def apply_template(template_key: str):
 # CORE FUNCTIONS
 # ============================================================================
 def run_crew(grade: str, topic: str, material_type: str, instructions: str, content_options: dict) -> str:
-    """Run the CrewAI editorial team to generate content."""
+    """
+    Run the CrewAI editorial team to generate content.
+    3 agents: Pedagogue → Writer → Editor (streamlined from 4).
+    """
     from crewai import Crew, Process
     from src.agents import MathBookAgents
     from src.tasks import MathTasks
@@ -133,21 +136,21 @@ def run_crew(grade: str, topic: str, material_type: str, instructions: str, cont
     agents = MathBookAgents(language_level=language_level)
     tasks = MathTasks()
 
+    # 3 agents (writer handles both math content + illustrations)
     pedagogue = agents.pedagogue(grade=grade)
-    mathematician = agents.mathematician(grade=grade)
-    illustrator = agents.illustrator(grade=grade)
-    chief_editor = agents.chief_editor()
+    writer = agents.writer(grade=grade)
+    editor = agents.chief_editor()
 
     full_topic = f"{topic}\n\nTilleggsinstruksjoner: {instructions}" if instructions else topic
 
+    # 3 tasks (no separate graphics task — writer produces TikZ inline)
     task1 = tasks.plan_content_task(pedagogue, grade, full_topic, material_type, content_options)
-    task2 = tasks.write_content_task(mathematician, task1, content_options)
-    task3 = tasks.generate_graphics_task(illustrator, task2, content_options)
-    task4 = tasks.final_assembly_task(chief_editor, task3, content_options)
+    task2 = tasks.write_content_task(writer, task1, content_options)
+    task3 = tasks.edit_and_validate_task(editor, task2, content_options)
 
     crew = Crew(
-        agents=[pedagogue, mathematician, illustrator, chief_editor],
-        tasks=[task1, task2, task3, task4],
+        agents=[pedagogue, writer, editor],
+        tasks=[task1, task2, task3],
         process=Process.sequential,
         verbose=True
     )
@@ -453,10 +456,10 @@ def main():
         instructions = ". ".join(content_instructions)
 
         # Progress
-        progress_bar = st.progress(0, text="Pedagogen planlegger innholdet...")
+        progress_bar = st.progress(0, text="Starter generering...")
 
         try:
-            progress_bar.progress(10, text="🎓 Pedagogen planlegger...")
+            progress_bar.progress(10, text="🎓 Pedagogen planlegger innholdet...")
 
             latex_result = run_crew(
                 grade=grade_options[selected_grade],
