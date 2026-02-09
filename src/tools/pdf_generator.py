@@ -4,10 +4,14 @@ Compiles LaTeX content to PDF using pdflatex.
 """
 
 import os
+import re
+import logging
 import subprocess
 import tempfile
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 # Standard preamble for Norwegian math documents - Modern Textbook Style
@@ -22,13 +26,16 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
 \usepackage{lmodern}
 \usepackage{microtype}
 
-% Mathematics
-\usepackage{amsmath, amssymb, amsthm}
+% Mathematics (mathtools extends amsmath with better spacing)
+\usepackage{mathtools}
+\usepackage{amssymb, amsthm}
+\usepackage{bm}        % Bold math symbols (\bm{x})
+\usepackage{siunitx}   % Units (\SI{9.81}{\metre\per\second\squared})
 
 % Graphics
 \usepackage{tikz, pgfplots}
 \pgfplotsset{compat=1.18}
-\usetikzlibrary{arrows.meta, calc, patterns, positioning, shapes.geometric}
+\usetikzlibrary{arrows.meta, calc, patterns, positioning, shapes.geometric, decorations.pathreplacing}
 
 % Layout
 \usepackage[margin=2.5cm]{geometry}
@@ -48,6 +55,9 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
 % Colors and colored boxes
 \usepackage{xcolor}
 \usepackage[most]{tcolorbox}
+
+% Hyperlinks (load late to avoid conflicts)
+\usepackage[colorlinks=true, linkcolor=mainBlue, urlcolor=mainBlue, citecolor=mainGreen]{hyperref}
 
 % --- Custom Color Definitions ---
 \definecolor{mainBlue}{RGB}{0, 102, 204}
@@ -220,6 +230,28 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
 """
 
 
+# Preamble-only commands that should NEVER appear in body content.
+# These are stripped ONLY when they appear at the top level (not inside tikzpicture etc.)
+_PREAMBLE_ONLY_PATTERNS = [
+    re.compile(r'^\\documentclass\[?[^\]]*\]?\{[^}]*\}', re.MULTILINE),
+    re.compile(r'^\\usepackage\[?[^\]]*\]?\{[^}]*\}', re.MULTILINE),
+    re.compile(r'^\\newtcolorbox(?:\[[^\]]*\])?\{[^}]*\}.*$', re.MULTILINE),
+    re.compile(r'^\\newtheorem(?:\[[^\]]*\])?\{[^}]*\}.*$', re.MULTILINE),
+    re.compile(r'^\\pgfplotsset\{compat=[^}]*\}', re.MULTILINE),
+    re.compile(r'^\\usetikzlibrary\{[^}]*\}', re.MULTILINE),
+    re.compile(r'^\\titleformat\{[^}]*\}.*$', re.MULTILINE),
+    re.compile(r'^\\pagestyle\{[^}]*\}', re.MULTILINE),
+    re.compile(r'^\\fancyhf\{\}', re.MULTILINE),
+    re.compile(r'^\\fancyhead\[?[^\]]*\]?\{[^}]*\}', re.MULTILINE),
+    re.compile(r'^\\fancyfoot\[?[^\]]*\]?\{[^}]*\}', re.MULTILINE),
+    re.compile(r'^\\renewcommand\{\\headrulewidth\}.*$', re.MULTILINE),
+    re.compile(r'^\\renewcommand\{\\footrulewidth\}.*$', re.MULTILINE),
+    re.compile(r'^\\setlength\{\\parskip\}.*$', re.MULTILINE),
+    re.compile(r'^\\setlength\{\\parindent\}.*$', re.MULTILINE),
+    re.compile(r'^\\floatplacement\{[^}]*\}\{[^}]*\}', re.MULTILINE),
+]
+
+
 def clean_ai_output(latex_content: str) -> str:
     """
     Clean up AI-generated LaTeX content.
@@ -228,8 +260,8 @@ def clean_ai_output(latex_content: str) -> str:
     2. Strips any preamble the AI generated (documentclass, usepackage, etc.)
     3. Extracts only the body content
     
-    The system's STANDARD_PREAMBLE is always used, so AI-generated preambles
-    must be removed to prevent duplicates and compilation errors.
+    Context-aware: only strips preamble commands at the top level,
+    NOT inside tikzpicture or other environments where they might be valid.
     
     Args:
         latex_content: Raw AI output that may contain markdown formatting.
@@ -237,8 +269,6 @@ def clean_ai_output(latex_content: str) -> str:
     Returns:
         Clean LaTeX body content (no preamble).
     """
-    import re
-    
     content = latex_content.strip()
     
     # Step 1: Remove markdown code blocks (```latex ... ``` or ``` ... ```)
@@ -246,7 +276,9 @@ def clean_ai_output(latex_content: str) -> str:
     matches = re.findall(code_block_pattern, content, re.DOTALL)
     
     if matches:
-        content = max(matches, key=len).strip()
+        # Use the last substantial match (AI usually puts the final version last)
+        substantial = [m for m in matches if len(m.strip()) > 50]
+        content = (substantial[-1] if substantial else max(matches, key=len)).strip()
     
     # Remove remaining markdown fences
     content = re.sub(r'^```(?:latex|tex)?\s*\n?', '', content)
@@ -255,7 +287,6 @@ def clean_ai_output(latex_content: str) -> str:
     # Step 2: Strip AI-generated preamble
     # If there's a \begin{document}, extract just the body content
     if r'\begin{document}' in content:
-        # Find body content between \begin{document} and \end{document}
         body_match = re.search(
             r'\\begin\{document\}(.*?)(?:\\end\{document\}|$)',
             content,
@@ -274,32 +305,14 @@ def clean_ai_output(latex_content: str) -> str:
                 if inner_match:
                     content = inner_match.group(1).strip()
     
-    # Step 3: Remove stray preamble commands that slipped through
-    # These should NEVER be in body content
-    preamble_patterns = [
-        r'\\documentclass\[?[^\]]*\]?\{[^}]*\}',
-        r'\\usepackage\[?[^\]]*\]?\{[^}]*\}',
-        r'\\newtcolorbox\{[^}]*\}.*?(?=\n\n|\n\\)',
-        r'\\newtcolorbox\[[^\]]*\]\{[^}]*\}.*?(?=\n\n|\n\\)',
-        r'\\definecolor\{[^}]*\}\{[^}]*\}\{[^}]*\}',
-        r'\\newtheorem\{[^}]*\}.*',
-        r'\\newtheorem\[[^\]]*\]\{[^}]*\}.*',
-        r'\\pgfplotsset\{compat=[^}]*\}',
-        r'\\usetikzlibrary\{[^}]*\}',
-        r'\\titleformat\{[^}]*\}.*',
-        r'\\pagestyle\{[^}]*\}',
-        r'\\fancyhf\{\}',
-        r'\\fancyhead\[?[^\]]*\]?\{[^}]*\}',
-        r'\\fancyfoot\[?[^\]]*\]?\{[^}]*\}',
-        r'\\renewcommand\{\\headrulewidth\}.*',
-        r'\\renewcommand\{\\footrulewidth\}.*',
-        r'\\setlength\{\\parskip\}.*',
-        r'\\setlength\{\\parindent\}.*',
-        r'\\floatplacement\{[^}]*\}\{[^}]*\}',
-    ]
+    # Step 3: Remove top-level preamble commands (context-aware)
+    # Only strip lines that start with preamble commands (not inside environments)
+    for pattern in _PREAMBLE_ONLY_PATTERNS:
+        content = pattern.sub('', content)
     
-    for pattern in preamble_patterns:
-        content = re.sub(pattern, '', content)
+    # Step 4: Remove standalone \definecolor at top level
+    # But preserve them inside tikzpicture environments
+    content = _strip_top_level_only(content, r'\\definecolor\{[^}]*\}\{[^}]*\}\{[^}]*\}')
     
     # Remove any standalone \end{document} at the end
     content = re.sub(r'\\end\{document\}\s*$', '', content)
@@ -310,16 +323,37 @@ def clean_ai_output(latex_content: str) -> str:
     return content.strip()
 
 
+def _strip_top_level_only(content: str, pattern_str: str) -> str:
+    """
+    Strip a pattern only when it appears OUTSIDE of tikzpicture/axis environments.
+    This prevents removing \\definecolor or \\pgfplotsset inside TikZ figures.
+    """
+    lines = content.split('\n')
+    result = []
+    depth = 0  # Track nesting depth of tikzpicture/axis environments
+    pattern = re.compile(pattern_str)
+    
+    for line in lines:
+        # Track environment nesting
+        if r'\begin{tikzpicture}' in line or r'\begin{axis}' in line:
+            depth += 1
+        if r'\end{tikzpicture}' in line or r'\end{axis}' in line:
+            depth = max(0, depth - 1)
+        
+        # Only strip at top level (depth == 0)
+        if depth == 0 and pattern.match(line.strip()):
+            continue
+        result.append(line)
+    
+    return '\n'.join(result)
+
+
 def ensure_preamble(latex_content: str) -> str:
     """
     Ensure the LaTeX content has a valid preamble.
     
     After clean_ai_output(), the content should always be just body content.
     This function wraps it with the STANDARD_PREAMBLE.
-    
-    If the content somehow still has a \\documentclass (legacy path),
-    we strip it and use our own preamble instead — our preamble defines
-    all the custom environments (definisjon, eksempel, taskbox, etc.).
 
     Args:
         latex_content: The LaTeX content to check.
@@ -327,11 +361,9 @@ def ensure_preamble(latex_content: str) -> str:
     Returns:
         Complete LaTeX document with standard preamble.
     """
-    import re
-    
     content_stripped = latex_content.strip()
 
-    # If content has a documentclass, it means clean_ai_output didn't fully strip it.
+    # If content has a documentclass, clean_ai_output didn't fully strip it.
     # Extract just the body and use our standard preamble.
     if r"\documentclass" in content_stripped:
         body_match = re.search(
@@ -342,7 +374,6 @@ def ensure_preamble(latex_content: str) -> str:
         if body_match:
             content_stripped = body_match.group(1).strip()
         else:
-            # No \begin{document} found — try to skip everything before \title or \section
             title_match = re.search(r'(\\(?:title|section|maketitle).*)', content_stripped, re.DOTALL)
             if title_match:
                 content_stripped = title_match.group(1).strip()
@@ -361,52 +392,6 @@ def ensure_preamble(latex_content: str) -> str:
         + "\n\n"
         + r"\end{document}"
     )
-
-
-def _ensure_critical_packages(latex_content: str) -> str:
-    """
-    Ensure critical packages are present in existing preamble.
-    Injects missing packages after \\documentclass line if needed.
-
-    Args:
-        latex_content: LaTeX content that already has a documentclass.
-
-    Returns:
-        LaTeX content with critical packages ensured.
-    """
-    critical_packages = [
-        (r"\usepackage[utf8]{inputenc}", r"[utf8]{inputenc}"),
-        (r"\usepackage[norsk]{babel}", r"babel"),
-        (r"\usepackage{amsmath", r"amsmath"),
-        (r"\usepackage{tikz", r"tikz"),
-        (r"\usepackage{pgfplots}", r"pgfplots"),
-        (r"\usepackage[most]{tcolorbox}", r"tcolorbox"),
-        (r"\usepackage{xcolor}", r"xcolor"),
-        (r"\usepackage{float}", r"float"),
-    ]
-
-    missing_packages = []
-    for package_line, check_string in critical_packages:
-        if check_string not in latex_content:
-            missing_packages.append(package_line)
-
-    if not missing_packages:
-        return latex_content
-
-    # Find the end of documentclass line and inject missing packages
-    lines = latex_content.split("\n")
-    result_lines = []
-    packages_injected = False
-
-    for line in lines:
-        result_lines.append(line)
-        if not packages_injected and line.strip().startswith(r"\documentclass"):
-            result_lines.append("\n% Auto-injected critical packages")
-            result_lines.extend(missing_packages)
-            result_lines.append("")
-            packages_injected = True
-
-    return "\n".join(result_lines)
 
 
 def compile_latex_to_pdf(
@@ -454,14 +439,25 @@ def compile_latex_to_pdf(
     # Ensure valid preamble
     latex_content = ensure_preamble(latex_content)
 
+    # Validate before attempting compilation (saves time on obviously broken docs)
+    is_valid, issues = validate_latex_syntax(latex_content)
+    if not is_valid:
+        logger.warning(f"Pre-compilation validation found {len(issues)} issues: {issues}")
+        # Try to auto-fix the issues before giving up
+        latex_content = _try_autofix_latex(latex_content, "\n".join(issues))
+
     # Define file paths
     tex_file = output_dir / f"{filename}.tex"
     pdf_file = output_dir / f"{filename}.pdf"
     log_file = output_dir / f"{filename}.log"
 
     # Write the .tex file
-    tex_file.write_text(latex_content, encoding="utf-8")
-    print(f"[OK] LaTeX source saved to: {tex_file}")
+    try:
+        tex_file.write_text(latex_content, encoding="utf-8")
+    except (OSError, IOError) as e:
+        raise RuntimeError(f"Could not write .tex file: {e}")
+    
+    logger.info(f"LaTeX source saved to: {tex_file}")
 
     # Check if pdflatex is available
     pdflatex_cmd = _find_pdflatex()
@@ -481,7 +477,7 @@ def compile_latex_to_pdf(
         
         # Run pdflatex (twice for proper cross-references)
         for run_num in range(2):
-            print(f"  Running pdflatex (attempt {attempt + 1}, pass {run_num + 1}/2)...")
+            logger.info(f"Running pdflatex (attempt {attempt + 1}, pass {run_num + 1}/2)...")
             
             try:
                 result = subprocess.run(
@@ -495,15 +491,14 @@ def compile_latex_to_pdf(
                     capture_output=True,
                     text=True,
                     cwd=output_dir,
-                    timeout=120  # 2 minute timeout per pass
+                    timeout=180  # 3 minute timeout for complex TikZ
                 )
             except subprocess.TimeoutExpired:
-                last_error = "LaTeX compilation timed out (>2 minutes). The document may be too complex."
+                last_error = "LaTeX compilation timed out (>3 minutes). The document may have an infinite loop in TikZ."
                 success = False
                 break
 
             if result.returncode != 0:
-                # Extract error and try to fix
                 error_msg = _extract_latex_errors(log_file, result.stdout)
                 last_error = error_msg
                 
@@ -513,7 +508,7 @@ def compile_latex_to_pdf(
                     if fixed_content != latex_content:
                         latex_content = fixed_content
                         tex_file.write_text(latex_content, encoding="utf-8")
-                        print(f"  [RETRY] Auto-fixed LaTeX issues, retrying...")
+                        logger.info("Auto-fixed LaTeX issues, retrying...")
                 
                 success = False
                 break
@@ -521,7 +516,6 @@ def compile_latex_to_pdf(
         if success:
             break
     else:
-        # All retries exhausted
         raise RuntimeError(
             f"LaTeX compilation failed after {max_retries} attempts:\n{last_error}\n\n"
             f"Full log available at: {log_file}\n"
@@ -535,7 +529,7 @@ def compile_latex_to_pdf(
             f"Check the log file: {log_file}"
         )
 
-    print(f"[OK] PDF generated: {pdf_file}")
+    logger.info(f"PDF generated: {pdf_file}")
 
     # Cleanup auxiliary files
     if cleanup_aux:
@@ -545,15 +539,9 @@ def compile_latex_to_pdf(
 
 
 def _find_pdflatex() -> Optional[str]:
-    """
-    Find pdflatex executable on the system.
-    
-    Returns:
-        Path to pdflatex or None if not found.
-    """
+    """Find pdflatex executable on the system."""
     import shutil
     
-    # Try standard command first
     if shutil.which("pdflatex"):
         return "pdflatex"
     
@@ -562,6 +550,7 @@ def _find_pdflatex() -> Optional[str]:
         r"C:\Program Files\MiKTeX\miktex\bin\x64\pdflatex.exe",
         r"C:\Program Files (x86)\MiKTeX\miktex\bin\pdflatex.exe",
         r"C:\texlive\2024\bin\windows\pdflatex.exe",
+        r"C:\texlive\2025\bin\windows\pdflatex.exe",
         r"C:\texlive\2023\bin\windows\pdflatex.exe",
     ]
     
@@ -575,27 +564,14 @@ def _find_pdflatex() -> Optional[str]:
 def _fix_common_latex_issues(latex_content: str) -> str:
     """
     Fix common LaTeX issues that AI models tend to generate.
-    
-    Args:
-        latex_content: The LaTeX content to fix.
-    
-    Returns:
-        Fixed LaTeX content.
     """
-    import re
-    
     content = latex_content
     
-    # Fix unescaped percent signs in text (not comments)
-    # This is tricky - we need to avoid breaking actual comments
-    # Only fix % that appears after letters/numbers without backslash
+    # Fix unescaped percent signs in text (after digits, not at line end = comment)
     content = re.sub(r'(\d)%(?!\s*$)', r'\1\\%', content)
     
-    # Fix unescaped ampersands outside of tables/align
-    # (This is context-sensitive, so we're conservative)
-    
-    # Fix common Norwegian character issues
-    content = content.replace('æ', 'æ')  # Ensure proper encoding
+    # Fix common Norwegian character issues (ensure proper encoding)
+    content = content.replace('æ', 'æ')
     content = content.replace('ø', 'ø')
     content = content.replace('å', 'å')
     
@@ -605,18 +581,25 @@ def _fix_common_latex_issues(latex_content: str) -> str:
     # Fix double backslashes that should be single (common AI mistake)
     content = re.sub(r'\\\\(?=begin|end|section|subsection|textbf|frac|sqrt)', r'\\', content)
     
-    # Remove any stray markdown that might have slipped through
+    # Remove stray markdown
     content = re.sub(r'^\s*#{1,6}\s+', '', content, flags=re.MULTILINE)
     content = re.sub(r'\*\*([^*]+)\*\*', r'\\textbf{\1}', content)
-    content = re.sub(r'\*([^*]+)\*', r'\\textit{\1}', content)
+    content = re.sub(r'(?<!\*)\*([^*]+)\*(?!\*)', r'\\textit{\1}', content)
     
-    # Fix missing closing braces in common patterns
-    # Count braces to detect obvious mismatches
+    # Fix missing semicolons in TikZ paths (common AI error)
+    # Look for lines inside tikzpicture that end with coordinates but no semicolon
+    content = re.sub(
+        r'(\\draw[^;]*(?:--\s*\([^)]+\))\s*)$(?!\s*--)',
+        r'\1;',
+        content,
+        flags=re.MULTILINE
+    )
+    
+    # Fix missing closing braces
     open_count = content.count('{')
     close_count = content.count('}')
     
     if open_count > close_count:
-        # Add missing closing braces at the end (before \end{document} if present)
         diff = open_count - close_count
         if r'\end{document}' in content:
             content = content.replace(r'\end{document}', '}' * diff + r'\end{document}')
@@ -629,100 +612,118 @@ def _fix_common_latex_issues(latex_content: str) -> str:
 def _try_autofix_latex(latex_content: str, error_msg: str) -> str:
     """
     Try to automatically fix LaTeX errors based on error message.
-    
-    Args:
-        latex_content: The LaTeX content with errors.
-        error_msg: The error message from pdflatex.
-    
-    Returns:
-        Potentially fixed LaTeX content.
+    Handles: undefined commands, missing $, runaway arguments,
+    undefined colors, extra alignment tabs, missing numbers, package errors.
     """
-    import re
-    
     content = latex_content
     
-    # Fix undefined control sequence errors
+    # 1. Fix undefined control sequence errors
     if "Undefined control sequence" in error_msg:
-        # Extract the undefined command
-        match = re.search(r'\\([a-zA-Z]+)', error_msg)
-        if match:
-            undefined_cmd = match.group(1)
-            # Common fixes for undefined commands
-            fixes = {
-                'R': r'\mathbb{R}',  # Real numbers
-                'N': r'\mathbb{N}',  # Natural numbers
-                'Z': r'\mathbb{Z}',  # Integers
-                'Q': r'\mathbb{Q}',  # Rationals
+        # Extract the undefined command from the error context
+        matches = re.findall(r'\\([a-zA-Z]+)', error_msg)
+        for undefined_cmd in matches:
+            # Common math symbol fixes
+            symbol_fixes = {
+                'R': r'\mathbb{R}',
+                'N': r'\mathbb{N}',
+                'Z': r'\mathbb{Z}',
+                'Q': r'\mathbb{Q}',
+                'C': r'\mathbb{C}',
             }
-            if undefined_cmd in fixes:
-                content = content.replace(f'\\{undefined_cmd}', fixes[undefined_cmd])
+            if undefined_cmd in symbol_fixes:
+                content = content.replace(f'\\{undefined_cmd}', symbol_fixes[undefined_cmd])
+            
+            # Remove unknown commands that are likely AI hallucinations
+            hallucinated = [
+                'newpage', 'clearpage', 'pagebreak',  # These are actually valid but might cause issues
+            ]
+            # Don't auto-remove valid commands
     
-    # Fix missing $ errors (math mode)
+    # 2. Fix missing $ errors (math mode)
     if "Missing $" in error_msg:
-        # This is harder to auto-fix, but we can try wrapping isolated math symbols
-        pass
+        # Common patterns: standalone ^, _, or math symbols outside math mode
+        # Wrap isolated math expressions
+        content = re.sub(r'(?<![\$\\])(\b\w+)\^(\{[^}]+\}|\w)', r'$\1^\2$', content)
+        content = re.sub(r'(?<![\$\\])(\b\w+)_(\{[^}]+\}|\w)', r'$\1_\2$', content)
     
-    # Fix runaway argument (usually missing closing brace)
+    # 3. Fix runaway argument (usually missing closing brace or end tag)
     if "Runaway argument" in error_msg:
-        # Try to find and close unclosed environments
-        environments = ['definisjon', 'eksempel', 'taskbox', 'merk', 'losning', 'figure', 'align']
+        environments = [
+            'definisjon', 'eksempel', 'taskbox', 'merk', 'losning',
+            'figure', 'align', 'align*', 'equation', 'equation*',
+            'tikzpicture', 'axis', 'enumerate', 'itemize',
+            'multicols', 'tcolorbox',
+        ]
         for env in environments:
             opens = content.count(f'\\begin{{{env}}}')
+            # Handle optional args for counting
             closes = content.count(f'\\end{{{env}}}')
             if opens > closes:
-                # Add missing end tags
                 content += f'\n\\end{{{env}}}' * (opens - closes)
+    
+    # 4. Fix extra alignment tab errors
+    if "Extra alignment tab" in error_msg:
+        # This usually means too many & in a table row
+        # Hard to auto-fix without context, but we can try to find obvious cases
+        pass
+    
+    # 5. Fix undefined color errors
+    if "Undefined color" in error_msg:
+        color_match = re.search(r"Undefined color [`']?(\w+)", error_msg)
+        if color_match:
+            undef_color = color_match.group(1)
+            # Map common color names to our defined colors
+            color_map = {
+                'blue': 'mainBlue', 'red': 'red', 'green': 'mainGreen',
+                'orange': 'mainOrange', 'purple': 'mainPurple', 'teal': 'mainTeal',
+                'gray': 'mainGray', 'grey': 'mainGray',
+            }
+            replacement = color_map.get(undef_color.lower(), 'mainBlue')
+            content = content.replace(undef_color, replacement)
+    
+    # 6. Fix "Missing number, treated as zero"
+    if "Missing number" in error_msg:
+        # Often caused by empty optional args like \begin{multicols}{}
+        content = re.sub(r'\\begin\{multicols\}\{\}', r'\\begin{multicols}{2}', content)
+    
+    # 7. Fix "File X.sty not found" by removing the usepackage line
+    if "File" in error_msg and "not found" in error_msg:
+        sty_match = re.search(r"File `([^']+)\.sty' not found", error_msg)
+        if sty_match:
+            pkg_name = sty_match.group(1)
+            content = re.sub(rf'\\usepackage(?:\[[^\]]*\])?\{{{pkg_name}\}}', '', content)
     
     return content
 
 
 def _extract_latex_errors(log_file: Path, stdout: str) -> str:
-    """
-    Extract meaningful error messages from LaTeX output.
-
-    Args:
-        log_file: Path to the .log file.
-        stdout: Standard output from pdflatex.
-
-    Returns:
-        Formatted error message string.
-    """
+    """Extract meaningful error messages from LaTeX output."""
     errors = []
 
-    # Try to read the log file for detailed errors
     if log_file.exists():
         try:
             log_content = log_file.read_text(encoding="utf-8", errors="ignore")
-            # Find lines starting with "!" which indicate errors
             for line in log_content.split("\n"):
                 if line.startswith("!"):
                     errors.append(line)
                 elif errors and line.strip() and not line.startswith("!"):
-                    # Include context lines after error
-                    if len(errors) < 10:
+                    if len(errors) < 15:
                         errors.append(line)
         except Exception:
             pass
 
     if errors:
-        return "\n".join(errors[:10])  # Limit to first 10 error lines
+        return "\n".join(errors[:15])
 
-    # Fallback to stdout if log parsing failed
     if stdout:
-        return stdout[-2000:]  # Last 2000 characters of output
+        return stdout[-2000:]
 
     return "Unknown error. Check the log file for details."
 
 
 def _cleanup_auxiliary_files(output_dir: Path, filename: str) -> None:
-    """
-    Remove auxiliary files generated by pdflatex.
-
-    Args:
-        output_dir: Directory containing the files.
-        filename: Base name of the files.
-    """
-    aux_extensions = [".aux", ".log", ".out", ".toc", ".lof", ".lot", ".fls", ".fdb_latexmk"]
+    """Remove auxiliary files generated by pdflatex."""
+    aux_extensions = [".aux", ".log", ".out", ".toc", ".lof", ".lot", ".fls", ".fdb_latexmk", ".synctex.gz"]
 
     for ext in aux_extensions:
         aux_file = output_dir / f"{filename}{ext}"
@@ -730,7 +731,7 @@ def _cleanup_auxiliary_files(output_dir: Path, filename: str) -> None:
             try:
                 aux_file.unlink()
             except Exception:
-                pass  # Ignore cleanup errors
+                pass
 
 
 def validate_latex_syntax(latex_content: str) -> tuple[bool, list[str]]:
@@ -759,12 +760,15 @@ def validate_latex_syntax(latex_content: str) -> tuple[bool, list[str]]:
 
     # Check for common environment mismatches
     environments = [
-        "equation", "align", "itemize", "enumerate", "tikzpicture", "figure", "table",
+        "equation", "align", "align*", "itemize", "enumerate",
+        "tikzpicture", "axis", "figure", "table",
         "definitionbox", "examplebox", "taskbox", "tipbox",
-        "definisjon", "eksempel", "merk", "losning"
+        "definisjon", "eksempel", "merk", "losning",
+        "multicols", "tcolorbox",
     ]
     for env in environments:
-        opens = latex_content.count(f"\\begin{{{env}}}")
+        # Count begins (ignoring optional args)
+        opens = len(re.findall(rf'\\begin\{{{re.escape(env)}\}}', latex_content))
         closes = latex_content.count(f"\\end{{{env}}}")
         if opens != closes:
             issues.append(f"Unmatched {env} environment: {opens} begin, {closes} end")

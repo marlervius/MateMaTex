@@ -5,6 +5,7 @@ Streamlined UI - Clean, focused, user-friendly.
 
 import os
 import base64
+import logging
 from datetime import datetime
 from pathlib import Path
 
@@ -12,6 +13,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import streamlit as st
+
+logger = logging.getLogger(__name__)
 
 # Page configuration
 st.set_page_config(
@@ -80,6 +83,14 @@ TEMPLATES = {
     },
 }
 
+# Difficulty mapping — robust, no string splitting
+DIFFICULTY_OPTIONS = {
+    "🟢 Lett": "Lett",
+    "🟡 Middels": "Middels",
+    "🔴 Vanskelig": "Vanskelig",
+}
+DIFFICULTY_REVERSE = {v: k for k, v in DIFFICULTY_OPTIONS.items()}
+
 
 # ============================================================================
 # SESSION STATE
@@ -91,6 +102,7 @@ def initialize_session_state():
         "pdf_path": None,
         "pdf_bytes": None,
         "generation_complete": False,
+        "generation_cancelled": False,
         "include_theory": True,
         "include_examples": True,
         "include_exercises": True,
@@ -104,7 +116,6 @@ def initialize_session_state():
         "selected_competency_goals": [],
         "selected_template": None,
         "language_level": "standard",
-        "history": [],
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -176,6 +187,16 @@ def save_tex_file(latex_content: str, filename: str) -> str:
     tex_path = output_dir / f"{filename}.tex"
     tex_path.write_text(latex_content, encoding="utf-8")
     return str(tex_path)
+
+
+def make_safe_filename(topic: str, grade: str) -> str:
+    """Create a safe filename from topic and grade. Never returns empty."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_topic = "".join(c for c in topic if c.isalnum() or c in (' ', '-', '_')).strip().replace(' ', '_')[:30]
+    safe_grade = grade.replace(' ', '_').replace('.', '')
+    if not safe_topic:
+        safe_topic = "matematikk"
+    return f"{safe_topic}_{safe_grade}_{timestamp}"
 
 
 # ============================================================================
@@ -252,6 +273,7 @@ def main():
         "10. trinn": "10. trinn",
         "VG1 1T": "VG1 1T",
         "VG1 1P": "VG1 1P",
+        "VG2 2P": "VG2 2P",
         "VG2 R1": "VG2 R1",
         "VG3 R2": "VG3 R2",
     }
@@ -319,15 +341,16 @@ def main():
                 value=st.session_state.num_exercises, step=1
             )
         with col_diff:
-            difficulty_options = ["🟢 Lett", "🟡 Middels", "🔴 Vanskelig"]
-            diff_idx = {"Lett": 0, "Middels": 1, "Vanskelig": 2}.get(st.session_state.difficulty_level, 1)
+            difficulty_labels = list(DIFFICULTY_OPTIONS.keys())
+            current_label = DIFFICULTY_REVERSE.get(st.session_state.difficulty_level, "🟡 Middels")
+            diff_idx = difficulty_labels.index(current_label) if current_label in difficulty_labels else 1
             selected_difficulty = st.radio(
                 "Vanskelighetsgrad",
-                options=difficulty_options,
+                options=difficulty_labels,
                 index=diff_idx,
                 horizontal=True
             )
-            st.session_state.difficulty_level = selected_difficulty.split(" ")[1]
+            st.session_state.difficulty_level = DIFFICULTY_OPTIONS[selected_difficulty]
 
     # ------------------------------------------------------------------
     # STEP 4: Advanced options (collapsed by default)
@@ -360,7 +383,7 @@ def main():
                 from src.cache import get_all_exercise_types
                 exercise_types = get_all_exercise_types()
                 selected_types = []
-                for type_key, type_info in list(exercise_types.items())[:6]:
+                for type_key, type_info in exercise_types.items():
                     if st.checkbox(
                         type_info["name"],
                         value=type_key in st.session_state.selected_exercise_types,
@@ -375,7 +398,7 @@ def main():
         if competency_goals:
             st.markdown("**🎯 Kompetansemål (LK20)**")
             selected_goals = []
-            for i, goal in enumerate(competency_goals[:6]):
+            for i, goal in enumerate(competency_goals):
                 display = goal[:80] + "..." if len(goal) > 80 else goal
                 if st.checkbox(display, key=f"goal_{i}", help=goal):
                     selected_goals.append(goal)
@@ -391,12 +414,22 @@ def main():
     if not topic:
         st.info("Velg eller skriv inn et tema for å starte.")
 
-    generate_clicked = st.button(
-        "◇ Generer materiale",
-        disabled=not can_generate,
-        use_container_width=True,
-        type="primary"
-    )
+    gen_col1, gen_col2 = st.columns([4, 1])
+    with gen_col1:
+        generate_clicked = st.button(
+            "◇ Generer materiale",
+            disabled=not can_generate,
+            use_container_width=True,
+            type="primary"
+        )
+    with gen_col2:
+        cancel_clicked = st.button(
+            "Avbryt",
+            disabled=not st.session_state.get("_generating", False),
+            use_container_width=True,
+        )
+        if cancel_clicked:
+            st.session_state.generation_cancelled = True
 
     # ------------------------------------------------------------------
     # GENERATION LOGIC
@@ -406,10 +439,10 @@ def main():
         st.session_state.pdf_path = None
         st.session_state.pdf_bytes = None
         st.session_state.generation_complete = False
+        st.session_state.generation_cancelled = False
+        st.session_state._generating = True
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_topic = "".join(c for c in topic if c.isalnum() or c in (' ', '-', '_')).strip().replace(' ', '_')[:30]
-        filename = f"{safe_topic}_{selected_grade.replace(' ', '_').replace('.', '')}_{timestamp}"
+        filename = make_safe_filename(topic, selected_grade)
 
         # Build content options
         from src.cache import get_all_exercise_types
@@ -420,11 +453,11 @@ def main():
             if et in exercise_types
         ]
 
-        selected_material = "arbeidsark"
-        for tmpl in TEMPLATES.values():
-            if st.session_state.selected_template and st.session_state.selected_template in TEMPLATES:
-                selected_material = TEMPLATES[st.session_state.selected_template]["config"].get("material_type", "arbeidsark")
-                break
+        # Get material type from selected template (fix: no unnecessary loop)
+        if st.session_state.selected_template and st.session_state.selected_template in TEMPLATES:
+            selected_material = TEMPLATES[st.session_state.selected_template]["config"].get("material_type", "arbeidsark")
+        else:
+            selected_material = "arbeidsark"
 
         content_options = {
             "include_theory": st.session_state.include_theory,
@@ -440,7 +473,7 @@ def main():
             "exercise_types": st.session_state.selected_exercise_types,
             "exercise_type_instructions": exercise_type_instructions,
             "differentiation_mode": st.session_state.differentiation_mode,
-            "language_level": st.session_state.get("language_level", "standard"),
+            "language_level": st.session_state.language_level,
         }
 
         # Build instructions
@@ -489,8 +522,8 @@ def main():
                     material_type=selected_material,
                     tex_content=latex_result, pdf_path=pdf_path
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Kunne ikke lagre til historikk: {e}")
 
             # Record usage
             try:
@@ -500,14 +533,17 @@ def main():
                     material_type=selected_material,
                     num_exercises=st.session_state.num_exercises
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Kunne ikke registrere bruk: {e}")
 
             st.session_state.generation_complete = True
+            st.session_state._generating = False
             st.rerun()
 
         except Exception as e:
+            st.session_state._generating = False
             progress_bar.empty()
+            logger.error(f"Generering feilet: {e}", exc_info=True)
             st.error(f"Feil under generering: {e}")
 
     # ------------------------------------------------------------------
@@ -595,6 +631,44 @@ def main():
                         with open(pdf_path, "rb") as f:
                             st.session_state.pdf_bytes = f.read()
                         st.rerun()
+
+    # ------------------------------------------------------------------
+    # HISTORY (show recent generations)
+    # ------------------------------------------------------------------
+    try:
+        from src.cache import get_history
+        history = get_history()
+        if history:
+            with st.expander(f"📚 Tidligere genereringer ({len(history)})", expanded=False):
+                for entry in history[:10]:
+                    entry_topic = entry.get("topic", "Ukjent")
+                    entry_grade = entry.get("grade", "")
+                    entry_type = entry.get("material_type", "")
+                    entry_date = entry.get("created_at", entry.get("timestamp", ""))
+                    if isinstance(entry_date, str) and len(entry_date) > 10:
+                        entry_date = entry_date[:10]
+
+                    col_info, col_action = st.columns([3, 1])
+                    with col_info:
+                        st.markdown(
+                            f"**{entry_topic}** — {entry_grade} · {entry_type}  \n"
+                            f"<small style='color:#64748b'>{entry_date}</small>",
+                            unsafe_allow_html=True
+                        )
+                    with col_action:
+                        tex_content = entry.get("tex_content", "")
+                        if tex_content:
+                            st.download_button(
+                                "⬇️ .tex",
+                                data=tex_content,
+                                file_name=f"{entry_topic[:20]}.tex",
+                                mime="text/plain",
+                                key=f"hist_{entry.get('id', entry_date)}",
+                                use_container_width=True,
+                            )
+                    st.markdown("<hr style='margin:0.3rem 0;border-color:#1e293b'>", unsafe_allow_html=True)
+    except Exception:
+        pass  # History display is non-critical
 
     # ------------------------------------------------------------------
     # FOOTER

@@ -90,14 +90,21 @@ Lag TRE separate nivåer av oppgaver:
             language_level_text = """
 
 **SPRÅKNIVÅ: B2 (Forenklet norsk)**
-Korte setninger (15-20 ord), vanlige ord, forklar alle fagbegreper.
+- Korte setninger (15-20 ord maks), én idé per setning
+- Vanlige, konkrete ord - unngå idiomer
+- Forklar fagbegreper første gang de brukes
+- Bruk samme ord for samme begrep konsekvent
 Matematisk nivå er UENDRET - bare språket er enklere.
 """
         elif language_level == "b1":
             language_level_text = """
 
 **SPRÅKNIVÅ: B1 (Enklere norsk)**
-Veldig korte setninger (10-15 ord), de vanligste ordene, del oppgaver i steg.
+- Veldig korte setninger (10-15 ord maks)
+- De 3000 vanligste norske ordene
+- Forklar ALLE fagbegreper som om eleven hører det første gang
+- Del komplekse oppgaver i steg: "Steg 1:", "Steg 2:"
+- Legg til "Tips:" der det hjelper
 Matematisk nivå er UENDRET - bare språket er enklere.
 """
 
@@ -211,17 +218,26 @@ Strukturert plan:
         differentiation_mode = content_options.get("differentiation_mode", False)
         language_level = content_options.get("language_level", "standard")
 
-        # Language instruction
+        # Language instruction (consistent with agents)
         language_instruction = ""
         if language_level == "b2":
             language_instruction = (
-                "\n**SPRÅKNIVÅ B2:** Korte setninger (15-20 ord), vanlige ord, "
-                "forklar fagbegreper. Matematisk nivå UENDRET.\n"
+                "\n**SPRÅKNIVÅ B2 (Forenklet norsk):**\n"
+                "- Korte setninger (15-20 ord maks), én idé per setning\n"
+                "- Vanlige, konkrete ord - unngå idiomer\n"
+                "- Forklar fagbegreper første gang de brukes\n"
+                "- Bruk samme ord for samme begrep konsekvent\n"
+                "Matematisk nivå UENDRET.\n"
             )
         elif language_level == "b1":
             language_instruction = (
-                "\n**SPRÅKNIVÅ B1:** Veldig korte setninger (10-15 ord), "
-                "enkle ord, del oppgaver i steg. Matematisk nivå UENDRET.\n"
+                "\n**SPRÅKNIVÅ B1 (Enklere norsk):**\n"
+                "- Veldig korte setninger (10-15 ord maks)\n"
+                "- De 3000 vanligste norske ordene\n"
+                "- Forklar ALLE fagbegreper som om eleven hører det første gang\n"
+                "- Del komplekse oppgaver i steg: 'Steg 1:', 'Steg 2:'\n"
+                "- Legg til 'Tips:' der det hjelper\n"
+                "Matematisk nivå UENDRET.\n"
             )
 
         # Competency goals

@@ -196,6 +196,14 @@ class MathBookAgents:
                 "Skriv TikZ-kode DIREKTE - aldri [INSERT FIGURE].\n"
                 f"{age_instructions}\n\n"
 
+                "TILGJENGELIGE TikZ-BIBLIOTEKER (allerede lastet i preamble):\n"
+                "arrows.meta, calc, patterns, positioning, shapes.geometric,\n"
+                "decorations.pathreplacing\n"
+                "IKKE bruk andre biblioteker - de er IKKE tilgjengelige.\n\n"
+
+                "TILGJENGELIGE PAKKER: tikz, pgfplots (compat=1.18), "
+                "float, booktabs, enumitem, multicol, tcolorbox, siunitx, mathtools, bm\n\n"
+
                 "Tilgjengelige farger i preamble:\n"
                 "mainBlue, lightBlue, mainGreen, lightGreen, mainOrange, lightOrange,\n"
                 "mainPurple, lightPurple, mainTeal, lightTeal, mainGray, lightGray\n\n"
