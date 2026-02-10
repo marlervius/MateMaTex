@@ -181,7 +181,18 @@ def generate_pdf(latex_content: str, filename: str) -> str | None:
 
 
 def save_tex_file(latex_content: str, filename: str) -> str:
-    """Save LaTeX content to .tex file."""
+    """Save LaTeX content to .tex file.
+    
+    Ensures the saved file is a complete, self-contained LaTeX document
+    that compiles in Overleaf/pdflatex by validating it has a preamble.
+    """
+    from src.tools import ensure_preamble
+    from src.tools.pdf_generator import clean_ai_output
+    
+    # Ensure the .tex file is always complete and self-contained
+    if r'\documentclass' not in latex_content:
+        latex_content = ensure_preamble(clean_ai_output(latex_content))
+    
     output_dir = Path("output")
     output_dir.mkdir(exist_ok=True)
     tex_path = output_dir / f"{filename}.tex"
@@ -494,18 +505,28 @@ def main():
         try:
             progress_bar.progress(10, text="🎓 Pedagogen planlegger innholdet...")
 
-            latex_result = run_crew(
+            raw_result = run_crew(
                 grade=grade_options[selected_grade],
                 topic=topic,
                 material_type=selected_material,
                 instructions=instructions,
                 content_options=content_options
             )
+
+            progress_bar.progress(70, text="🔧 Bygger komplett LaTeX-dokument...")
+
+            # Always produce a complete, self-contained .tex file
+            # by cleaning AI output and wrapping with standard preamble.
+            # This ensures the .tex file compiles in Overleaf/pdflatex.
+            from src.tools import ensure_preamble
+            from src.tools.pdf_generator import clean_ai_output
+            latex_result = ensure_preamble(clean_ai_output(raw_result))
             st.session_state.latex_result = latex_result
 
             progress_bar.progress(80, text="📄 Lagrer filer...")
 
             tex_path = save_tex_file(latex_result, filename)
+            # Pass already-processed content to PDF generator
             pdf_path = generate_pdf(latex_result, filename)
             if pdf_path:
                 st.session_state.pdf_path = pdf_path
@@ -658,6 +679,11 @@ def main():
                     with col_action:
                         tex_content = entry.get("tex_content", "")
                         if tex_content:
+                            # Ensure historical .tex files also have preamble
+                            if r'\documentclass' not in tex_content:
+                                from src.tools import ensure_preamble
+                                from src.tools.pdf_generator import clean_ai_output
+                                tex_content = ensure_preamble(clean_ai_output(tex_content))
                             st.download_button(
                                 "⬇️ .tex",
                                 data=tex_content,

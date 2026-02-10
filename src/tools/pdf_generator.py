@@ -56,10 +56,7 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
 \usepackage{xcolor}
 \usepackage[most]{tcolorbox}
 
-% Hyperlinks (load late to avoid conflicts)
-\usepackage[colorlinks=true, linkcolor=mainBlue, urlcolor=mainBlue, citecolor=mainGreen]{hyperref}
-
-% --- Custom Color Definitions ---
+% --- Custom Color Definitions (must come BEFORE hyperref) ---
 \definecolor{mainBlue}{RGB}{0, 102, 204}
 \definecolor{lightBlue}{RGB}{230, 242, 255}
 \definecolor{mainGreen}{RGB}{0, 153, 76}
@@ -72,6 +69,9 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
 \definecolor{lightTeal}{RGB}{235, 250, 250}
 \definecolor{mainGray}{RGB}{80, 80, 90}
 \definecolor{lightGray}{RGB}{248, 248, 252}
+
+% Hyperlinks (load AFTER color definitions to avoid undefined color errors)
+\usepackage[colorlinks=true, linkcolor=mainBlue, urlcolor=mainBlue, citecolor=mainGreen]{hyperref}
 
 % --- Definition Box (Blue) - Modern Style ---
 \newtcolorbox{definitionbox}[1][]{
@@ -430,14 +430,16 @@ def compile_latex_to_pdf(
     # Ensure filename doesn't have extension
     filename = filename.replace(".tex", "").replace(".pdf", "")
 
-    # Clean up AI output (remove markdown blocks, nested documents)
-    latex_content = clean_ai_output(latex_content)
-    
-    # Fix common AI-generated LaTeX issues
-    latex_content = _fix_common_latex_issues(latex_content)
-    
-    # Ensure valid preamble
-    latex_content = ensure_preamble(latex_content)
+    # If the content already has our standard preamble, skip cleaning.
+    # Otherwise, clean AI output and wrap with preamble.
+    if r'\documentclass' not in latex_content:
+        # Raw AI output - needs full processing
+        latex_content = clean_ai_output(latex_content)
+        latex_content = _fix_common_latex_issues(latex_content)
+        latex_content = ensure_preamble(latex_content)
+    else:
+        # Already has preamble (pre-processed) - just fix common issues
+        latex_content = _fix_common_latex_issues(latex_content)
 
     # Validate before attempting compilation (saves time on obviously broken docs)
     is_valid, issues = validate_latex_syntax(latex_content)
