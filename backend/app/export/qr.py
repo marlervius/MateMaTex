@@ -13,8 +13,10 @@ import os
 import tempfile
 
 import structlog
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
+
+from app.auth import get_current_user
 
 logger = structlog.get_logger()
 
@@ -120,7 +122,7 @@ def qr_to_latex_file(
     response_model=QrGenerateResponse,
     summary="Generate a QR code PNG for a URL",
 )
-async def generate_qr(req: QrGenerateRequest) -> QrGenerateResponse:
+async def generate_qr(req: QrGenerateRequest, user_id: str = Depends(get_current_user)) -> QrGenerateResponse:
     """Generate a QR code PNG encoded as base64."""
     try:
         png_bytes = generate_qr_png(req.url, box_size=req.size)
@@ -142,7 +144,7 @@ async def generate_qr(req: QrGenerateRequest) -> QrGenerateResponse:
     response_model=QrBatchResponse,
     summary="Generate QR codes for multiple exercises",
 )
-async def generate_qr_batch(req: QrBatchRequest) -> QrBatchResponse:
+async def generate_qr_batch(req: QrBatchRequest, user_id: str = Depends(get_current_user)) -> QrBatchResponse:
     """Generate QR codes for a batch of exercise URLs."""
     codes = []
     errors = []

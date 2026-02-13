@@ -112,6 +112,7 @@ async def list_school_exercises(
     grade_level: str | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    user_id: str = Depends(get_current_user),
 ) -> SchoolListResponse:
     """List all exercises published to the school's shared bank."""
     results = list(_school_exercises.values())
@@ -137,20 +138,27 @@ async def list_school_exercises(
 )
 async def publish_to_school(exercise_id: str, req: PublishRequest, user_id: str = Depends(get_current_user)):
     """Make an exercise available to all teachers at the school."""
-    from app.exercises.router import _exercise_store
+    # Use the public API to fetch the exercise instead of importing private stores
+    from app.exercises.router import get_exercise as _get_exercise
 
-    exercise = _exercise_store.get(exercise_id)
-    if not exercise or exercise.get("deleted"):
+    try:
+        exercise = await _get_exercise(exercise_id, user_id=user_id)
+    except HTTPException:
         raise HTTPException(404, "Exercise not found")
 
     school_entry = {
-        **exercise,
-        "published_by": req.school,
+        "id": exercise.id,
+        "title": exercise.title,
+        "topic": exercise.topic,
+        "grade_level": exercise.grade_level,
+        "difficulty": exercise.difficulty,
+        "latex_content": exercise.latex_content,
+        "published_by": req.school or user_id,
         "published_at": datetime.now().isoformat(),
     }
     _school_exercises[exercise_id] = school_entry
 
-    logger.info("exercise_published_to_school", exercise_id=exercise_id)
+    logger.info("exercise_published_to_school", exercise_id=exercise_id, user=user_id)
     return {"published": True, "exercise_id": exercise_id}
 
 
@@ -166,7 +174,7 @@ comments_router = APIRouter(prefix="/generations", tags=["collaboration"])
     response_model=CommentListResponse,
     summary="List comments on a generation",
 )
-async def list_comments(generation_id: str) -> CommentListResponse:
+async def list_comments(generation_id: str, user_id: str = Depends(get_current_user)) -> CommentListResponse:
     """Get all comments for a generation, threaded by parent_id."""
     all_comments = _comments.get(generation_id, [])
 
@@ -230,7 +238,7 @@ versions_router = APIRouter(prefix="/generations", tags=["collaboration"])
     response_model=VersionListResponse,
     summary="List all versions of a generation",
 )
-async def list_versions(generation_id: str) -> VersionListResponse:
+async def list_versions(generation_id: str, user_id: str = Depends(get_current_user)) -> VersionListResponse:
     """Get the version history of a generation."""
     versions = _versions.get(generation_id, [])
     return VersionListResponse(
@@ -247,6 +255,7 @@ async def list_versions(generation_id: str) -> VersionListResponse:
 async def create_version(
     generation_id: str,
     req: VersionCreateRequest,
+    user_id: str = Depends(get_current_user),
 ) -> VersionOut:
     """Save a new version of the generation's LaTeX content."""
     if generation_id not in _versions:
@@ -276,7 +285,7 @@ async def create_version(
     "/{generation_id}/versions/{version_id}/restore",
     summary="Restore a specific version",
 )
-async def restore_version(generation_id: str, version_id: str):
+async def restore_version(generation_id: str, version_id: str, user_id: str = Depends(get_current_user)):
     """Restore a previous version, creating a new version entry."""
     versions = _versions.get(generation_id, [])
     target = next((v for v in versions if v["id"] == version_id), None)

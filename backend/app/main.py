@@ -24,10 +24,12 @@ from datetime import datetime
 from typing import AsyncGenerator
 
 import structlog
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+
+from app.auth import get_current_user
 
 from app.config import get_config, get_settings
 
@@ -139,7 +141,7 @@ class CompileResponse(BaseModel):
 # Endpoints
 # ---------------------------------------------------------------------------
 @app.post("/generate", response_model=GenerateResponse)
-async def start_generation(request: "GenerationRequest") -> GenerateResponse:
+async def start_generation(request: "GenerationRequest", user_id: str = Depends(get_current_user)) -> GenerateResponse:
     """Start an asynchronous generation job."""
     from app.models.state import GenerationRequest, PipelineState, PipelineStatus
 
@@ -215,7 +217,7 @@ async def stream_progress(job_id: str) -> StreamingResponse:
 
 
 @app.get("/generate/{job_id}/result")
-async def get_result(job_id: str):
+async def get_result(job_id: str, user_id: str = Depends(get_current_user)):
     """Get the result of a completed generation job."""
     from app.models.state import PipelineStatus
 
@@ -241,7 +243,7 @@ async def get_result(job_id: str):
 
 
 @app.post("/compile", response_model=CompileResponse)
-async def compile_latex(request: CompileRequest) -> CompileResponse:
+async def compile_latex(request: CompileRequest, user_id: str = Depends(get_current_user)) -> CompileResponse:
     """Compile LaTeX content to PDF."""
     from app.latex.compiler import compile_to_pdf
     from app.latex.preamble import wrap_with_preamble
@@ -264,7 +266,7 @@ async def compile_latex(request: CompileRequest) -> CompileResponse:
 
 
 @app.post("/estimate")
-async def estimate_cost(request: "GenerationRequest"):
+async def estimate_cost(request: "GenerationRequest", user_id: str = Depends(get_current_user)):
     """Estimate token cost BEFORE generation."""
     from app.cache import get_cache
     cache = get_cache()
@@ -279,14 +281,14 @@ async def estimate_cost(request: "GenerationRequest"):
 
 
 @app.get("/cache/stats")
-async def cache_stats():
+async def cache_stats(user_id: str = Depends(get_current_user)):
     """Get cache statistics."""
     from app.cache import get_cache
     return get_cache().stats()
 
 
 @app.delete("/cache")
-async def clear_cache():
+async def clear_cache(user_id: str = Depends(get_current_user)):
     """Clear the semantic cache."""
     from app.cache import get_cache
     count = get_cache().clear()

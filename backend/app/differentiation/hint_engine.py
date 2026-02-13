@@ -181,7 +181,7 @@ async def create_hints(exercise_id: str, req: HintRequest, user_id: str = Depend
     response_model=QrResponse,
     summary="Generate QR code linking to hint viewing page",
 )
-async def get_hint_qr(exercise_id: str) -> QrResponse:
+async def get_hint_qr(exercise_id: str, user_id: str = Depends(get_current_user)) -> QrResponse:
     """
     Generate a QR code that links to a mobile-friendly hint viewing page.
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { LogIn, Mail, Lock, AlertCircle } from "lucide-react";
@@ -9,10 +9,23 @@ import { createClient } from "@/lib/supabase";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Show error from auth callback redirect
+  useEffect(() => {
+    const callbackError = searchParams.get("error");
+    if (callbackError) {
+      const messages: Record<string, string> = {
+        missing_code: "Ugyldig bekreftelseslenke",
+        callback_failed: "Noe gikk galt ved bekreftelse. Prøv igjen.",
+      };
+      setError(messages[callbackError] || callbackError);
+    }
+  }, [searchParams]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
