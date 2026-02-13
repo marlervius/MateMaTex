@@ -35,7 +35,7 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
 % Graphics
 \usepackage{tikz, pgfplots}
 \pgfplotsset{compat=1.18}
-\usetikzlibrary{arrows.meta, calc, patterns, positioning, shapes.geometric, decorations.pathreplacing}
+\usetikzlibrary{arrows.meta, calc, patterns, positioning, shapes.geometric, decorations.pathreplacing, decorations.pathmorphing}
 
 % Layout
 \usepackage[margin=2.5cm]{geometry}
@@ -45,9 +45,12 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
 \usepackage{booktabs}
 \usepackage{multicol}
 
-% Paragraph spacing - more air between paragraphs
-\setlength{\parskip}{1em}
+% Paragraph spacing
+\setlength{\parskip}{0.8em}
 \setlength{\parindent}{0pt}
+
+% Reduce extra spacing around lists caused by parskip
+\setlist{itemsep=0.3em, parsep=0.2em, topsep=0.3em}
 
 % Float placement - keep figures where they are defined
 \floatplacement{figure}{H}
@@ -73,118 +76,80 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
 % Hyperlinks (load AFTER color definitions to avoid undefined color errors)
 \usepackage[colorlinks=true, linkcolor=mainBlue, urlcolor=mainBlue, citecolor=mainGreen]{hyperref}
 
-% --- Definition Box (Blue) - Modern Style ---
+% --- Shared box style ---
+\tcbset{matebox/.style={
+  enhanced, breakable,
+  arc=3mm,
+  left=8pt, right=8pt, top=8pt, bottom=8pt,
+  attach boxed title to top left={yshift*=-\tcboxedtitleheight/2, xshift=5mm},
+  sharp corners=downhill,
+}}
+
+% --- Definition Box (Blue) ---
 \newtcolorbox{definitionbox}[1][]{
-  enhanced,
-  colback=lightBlue,
-  colframe=mainBlue,
-  fonttitle=\bfseries\sffamily,
-  title={Definisjon},
-  attach boxed title to top left={yshift*=-\tcboxedtitleheight/2, xshift=5mm},
+  matebox,
+  colback=lightBlue, colframe=mainBlue,
+  fonttitle=\bfseries\sffamily, title={Definisjon},
   boxed title style={colback=mainBlue, colframe=mainBlue},
-  sharp corners=downhill,
-  arc=3mm,
-  left=8pt, right=8pt, top=8pt, bottom=8pt,
   #1
 }
-
-% Alias for Norwegian naming
 \newtcolorbox{definisjon}[1][]{
-  enhanced,
-  colback=lightBlue,
-  colframe=mainBlue,
-  fonttitle=\bfseries\sffamily,
-  title={Definisjon},
-  attach boxed title to top left={yshift*=-\tcboxedtitleheight/2, xshift=5mm},
+  matebox,
+  colback=lightBlue, colframe=mainBlue,
+  fonttitle=\bfseries\sffamily, title={Definisjon},
   boxed title style={colback=mainBlue, colframe=mainBlue},
-  sharp corners=downhill,
-  arc=3mm,
-  left=8pt, right=8pt, top=8pt, bottom=8pt,
   #1
 }
 
-% --- Example Box (Green) - Modern Style ---
+% --- Example Box (Green) ---
 \newtcolorbox{examplebox}[1][]{
-  enhanced,
-  colback=lightGreen,
-  colframe=mainGreen,
-  fonttitle=\bfseries\sffamily,
-  title={Eksempel},
-  attach boxed title to top left={yshift*=-\tcboxedtitleheight/2, xshift=5mm},
+  matebox,
+  colback=lightGreen, colframe=mainGreen,
+  fonttitle=\bfseries\sffamily, title={Eksempel},
   boxed title style={colback=mainGreen, colframe=mainGreen},
-  sharp corners=downhill,
-  arc=3mm,
-  left=8pt, right=8pt, top=8pt, bottom=8pt,
   #1
 }
-
-% Alias for Norwegian naming
 \newtcolorbox{eksempel}[1][]{
-  enhanced,
-  colback=lightGreen,
-  colframe=mainGreen,
-  fonttitle=\bfseries\sffamily,
-  title={Eksempel},
-  attach boxed title to top left={yshift*=-\tcboxedtitleheight/2, xshift=5mm},
+  matebox,
+  colback=lightGreen, colframe=mainGreen,
+  fonttitle=\bfseries\sffamily, title={Eksempel},
   boxed title style={colback=mainGreen, colframe=mainGreen},
-  sharp corners=downhill,
-  arc=3mm,
-  left=8pt, right=8pt, top=8pt, bottom=8pt,
   #1
 }
 
-% --- Task Box (Purple/Blue) - Elegant Worksheet Style ---
+% --- Task Box (Purple) ---
 \newtcolorbox{taskbox}[1][]{
-  enhanced,
-  colback=lightPurple,
-  colframe=mainPurple,
-  fonttitle=\bfseries\sffamily\color{white},
-  title={#1},
-  attach boxed title to top left={yshift*=-\tcboxedtitleheight/2, xshift=5mm},
+  matebox,
+  colback=lightPurple, colframe=mainPurple,
+  fonttitle=\bfseries\sffamily\color{white}, title={#1},
   boxed title style={colback=mainPurple, colframe=mainPurple},
-  sharp corners=downhill,
-  arc=3mm,
   left=10pt, right=10pt, top=10pt, bottom=10pt,
-  shadow={2mm}{-2mm}{0mm}{black!20}
 }
 
-% --- Tip/Note Box (Orange/Yellow) ---
+% --- Tip/Note Box (Orange) ---
 \newtcolorbox{tipbox}[1][]{
-  enhanced,
-  colback=lightOrange,
-  colframe=mainOrange,
-  fonttitle=\bfseries\sffamily,
-  title={Tips},
-  attach boxed title to top left={yshift*=-\tcboxedtitleheight/2, xshift=5mm},
+  matebox,
+  colback=lightOrange, colframe=mainOrange,
+  fonttitle=\bfseries\sffamily, title={Tips},
   boxed title style={colback=mainOrange, colframe=mainOrange},
-  arc=3mm,
-  left=8pt, right=8pt, top=8pt, bottom=8pt,
   #1
 }
 
-% --- Merk/Warning Box ---
+% --- Merk/Warning Box (Orange) ---
 \newtcolorbox{merk}[1][]{
-  enhanced,
-  colback=yellow!10!white,
-  colframe=orange!80!black,
-  fonttitle=\bfseries\sffamily,
-  title={Merk!},
-  arc=3mm,
-  left=8pt, right=8pt, top=8pt, bottom=8pt,
+  matebox,
+  colback=lightOrange, colframe=mainOrange,
+  fonttitle=\bfseries\sffamily, title={Merk!},
+  boxed title style={colback=mainOrange, colframe=mainOrange},
   #1
 }
 
-% --- Solution Box (for answers) - Teal Style ---
+% --- Solution Box (Teal) ---
 \newtcolorbox{losning}[1][]{
-  enhanced,
-  colback=lightTeal,
-  colframe=mainTeal,
-  fonttitle=\bfseries\sffamily\color{white},
-  title={Løsning},
-  attach boxed title to top left={yshift*=-\tcboxedtitleheight/2, xshift=5mm},
+  matebox,
+  colback=lightTeal, colframe=mainTeal,
+  fonttitle=\bfseries\sffamily\color{white}, title={Løsning},
   boxed title style={colback=mainTeal, colframe=mainTeal},
-  sharp corners=downhill,
-  arc=3mm,
   left=10pt, right=10pt, top=10pt, bottom=10pt,
   #1
 }
@@ -206,15 +171,30 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
 \titleformat{\section}{\Large\bfseries\sffamily\color{mainBlue}}{\thesection}{1em}{}[\color{mainBlue}\titlerule]
 \titleformat{\subsection}{\large\bfseries\sffamily\color{mainPurple}}{\thesubsection}{1em}{}
 
-% Colored graph defaults
+% Graph defaults - consistent style for all figures
 \pgfplotsset{
     every axis/.append style={
-        line width=1pt,
-        tick style={line width=0.8pt}
+        width=0.75\textwidth,
+        height=0.5\textwidth,
+        line width=0.8pt,
+        tick style={line width=0.6pt},
+        tick label style={font=\small},
+        label style={font=\small},
+        legend style={font=\small, draw=none, fill=white, fill opacity=0.8},
+        grid=major,
+        grid style={dashed, gray!30},
+        axis lines=middle,
     },
     every axis plot/.append style={
-        line width=1.5pt
-    }
+        line width=1.2pt,
+    },
+    cycle list={
+        {mainBlue, thick},
+        {mainGreen, thick},
+        {mainOrange, thick},
+        {mainPurple, thick},
+        {mainTeal, thick},
+    },
 }
 
 % Header/Footer styling for worksheets
@@ -226,6 +206,9 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
 \fancyfoot[C]{\small\color{mainGray}\thepage}
 \renewcommand{\headrulewidth}{0.4pt}
 \renewcommand{\footrulewidth}{0pt}
+
+% First page: no header/footer (clean title page)
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\small\color{mainGray}\thepage}\renewcommand{\headrulewidth}{0pt}}
 
 """
 
@@ -387,6 +370,8 @@ def ensure_preamble(latex_content: str) -> str:
     return (
         STANDARD_PREAMBLE
         + r"\begin{document}"
+        + "\n"
+        + r"\thispagestyle{plain}"
         + "\n\n"
         + content_stripped
         + "\n\n"
@@ -571,11 +556,6 @@ def _fix_common_latex_issues(latex_content: str) -> str:
     
     # Fix unescaped percent signs in text (after digits, not at line end = comment)
     content = re.sub(r'(\d)%(?!\s*$)', r'\1\\%', content)
-    
-    # Fix common Norwegian character issues (ensure proper encoding)
-    content = content.replace('æ', 'æ')
-    content = content.replace('ø', 'ø')
-    content = content.replace('å', 'å')
     
     # Fix missing spaces after commands
     content = re.sub(r'\\textbf\{([^}]+)\}(?=[a-zA-ZæøåÆØÅ])', r'\\textbf{\1} ', content)

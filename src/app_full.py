@@ -116,6 +116,9 @@ def initialize_session_state():
         "selected_competency_goals": [],
         "selected_template": None,
         "language_level": "standard",
+        "_generating": False,
+        "_last_filename": "",
+        "word_bytes": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -320,8 +323,30 @@ def main():
             placeholder="f.eks. Lineære funksjoner, Pytagoras, Brøk...",
             label_visibility="collapsed"
         )
+        # C9: Show topic suggestions from curriculum
+        try:
+            from src.tools import get_topic_suggestions
+            suggestions = get_topic_suggestions(grade=selected_grade, current_topic=topic, num_suggestions=4)
+            if suggestions:
+                st.caption("Forslag:")
+                suggestion_cols = st.columns(len(suggestions))
+                for i, sug in enumerate(suggestions):
+                    with suggestion_cols[i]:
+                        if st.button(sug.get("topic", ""), key=f"sug_{i}", use_container_width=True):
+                            st.session_state._suggestion_topic = sug.get("topic", "")
+                            st.rerun()
+                # Apply suggestion if one was clicked
+                if st.session_state.get("_suggestion_topic"):
+                    topic = st.session_state._suggestion_topic
+                    st.session_state._suggestion_topic = None
+        except Exception:
+            pass  # Topic suggestions are non-critical
     else:
         topic = selected_topic_choice
+
+    # Store for exercise bank
+    st.session_state._last_topic = topic
+    st.session_state._last_grade = selected_grade
 
     # ------------------------------------------------------------------
     # STEP 3: Content toggles - simple row
@@ -425,22 +450,28 @@ def main():
     if not topic:
         st.info("Velg eller skriv inn et tema for å starte.")
 
-    gen_col1, gen_col2 = st.columns([4, 1])
-    with gen_col1:
-        generate_clicked = st.button(
-            "◇ Generer materiale",
-            disabled=not can_generate,
-            use_container_width=True,
-            type="primary"
+    # C1: Show time estimate before generation
+    if can_generate:
+        from src.curriculum import estimate_generation_time
+        _est_material = "arbeidsark"
+        if st.session_state.selected_template and st.session_state.selected_template in TEMPLATES:
+            _est_material = TEMPLATES[st.session_state.selected_template]["config"].get("material_type", "arbeidsark")
+        est_min, est_max = estimate_generation_time(
+            material_type=_est_material,
+            num_exercises=st.session_state.num_exercises,
+            include_theory=st.session_state.include_theory,
+            include_examples=st.session_state.include_examples,
+            include_graphs=st.session_state.include_graphs,
         )
-    with gen_col2:
-        cancel_clicked = st.button(
-            "Avbryt",
-            disabled=not st.session_state.get("_generating", False),
-            use_container_width=True,
-        )
-        if cancel_clicked:
-            st.session_state.generation_cancelled = True
+        st.caption(f"Estimert tid: {est_min}–{est_max} min")
+
+    # B3: Removed non-functional cancel button (run_crew is blocking)
+    generate_clicked = st.button(
+        "◇ Generer materiale",
+        disabled=not can_generate,
+        use_container_width=True,
+        type="primary"
+    )
 
     # ------------------------------------------------------------------
     # GENERATION LOGIC
@@ -452,8 +483,10 @@ def main():
         st.session_state.generation_complete = False
         st.session_state.generation_cancelled = False
         st.session_state._generating = True
+        st.session_state.word_bytes = None  # C3: Reset Word cache on new generation
 
         filename = make_safe_filename(topic, selected_grade)
+        st.session_state._last_filename = filename  # C4: Store for download buttons
 
         # Build content options
         from src.cache import get_all_exercise_types
@@ -499,11 +532,13 @@ def main():
             content_instructions.append("Lag tre nivåer: lett, middels, vanskelig")
         instructions = ". ".join(content_instructions)
 
-        # Progress
+        # C2: Better progress with status message
         progress_bar = st.progress(0, text="Starter generering...")
+        status_msg = st.empty()
 
         try:
-            progress_bar.progress(10, text="🎓 Pedagogen planlegger innholdet...")
+            progress_bar.progress(10, text="🎓 AI-teamet jobber...")
+            status_msg.info("⏳ Pedagogen planlegger, matematikeren skriver, og redaktøren kvalitetssikrer. Dette tar vanligvis 1–3 minutter.")
 
             raw_result = run_crew(
                 grade=grade_options[selected_grade],
@@ -513,6 +548,7 @@ def main():
                 content_options=content_options
             )
 
+            status_msg.empty()
             progress_bar.progress(70, text="🔧 Bygger komplett LaTeX-dokument...")
 
             # Always produce a complete, self-contained .tex file
@@ -535,14 +571,16 @@ def main():
 
             progress_bar.progress(100, text="✅ Ferdig!")
 
-            # Record history
+            # Record history and invalidate cache so it shows immediately
             try:
                 from src.storage import add_to_history as save_to_storage
+                from src.cache import invalidate_history_cache
                 save_to_storage(
                     topic=topic, grade=selected_grade,
                     material_type=selected_material,
                     tex_content=latex_result, pdf_path=pdf_path
                 )
+                invalidate_history_cache()
             except Exception as e:
                 logger.warning(f"Kunne ikke lagre til historikk: {e}")
 
@@ -564,8 +602,23 @@ def main():
         except Exception as e:
             st.session_state._generating = False
             progress_bar.empty()
+            status_msg.empty()
             logger.error(f"Generering feilet: {e}", exc_info=True)
-            st.error(f"Feil under generering: {e}")
+
+            # C6: User-friendly error messages
+            err_str = str(e).lower()
+            if "api_key" in err_str or "authentication" in err_str or "401" in err_str:
+                st.error("API-nøkkel mangler eller er ugyldig. Sjekk GOOGLE_API_KEY i .env-filen.")
+            elif "quota" in err_str or "429" in err_str or "rate" in err_str:
+                st.error("API-grensen er nådd. Vent litt og prøv igjen.")
+            elif "pdflatex" in err_str or "tex" in err_str:
+                st.error("LaTeX-kompilering feilet. Prøv å forenkle innholdet eller sjekk at pdflatex er installert.")
+            elif "timeout" in err_str:
+                st.error("Genereringen tok for lang tid. Prøv med færre oppgaver eller enklere innhold.")
+            else:
+                st.error(f"Noe gikk galt under generering. Prøv igjen.")
+            with st.expander("Tekniske detaljer"):
+                st.code(str(e))
 
     # ------------------------------------------------------------------
     # RESULTS
@@ -574,6 +627,9 @@ def main():
         st.markdown("---")
         st.success("Materiale generert!")
 
+        # C4: Use descriptive filenames
+        dl_basename = st.session_state.get("_last_filename", f"matematikk_{datetime.now().strftime('%Y%m%d')}")
+
         # Download row
         dl_col1, dl_col2, dl_col3 = st.columns(3)
 
@@ -581,7 +637,7 @@ def main():
             st.download_button(
                 "📄 Last ned LaTeX",
                 data=st.session_state.latex_result,
-                file_name=f"matematikk_{datetime.now().strftime('%Y%m%d_%H%M%S')}.tex",
+                file_name=f"{dl_basename}.tex",
                 mime="text/plain",
                 use_container_width=True
             )
@@ -591,7 +647,7 @@ def main():
                 st.download_button(
                     "📕 Last ned PDF",
                     data=st.session_state.pdf_bytes,
-                    file_name=f"matematikk_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                    file_name=f"{dl_basename}.pdf",
                     mime="application/pdf",
                     use_container_width=True
                 )
@@ -599,37 +655,57 @@ def main():
                 st.button("📕 PDF", disabled=True, use_container_width=True, help="Krever pdflatex")
 
         with dl_col3:
-            try:
-                from src.tools import is_word_export_available, latex_to_word
-                if is_word_export_available():
-                    if st.button("📘 Word (.docx)", use_container_width=True):
-                        with st.spinner("Konverterer..."):
-                            output_path = Path("output") / f"matematikk_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
-                            output_path.parent.mkdir(exist_ok=True)
-                            word_path = latex_to_word(st.session_state.latex_result, str(output_path))
-                            if word_path and Path(word_path).exists():
-                                with open(word_path, "rb") as f:
-                                    st.download_button(
-                                        "⬇️ Last ned Word",
-                                        data=f.read(),
-                                        file_name=Path(word_path).name,
-                                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                        use_container_width=True
-                                    )
-                else:
+            # C3: Persist Word export in session state
+            if st.session_state.get("word_bytes"):
+                st.download_button(
+                    "📘 Last ned Word",
+                    data=st.session_state.word_bytes,
+                    file_name=f"{dl_basename}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    use_container_width=True,
+                )
+            else:
+                try:
+                    from src.tools import is_word_export_available, latex_to_word
+                    if is_word_export_available():
+                        if st.button("📘 Word (.docx)", use_container_width=True):
+                            with st.spinner("Konverterer til Word..."):
+                                output_path = Path("output") / f"{dl_basename}.docx"
+                                output_path.parent.mkdir(exist_ok=True)
+                                word_path = latex_to_word(st.session_state.latex_result, str(output_path))
+                                if word_path and Path(word_path).exists():
+                                    with open(word_path, "rb") as f:
+                                        st.session_state.word_bytes = f.read()
+                                    st.rerun()
+                                else:
+                                    st.warning("Word-konvertering feilet.")
+                    else:
+                        st.button("📘 Word", disabled=True, use_container_width=True)
+                except ImportError:
                     st.button("📘 Word", disabled=True, use_container_width=True)
-            except ImportError:
-                st.button("📘 Word", disabled=True, use_container_width=True)
 
-        # PDF Preview
+        # C5: Better PDF preview with controls and fallback
         if st.session_state.pdf_bytes:
             pdf_b64 = base64.b64encode(st.session_state.pdf_bytes).decode('utf-8')
             st.markdown(f'''
-            <iframe
-                src="data:application/pdf;base64,{pdf_b64}"
-                width="100%" height="600"
-                style="border: 1px solid #334155; border-radius: 12px; margin-top: 1rem;"
-            ></iframe>
+            <div style="position: relative; margin-top: 1rem;">
+                <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-bottom: 0.5rem;">
+                    <a href="data:application/pdf;base64,{pdf_b64}" target="_blank"
+                       style="color: #94a3b8; font-size: 0.8rem; text-decoration: none;">
+                       Åpne i ny fane ↗
+                    </a>
+                </div>
+                <iframe
+                    src="data:application/pdf;base64,{pdf_b64}#toolbar=1&navpanes=0"
+                    width="100%" height="700"
+                    style="border: 1px solid #334155; border-radius: 12px;"
+                ></iframe>
+                <noscript>
+                    <p style="color: #94a3b8; text-align: center; padding: 2rem;">
+                        PDF-forhåndsvisning krever JavaScript. Last ned filen i stedet.
+                    </p>
+                </noscript>
+            </div>
             ''', unsafe_allow_html=True)
 
         # LaTeX code viewer
@@ -652,6 +728,112 @@ def main():
                         with open(pdf_path, "rb") as f:
                             st.session_state.pdf_bytes = f.read()
                         st.rerun()
+
+        # ==============================================================
+        # C9: Surface useful tools that were built but not in the UI
+        # ==============================================================
+
+        # --- Difficulty analysis ---
+        with st.expander("📊 Vanskelighetsanalyse"):
+            try:
+                from src.tools import analyze_content
+                analysis = analyze_content(st.session_state.latex_result)
+                if analysis.total_exercises > 0:
+                    ac1, ac2, ac3, ac4 = st.columns(4)
+                    ac1.metric("🟢 Lett", analysis.easy_count)
+                    ac2.metric("🟡 Middels", analysis.medium_count)
+                    ac3.metric("🔴 Vanskelig", analysis.hard_count)
+                    ac4.metric("⏱️ Est. tid", f"{analysis.estimated_time_minutes} min")
+                    if analysis.recommendations:
+                        for rec in analysis.recommendations:
+                            st.caption(f"💡 {rec}")
+                else:
+                    st.caption("Ingen oppgaver funnet å analysere.")
+            except Exception:
+                st.caption("Analyse ikke tilgjengelig.")
+
+        # --- Print-friendly version ---
+        with st.expander("🖨️ Utskriftsvennlig versjon"):
+            st.caption("Genererer en versjon med gråtoner, optimalisert for utskrift.")
+            if st.button("Lag utskriftsversjon", use_container_width=True, key="btn_print"):
+                try:
+                    from src.tools import create_print_version
+                    with st.spinner("Lager utskriftsversjon..."):
+                        print_latex = create_print_version(st.session_state.latex_result)
+                        print_pdf = generate_pdf(print_latex, f"print_{datetime.now().strftime('%H%M%S')}")
+                        if print_pdf and Path(print_pdf).exists():
+                            with open(print_pdf, "rb") as f:
+                                st.download_button(
+                                    "⬇️ Last ned utskriftsversjon",
+                                    data=f.read(),
+                                    file_name=f"{dl_basename}_utskrift.pdf",
+                                    mime="application/pdf",
+                                    use_container_width=True,
+                                )
+                        else:
+                            st.warning("Kunne ikke generere utskriftsversjon.")
+                except Exception as e:
+                    st.warning(f"Feil: {e}")
+
+        # --- Exercise bank ---
+        with st.expander("🏦 Lagre til oppgavebank"):
+            st.caption("Ekstraher enkeltoppgaver og lagre dem for gjenbruk.")
+            if st.button("🔍 Finn og lagre oppgaver", use_container_width=True, key="btn_exbank"):
+                try:
+                    from src.tools import extract_exercises_from_latex, add_exercise
+                    extracted = extract_exercises_from_latex(st.session_state.latex_result)
+                    if extracted:
+                        count = 0
+                        for ex in extracted:
+                            try:
+                                add_exercise(
+                                    title=ex.get("title", "Oppgave"),
+                                    topic=st.session_state.get("_last_topic", "Matematikk") or "Matematikk",
+                                    grade_level=st.session_state.get("_last_grade", "8. trinn") or "8. trinn",
+                                    latex_content=ex.get("full_latex", ex.get("content", "")),
+                                    difficulty=ex.get("difficulty", "middels"),
+                                    solution=ex.get("solution"),
+                                    source="generated",
+                                )
+                                count += 1
+                            except Exception:
+                                pass
+                        from src.cache import invalidate_exercises_cache
+                        invalidate_exercises_cache()
+                        st.success(f"Lagret {count} oppgaver til oppgavebanken!")
+                    else:
+                        st.info("Fant ingen oppgaver å ekstrahere.")
+                except Exception as e:
+                    st.warning(f"Feil: {e}")
+
+        # --- Rubric generator ---
+        with st.expander("📋 Vurderingsrubrikk"):
+            st.caption("Generer en vurderingsmatrise basert på innholdet.")
+            if st.button("Lag rubrikk", use_container_width=True, key="btn_rubric"):
+                try:
+                    from src.tools import generate_rubric, rubric_to_markdown
+                    rubric_topic = st.session_state.get("_last_topic", "Matematikk") or "Matematikk"
+                    rubric_grade = st.session_state.get("_last_grade", "10. trinn") or "10. trinn"
+                    rubric = generate_rubric(
+                        topic=rubric_topic,
+                        grade_level=rubric_grade,
+                        num_exercises=st.session_state.num_exercises,
+                    )
+                    st.markdown(rubric_to_markdown(rubric))
+                except Exception as e:
+                    st.warning(f"Feil: {e}")
+
+        # --- LK20 coverage ---
+        with st.expander("🎯 LK20-dekning"):
+            st.caption("Sjekk hvilke kompetansemål innholdet dekker.")
+            try:
+                from src.tools import analyze_coverage, format_coverage_report
+                coverage_grade = st.session_state.get("_last_grade", "10. trinn") or "10. trinn"
+                coverage = analyze_coverage(st.session_state.latex_result, coverage_grade)
+                report = format_coverage_report(coverage)
+                st.markdown(report)
+            except Exception as e:
+                st.caption("LK20-analyse ikke tilgjengelig.")
 
     # ------------------------------------------------------------------
     # HISTORY (show recent generations)
@@ -677,21 +859,24 @@ def main():
                             unsafe_allow_html=True
                         )
                     with col_action:
-                        tex_content = entry.get("tex_content", "")
-                        if tex_content:
-                            # Ensure historical .tex files also have preamble
-                            if r'\documentclass' not in tex_content:
-                                from src.tools import ensure_preamble
-                                from src.tools.pdf_generator import clean_ai_output
-                                tex_content = ensure_preamble(clean_ai_output(tex_content))
-                            st.download_button(
-                                "⬇️ .tex",
-                                data=tex_content,
-                                file_name=f"{entry_topic[:20]}.tex",
-                                mime="text/plain",
-                                key=f"hist_{entry.get('id', entry_date)}",
-                                use_container_width=True,
-                            )
+                        entry_id = entry.get("id", "")
+                        if entry_id:
+                            from src.storage import get_tex_content
+                            tex_content = get_tex_content(entry_id)
+                            if tex_content:
+                                # Ensure historical .tex files also have preamble
+                                if r'\documentclass' not in tex_content:
+                                    from src.tools import ensure_preamble
+                                    from src.tools.pdf_generator import clean_ai_output
+                                    tex_content = ensure_preamble(clean_ai_output(tex_content))
+                                st.download_button(
+                                    "⬇️ .tex",
+                                    data=tex_content,
+                                    file_name=f"{entry_topic[:20]}.tex",
+                                    mime="text/plain",
+                                    key=f"hist_{entry_id}",
+                                    use_container_width=True,
+                                )
                     st.markdown("<hr style='margin:0.3rem 0;border-color:#1e293b'>", unsafe_allow_html=True)
     except Exception:
         pass  # History display is non-critical

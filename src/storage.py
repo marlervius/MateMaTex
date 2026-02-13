@@ -5,6 +5,7 @@ Handles saving and loading history, settings, and generated content.
 
 import json
 import os
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -88,8 +89,8 @@ def add_to_history(
     """
     history = load_history()
     
-    # Create unique ID
-    entry_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Create unique ID (UUID avoids collisions on rapid generations)
+    entry_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
     
     # Save LaTeX content to file
     tex_file = STORAGE_DIR / f"{entry_id}.tex"

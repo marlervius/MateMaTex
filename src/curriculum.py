@@ -373,7 +373,7 @@ TOPIC_LIBRARY = {
         ],
         "Funksjoner": [
             "Polynomfunksjoner og egenskaper",
-            "Rasjonale funksjoner og asympttoter",
+            "Rasjonale funksjoner og asymptoter",
             "Sammensetning av funksjoner",
             "Kontinuitet",
             "Grenseverdier",
