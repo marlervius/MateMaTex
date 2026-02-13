@@ -1,0 +1,315 @@
+"""
+Collaboration API — school exercise bank, comments, version history.
+
+Provides endpoints for school-level sharing, threaded comments on
+generations, and document version history with restore capability.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+
+import structlog
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+
+from app.auth import get_current_user
+
+logger = structlog.get_logger()
+
+router = APIRouter(tags=["collaboration"])
+
+
+# ---------------------------------------------------------------------------
+# In-memory stores (replace with PostgreSQL in production)
+# ---------------------------------------------------------------------------
+_school_exercises: dict[str, dict] = {}  # exercise_id → exercise data
+_comments: dict[str, list[dict]] = {}     # generation_id → [comments]
+_versions: dict[str, list[dict]] = {}     # generation_id → [versions]
+
+
+# ---------------------------------------------------------------------------
+# Models
+# ---------------------------------------------------------------------------
+
+# --- School ---
+class SchoolExerciseOut(BaseModel):
+    id: str
+    title: str
+    topic: str
+    grade_level: str
+    difficulty: str
+    latex_content: str
+    published_by: str = ""
+    published_at: str = ""
+
+
+class PublishRequest(BaseModel):
+    exercise_id: str
+    school: str = ""
+
+
+class SchoolListResponse(BaseModel):
+    exercises: list[SchoolExerciseOut]
+    total: int
+
+
+# --- Comments ---
+class CommentCreate(BaseModel):
+    content: str = Field(..., min_length=1, max_length=2000)
+    parent_id: str | None = None
+    user_name: str = "Anonym"
+
+
+class CommentOut(BaseModel):
+    id: str
+    content: str
+    user_name: str
+    parent_id: str | None = None
+    created_at: str
+    replies: list[CommentOut] = []
+
+
+class CommentListResponse(BaseModel):
+    comments: list[CommentOut]
+    total: int
+
+
+# --- Versions ---
+class VersionOut(BaseModel):
+    id: str
+    version_number: int
+    change_summary: str
+    latex_body: str
+    created_at: str
+
+
+class VersionCreateRequest(BaseModel):
+    latex_body: str = Field(..., min_length=1)
+    change_summary: str = ""
+
+
+class VersionListResponse(BaseModel):
+    versions: list[VersionOut]
+    total: int
+
+
+# ---------------------------------------------------------------------------
+# School exercise bank endpoints
+# ---------------------------------------------------------------------------
+
+school_router = APIRouter(prefix="/school", tags=["collaboration"])
+
+
+@school_router.get(
+    "/exercises",
+    response_model=SchoolListResponse,
+    summary="List exercises shared with the school",
+)
+async def list_school_exercises(
+    topic: str | None = None,
+    grade_level: str | None = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+) -> SchoolListResponse:
+    """List all exercises published to the school's shared bank."""
+    results = list(_school_exercises.values())
+
+    if topic:
+        results = [r for r in results if topic.lower() in r.get("topic", "").lower()]
+    if grade_level:
+        results = [r for r in results if grade_level.lower() in r.get("grade_level", "").lower()]
+
+    total = len(results)
+    start = (page - 1) * page_size
+    page_results = results[start:start + page_size]
+
+    return SchoolListResponse(
+        exercises=[SchoolExerciseOut(**{k: v for k, v in d.items()}) for d in page_results],
+        total=total,
+    )
+
+
+@school_router.post(
+    "/exercises/{exercise_id}/publish",
+    summary="Publish an exercise to the school's shared bank",
+)
+async def publish_to_school(exercise_id: str, req: PublishRequest, user_id: str = Depends(get_current_user)):
+    """Make an exercise available to all teachers at the school."""
+    from app.exercises.router import _exercise_store
+
+    exercise = _exercise_store.get(exercise_id)
+    if not exercise or exercise.get("deleted"):
+        raise HTTPException(404, "Exercise not found")
+
+    school_entry = {
+        **exercise,
+        "published_by": req.school,
+        "published_at": datetime.now().isoformat(),
+    }
+    _school_exercises[exercise_id] = school_entry
+
+    logger.info("exercise_published_to_school", exercise_id=exercise_id)
+    return {"published": True, "exercise_id": exercise_id}
+
+
+# ---------------------------------------------------------------------------
+# Comments endpoints
+# ---------------------------------------------------------------------------
+
+comments_router = APIRouter(prefix="/generations", tags=["collaboration"])
+
+
+@comments_router.get(
+    "/{generation_id}/comments",
+    response_model=CommentListResponse,
+    summary="List comments on a generation",
+)
+async def list_comments(generation_id: str) -> CommentListResponse:
+    """Get all comments for a generation, threaded by parent_id."""
+    all_comments = _comments.get(generation_id, [])
+
+    # Build threaded structure
+    top_level = [c for c in all_comments if c.get("parent_id") is None]
+    comment_map = {c["id"]: c for c in all_comments}
+
+    def build_tree(comment: dict) -> CommentOut:
+        replies = [
+            build_tree(r)
+            for r in all_comments
+            if r.get("parent_id") == comment["id"]
+        ]
+        return CommentOut(
+            id=comment["id"],
+            content=comment["content"],
+            user_name=comment.get("user_name", "Anonym"),
+            parent_id=comment.get("parent_id"),
+            created_at=comment["created_at"],
+            replies=replies,
+        )
+
+    threaded = [build_tree(c) for c in top_level]
+
+    return CommentListResponse(comments=threaded, total=len(all_comments))
+
+
+@comments_router.post(
+    "/{generation_id}/comments",
+    response_model=CommentOut,
+    summary="Add a comment to a generation",
+)
+async def add_comment(generation_id: str, req: CommentCreate, user_id: str = Depends(get_current_user)) -> CommentOut:
+    """Add a comment (optionally threaded) to a generation."""
+    comment = {
+        "id": uuid.uuid4().hex[:12],
+        "content": req.content,
+        "user_name": req.user_name,
+        "parent_id": req.parent_id,
+        "created_at": datetime.now().isoformat(),
+    }
+
+    if generation_id not in _comments:
+        _comments[generation_id] = []
+    _comments[generation_id].append(comment)
+
+    logger.info("comment_added", generation_id=generation_id, comment_id=comment["id"])
+
+    return CommentOut(**comment)
+
+
+# ---------------------------------------------------------------------------
+# Version history endpoints
+# ---------------------------------------------------------------------------
+
+versions_router = APIRouter(prefix="/generations", tags=["collaboration"])
+
+
+@versions_router.get(
+    "/{generation_id}/versions",
+    response_model=VersionListResponse,
+    summary="List all versions of a generation",
+)
+async def list_versions(generation_id: str) -> VersionListResponse:
+    """Get the version history of a generation."""
+    versions = _versions.get(generation_id, [])
+    return VersionListResponse(
+        versions=[VersionOut(**v) for v in versions],
+        total=len(versions),
+    )
+
+
+@versions_router.post(
+    "/{generation_id}/versions",
+    response_model=VersionOut,
+    summary="Create a new version of a generation",
+)
+async def create_version(
+    generation_id: str,
+    req: VersionCreateRequest,
+) -> VersionOut:
+    """Save a new version of the generation's LaTeX content."""
+    if generation_id not in _versions:
+        _versions[generation_id] = []
+
+    version_number = len(_versions[generation_id]) + 1
+
+    version = {
+        "id": uuid.uuid4().hex[:12],
+        "version_number": version_number,
+        "latex_body": req.latex_body,
+        "change_summary": req.change_summary,
+        "created_at": datetime.now().isoformat(),
+    }
+    _versions[generation_id].append(version)
+
+    logger.info(
+        "version_created",
+        generation_id=generation_id,
+        version_number=version_number,
+    )
+
+    return VersionOut(**version)
+
+
+@versions_router.post(
+    "/{generation_id}/versions/{version_id}/restore",
+    summary="Restore a specific version",
+)
+async def restore_version(generation_id: str, version_id: str):
+    """Restore a previous version, creating a new version entry."""
+    versions = _versions.get(generation_id, [])
+    target = next((v for v in versions if v["id"] == version_id), None)
+
+    if not target:
+        raise HTTPException(404, "Version not found")
+
+    # Create a new version with the restored content
+    new_version = {
+        "id": uuid.uuid4().hex[:12],
+        "version_number": len(versions) + 1,
+        "latex_body": target["latex_body"],
+        "change_summary": f"Gjenopprettet fra versjon {target['version_number']}",
+        "created_at": datetime.now().isoformat(),
+    }
+    _versions[generation_id].append(new_version)
+
+    logger.info(
+        "version_restored",
+        generation_id=generation_id,
+        restored_version=target["version_number"],
+        new_version=new_version["version_number"],
+    )
+
+    return {
+        "restored": True,
+        "new_version_number": new_version["version_number"],
+        "restored_from": target["version_number"],
+    }
+
+
+# Combine all sub-routers
+router = APIRouter()
+router.include_router(school_router)
+router.include_router(comments_router)
+router.include_router(versions_router)
