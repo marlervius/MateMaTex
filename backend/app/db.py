@@ -29,28 +29,71 @@ def _parse_database_url(url: str) -> dict:
     Parse a Supabase / PostgreSQL connection string into keyword arguments
     for asyncpg.create_pool().
 
-    We parse manually to avoid issues with:
-    - Passwords containing @ or other special characters
-    - IPv6 brackets
-    - asyncpg not understanding ?sslmode=require
+    Handles passwords that contain unescaped @ signs by splitting manually
+    on the LAST @ before the host, rather than relying on urlparse which
+    splits on the FIRST @.
     """
+    import re
+
     url = url.strip().strip("'\"")
 
     # Normalise scheme
     if url.startswith("postgres://"):
         url = "postgresql://" + url[len("postgres://"):]
-
-    # Remove jdbc: prefix
     if url.startswith("jdbc:"):
         url = url[5:]
 
-    parsed = urlparse(url)
+    # Remove scheme prefix for manual parsing
+    # Format: postgresql://user:password@host:port/database?params
+    without_scheme = url.split("://", 1)[1] if "://" in url else url
 
-    host = parsed.hostname or "localhost"
-    port = parsed.port or 5432
-    user = unquote(parsed.username or "postgres")
-    password = unquote(parsed.password or "")
-    database = (parsed.path or "/postgres").lstrip("/") or "postgres"
+    # Split on the LAST @ to separate credentials from host
+    # This handles passwords containing @ signs
+    at_idx = without_scheme.rfind("@")
+    if at_idx == -1:
+        # No credentials in URL
+        credentials = ""
+        host_part = without_scheme
+    else:
+        credentials = without_scheme[:at_idx]
+        host_part = without_scheme[at_idx + 1:]
+
+    # Parse credentials (user:password)
+    if ":" in credentials:
+        user, password = credentials.split(":", 1)
+    else:
+        user = credentials
+        password = ""
+
+    # URL-decode user and password
+    user = unquote(user) if user else "postgres"
+    password = unquote(password) if password else ""
+
+    # Parse host_part: host:port/database?params
+    # Remove query params
+    host_part = re.split(r"[?#]", host_part)[0]
+
+    # Split database from host
+    if "/" in host_part:
+        host_port, database = host_part.split("/", 1)
+    else:
+        host_port = host_part
+        database = "postgres"
+
+    # Split host and port
+    # Handle IPv6: [::1]:5432
+    if host_port.startswith("["):
+        bracket_end = host_port.index("]")
+        host = host_port[1:bracket_end]
+        port_str = host_port[bracket_end + 2:] if bracket_end + 1 < len(host_port) else ""
+    elif ":" in host_port:
+        host, port_str = host_port.rsplit(":", 1)
+    else:
+        host = host_port
+        port_str = ""
+
+    port = int(port_str) if port_str else 5432
+    database = database or "postgres"
 
     return {
         "host": host,
