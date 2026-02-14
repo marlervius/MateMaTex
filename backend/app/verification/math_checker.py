@@ -9,7 +9,9 @@ arithmetic errors, incorrect solutions, and invalid equations.
 from __future__ import annotations
 
 import re
+import signal
 import structlog
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from sympy import (
     Eq,
     Float,
@@ -27,6 +29,12 @@ from sympy.parsing.latex import parse_latex
 from app.models.state import MathClaim, VerificationResult
 
 logger = structlog.get_logger()
+
+# Timeout per individual claim verification (seconds)
+_CLAIM_TIMEOUT = 5
+# Timeout for the entire verification pass (seconds)
+_TOTAL_TIMEOUT = 60
+_executor = ThreadPoolExecutor(max_workers=2)
 
 
 class MathChecker:
@@ -72,13 +80,33 @@ class MathChecker:
         Run full mathematical verification on the LaTeX content.
 
         Returns a VerificationResult with details on every claim checked.
+        Each claim has a per-claim timeout to prevent SymPy from hanging
+        on complex expressions.
         """
         claims = self._extract_claims(latex_content)
         result = VerificationResult()
         result.claims_checked = len(claims)
 
+        import time
+        start_time = time.monotonic()
+
         for claim in claims:
-            self._verify_claim(claim)
+            # Check total timeout
+            if time.monotonic() - start_time > _TOTAL_TIMEOUT:
+                logger.warning("math_verification_total_timeout", checked_so_far=result.claims_correct + result.claims_incorrect + result.claims_unparseable)
+                break
+
+            # Run each claim with a timeout to prevent SymPy hangs
+            try:
+                future = _executor.submit(self._verify_claim, claim)
+                future.result(timeout=_CLAIM_TIMEOUT)
+            except FuturesTimeoutError:
+                claim.is_correct = None
+                claim.error_message = f"Verification timed out ({_CLAIM_TIMEOUT}s)"
+                logger.debug("claim_timeout", claim=claim.latex_expression[:60])
+            except Exception as e:
+                claim.is_correct = None
+                claim.error_message = f"Verification error: {e}"
 
             if claim.is_correct is True:
                 result.claims_correct += 1
@@ -102,6 +130,7 @@ class MathChecker:
             correct=result.claims_correct,
             incorrect=result.claims_incorrect,
             unparseable=result.claims_unparseable,
+            duration=round(time.monotonic() - start_time, 1),
         )
 
         return result
