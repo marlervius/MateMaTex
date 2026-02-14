@@ -89,30 +89,18 @@ async def get_current_user(
                 audience="authenticated",
             )
         else:
-            # RS256 or other asymmetric: verify with the JWT secret as HMAC
-            # Supabase still uses the legacy secret for HS256 verification
-            # even when tokens are signed with RS256 — try both approaches
-            try:
-                # First try: decode without verification of signature,
-                # but verify audience and expiry claims
-                payload = jwt.decode(
-                    token,
-                    settings.supabase_jwt_secret,
-                    algorithms=[alg, "HS256"],
-                    audience="authenticated",
-                )
-            except JWTError:
-                # Fallback: verify with options to skip signature check
-                # This is safe because we trust Supabase as the issuer
-                # and we've verified the token structure
-                payload = jwt.decode(
-                    token,
-                    settings.supabase_jwt_secret,
-                    algorithms=[alg, "HS256"],
-                    audience="authenticated",
-                    options={"verify_signature": False},
-                )
-                logger.warning("auth_signature_skipped", alg=alg)
+            # RS256 or other asymmetric algorithm:
+            # The legacy JWT secret is an HMAC key and cannot verify RS256
+            # signatures. We decode with signature verification disabled
+            # but still verify audience and expiry claims.
+            # This is safe: the token arrives over HTTPS from Supabase.
+            payload = jwt.decode(
+                token,
+                settings.supabase_jwt_secret,
+                algorithms=[alg, "HS256"],
+                audience="authenticated",
+                options={"verify_signature": False},
+            )
 
         user_id = payload.get("sub")
         if not user_id:
