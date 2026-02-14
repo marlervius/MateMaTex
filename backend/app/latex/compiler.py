@@ -45,7 +45,7 @@ def compile_to_pdf(
                     ],
                     capture_output=True,
                     text=True,
-                    timeout=30,
+                    timeout=120,
                     cwd=tmpdir,
                 )
             except (FileNotFoundError, subprocess.TimeoutExpired) as e:

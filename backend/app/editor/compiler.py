@@ -148,10 +148,10 @@ def _compile_latex(full_content: str, filename: str) -> tuple[str, list[dict], l
                     ],
                     capture_output=True,
                     text=True,
-                    timeout=30,
+                    timeout=120,
                 )
             except subprocess.TimeoutExpired:
-                return "", [{"line": 0, "message": "Compilation timed out (30s)", "severity": "error"}], []
+                return "", [{"line": 0, "message": "Compilation timed out (120s)", "severity": "error"}], []
             except FileNotFoundError:
                 return "", [{"line": 0, "message": "pdflatex not found on system", "severity": "error"}], []
 
