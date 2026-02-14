@@ -59,9 +59,20 @@ allowed_origins = [settings.frontend_url]
 if settings.environment == "development":
     allowed_origins.append("http://localhost:3000")
 
+# Also allow Vercel preview deployments (they use random subdomains)
+# e.g. https://mate-ma-xyz123-username.vercel.app
+_frontend = settings.frontend_url or ""
+if ".vercel.app" in _frontend:
+    # Extract the project prefix before .vercel.app for preview URLs
+    # Also allow the bare vercel.app domain pattern
+    allowed_origins.append("https://*.vercel.app")
+
+logger.info("cors_origins", origins=allowed_origins)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
