@@ -58,6 +58,12 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Check if this is a password recovery flow
+  const next = requestUrl.searchParams.get("next");
+  if (next) {
+    return NextResponse.redirect(new URL(next, request.url));
+  }
+
   // Redirect to home after successful email confirmation
   return NextResponse.redirect(new URL("/", request.url));
 }

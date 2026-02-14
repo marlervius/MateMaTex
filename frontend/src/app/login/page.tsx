@@ -159,7 +159,16 @@ function LoginForm() {
             </button>
           </form>
 
-          <div className="mt-6 text-center">
+          <div className="mt-4 text-center">
+            <Link
+              href="/reset-password"
+              className="text-sm text-text-secondary hover:text-[hsl(var(--accent-blue))] hover:underline"
+            >
+              Glemt passord?
+            </Link>
+          </div>
+
+          <div className="mt-4 text-center">
             <p className="text-sm text-text-secondary">
               Har du ikke en konto?{" "}
               <Link

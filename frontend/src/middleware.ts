@@ -33,7 +33,7 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // Public paths that don't require authentication
-  const publicPaths = ["/login", "/register", "/auth/callback", "/shared"];
+  const publicPaths = ["/login", "/register", "/auth/callback", "/shared", "/reset-password", "/update-password"];
   const isPublic = publicPaths.some((p) =>
     request.nextUrl.pathname.startsWith(p)
   );
@@ -44,6 +44,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Redirect authenticated users away from login/register
+  // (but NOT from update-password — they need that after recovery)
   if (
     user &&
     (request.nextUrl.pathname === "/login" ||
