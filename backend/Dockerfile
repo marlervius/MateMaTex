@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     texlive-lang-european \
     latexmk \
     cm-super \
+    lmodern \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Stage 2: Python dependencies (cached layer)
