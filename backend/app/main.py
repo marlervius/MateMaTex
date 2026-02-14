@@ -14,14 +14,12 @@ Exposes:
 - /school/*, /generations/*   — Collaboration (comments, versions, school bank)
 """
 
-from __future__ import annotations
-
 import asyncio
 import json
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 import structlog
 from fastapi import Depends, FastAPI, HTTPException
@@ -30,8 +28,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.auth import get_current_user
-
 from app.config import get_config, get_settings
+from app.models.state import GenerationRequest, PipelineState, PipelineStatus
 
 logger = structlog.get_logger()
 
@@ -117,7 +115,7 @@ app.include_router(sharing_router)
 app.include_router(collab_router)
 
 # In-memory job store (replace with Redis/DB in production)
-_jobs: dict[str, "PipelineState"] = {}
+_jobs: dict[str, PipelineState] = {}
 _executor = ThreadPoolExecutor(max_workers=4)
 
 
@@ -137,7 +135,7 @@ class CompileRequest(BaseModel):
 
 class CompileResponse(BaseModel):
     success: bool
-    pdf_path: str | None = None
+    pdf_path: Optional[str] = None
     errors: list[str] = []
 
 
@@ -145,10 +143,8 @@ class CompileResponse(BaseModel):
 # Endpoints
 # ---------------------------------------------------------------------------
 @app.post("/generate", response_model=GenerateResponse)
-async def start_generation(request: "GenerationRequest", user_id: str = Depends(get_current_user)) -> GenerateResponse:
+async def start_generation(request: GenerationRequest, user_id: str = Depends(get_current_user)) -> GenerateResponse:
     """Start an asynchronous generation job."""
-    from app.models.state import GenerationRequest, PipelineState, PipelineStatus
-
     state = PipelineState(
         request=request,
         status=PipelineStatus.PENDING,
@@ -170,7 +166,6 @@ async def start_generation(request: "GenerationRequest", user_id: str = Depends(
 @app.get("/generate/{job_id}/stream")
 async def stream_progress(job_id: str) -> StreamingResponse:
     """Stream agent progress via Server-Sent Events."""
-    from app.models.state import PipelineStatus
 
     async def event_generator() -> AsyncGenerator[str, None]:
         last_step_count = 0
@@ -223,7 +218,6 @@ async def stream_progress(job_id: str) -> StreamingResponse:
 @app.get("/generate/{job_id}/result")
 async def get_result(job_id: str, user_id: str = Depends(get_current_user)):
     """Get the result of a completed generation job."""
-    from app.models.state import PipelineStatus
 
     state = _jobs.get(job_id)
     if state is None:
@@ -270,7 +264,7 @@ async def compile_latex(request: CompileRequest, user_id: str = Depends(get_curr
 
 
 @app.post("/estimate")
-async def estimate_cost(request: "GenerationRequest", user_id: str = Depends(get_current_user)):
+async def estimate_cost(request: GenerationRequest, user_id: str = Depends(get_current_user)):
     """Estimate token cost BEFORE generation."""
     from app.cache import get_cache
     cache = get_cache()
@@ -313,9 +307,8 @@ async def health():
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-def _run_job(job_id: str, request: "GenerationRequest") -> None:
+def _run_job(job_id: str, request: GenerationRequest) -> None:
     """Run a generation job in a background thread."""
-    from app.models.state import PipelineStatus
     from app.pipeline.graph import run_pipeline
 
     try:
