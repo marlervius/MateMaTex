@@ -75,9 +75,13 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup():
     if settings.database_url:
-        from app.db import get_pool
-        await get_pool()
-        logger.info("startup_complete", environment=settings.environment)
+        try:
+            from app.db import get_pool
+            await get_pool()
+            logger.info("startup_complete", environment=settings.environment)
+        except Exception as e:
+            logger.error("startup_database_failed", error=str(e))
+            logger.warning("startup_continuing_without_db", msg="App will start but DB features are unavailable")
     else:
         logger.warning("startup_no_database", msg="DATABASE_URL not set — running without DB")
 

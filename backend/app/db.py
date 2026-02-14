@@ -11,6 +11,8 @@ Usage in routers:
 
 from __future__ import annotations
 
+import re
+
 import asyncpg
 import structlog
 
@@ -19,6 +21,42 @@ from app.config import get_settings
 logger = structlog.get_logger()
 
 _pool: asyncpg.Pool | None = None
+
+
+def _fix_database_url(url: str) -> str:
+    """
+    Normalise a Supabase / PostgreSQL connection string so asyncpg can parse it.
+
+    Common issues:
+    - Supabase gives ``postgresql://…@db.<ref>.supabase.co:5432/postgres``
+      but sometimes with ``[IPv6]`` brackets that asyncpg rejects.
+    - ``?sslmode=require`` is not understood by asyncpg (it uses ``ssl=True``).
+    - Supabase "connection pooler" URLs use port 6543 and may include
+      ``?pgbouncer=true`` which asyncpg does not understand.
+    """
+    # Strip surrounding whitespace / quotes
+    url = url.strip().strip("'\"")
+
+    # Replace jdbc: prefix if someone copy-pasted the JDBC URL
+    url = re.sub(r"^jdbc:", "", url)
+
+    # Remove IPv6 brackets around the host (asyncpg chokes on them)
+    url = re.sub(r"@\[([^\]]+)\]:", r"@\1:", url)
+
+    # asyncpg does not understand sslmode=… — convert to ssl=true
+    url = re.sub(r"[?&]sslmode=[^&]*", "", url)
+
+    # Remove pgbouncer param
+    url = re.sub(r"[?&]pgbouncer=[^&]*", "", url)
+
+    # Ensure we use postgresql:// (not postgres://)
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+
+    # Clean up dangling ? at the end
+    url = url.rstrip("?&")
+
+    return url
 
 
 async def get_pool() -> asyncpg.Pool:
@@ -31,11 +69,14 @@ async def get_pool() -> asyncpg.Pool:
                 "DATABASE_URL is not set. "
                 "Set it to your Supabase connection string."
             )
+        dsn = _fix_database_url(settings.database_url)
+        logger.info("database_connecting", dsn_host=dsn.split("@")[-1].split("/")[0] if "@" in dsn else "***")
         _pool = await asyncpg.create_pool(
-            settings.database_url,
+            dsn,
             min_size=2,
             max_size=10,
             command_timeout=30,
+            ssl="require",
         )
         logger.info("database_pool_created")
     return _pool
