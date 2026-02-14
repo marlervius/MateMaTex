@@ -13,7 +13,7 @@ import os
 import subprocess
 import tempfile
 from collections import OrderedDict
-from concurrent.futures import Semaphore
+from threading import Semaphore
 from dataclasses import dataclass, field
 from typing import Any
 
