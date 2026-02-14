@@ -115,7 +115,21 @@ async def get_pool() -> asyncpg.Pool:
                 "Set it to your Supabase connection string."
             )
 
-        conn_kwargs = _parse_database_url(settings.database_url)
+        raw_url = settings.database_url
+        # Log masked URL for debugging (show scheme, user, host — hide password)
+        _masked = raw_url
+        if ":" in raw_url and "@" in raw_url:
+            # Mask password between first : after :// and last @
+            scheme_end = raw_url.find("://")
+            if scheme_end != -1:
+                after_scheme = raw_url[scheme_end + 3:]
+                last_at = after_scheme.rfind("@")
+                first_colon = after_scheme.find(":")
+                if first_colon != -1 and last_at != -1 and first_colon < last_at:
+                    _masked = raw_url[:scheme_end + 3 + first_colon + 1] + "***" + after_scheme[last_at:]
+        logger.info("database_raw_url_masked", url=_masked)
+
+        conn_kwargs = _parse_database_url(raw_url)
         logger.info(
             "database_connecting",
             host=conn_kwargs["host"],
