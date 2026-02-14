@@ -89,7 +89,13 @@ def run_author(state: PipelineState) -> PipelineState:
 
         # Call LLM
         response = llm.invoke(full_system, user_prompt)
-        state.raw_latex_body = response.strip()
+        body = response.strip()
+
+        # Clean LLM output: strip markdown code fences
+        import re as _re
+        body = _re.sub(r'^```(?:latex|tex)?\s*\n?', '', body)
+        body = _re.sub(r'\n?```\s*$', '', body)
+        state.raw_latex_body = body.strip()
 
         step.output_summary = f"LaTeX body ({len(state.raw_latex_body)} chars)"
         logger.info(

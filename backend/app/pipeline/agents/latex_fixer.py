@@ -46,8 +46,21 @@ def run_latex_fixer(state: PipelineState) -> PipelineState:
         response = llm.invoke(SYSTEM_PROMPT, user_prompt)
         fixed_doc = response.strip()
 
-        # The fixer returns the full document (with preamble)
-        state.full_document = fixed_doc
+        # Clean LLM output: strip markdown code fences that LLMs often add
+        import re as _re
+        # Remove ```latex ... ``` or ``` ... ``` wrapping
+        fixed_doc = _re.sub(r'^```(?:latex|tex)?\s*\n?', '', fixed_doc)
+        fixed_doc = _re.sub(r'\n?```\s*$', '', fixed_doc)
+        fixed_doc = fixed_doc.strip()
+
+        # Validate that the fixed document still contains \begin{document}
+        if r'\begin{document}' not in fixed_doc:
+            logger.warning("latex_fixer_missing_begin_document", doc_start=fixed_doc[:100])
+            # Fall back to the original document — don't overwrite with garbage
+            fixed_doc = state.full_document
+        else:
+            # The fixer returns the full document (with preamble)
+            state.full_document = fixed_doc
 
         # Also extract body for consistency
         import re

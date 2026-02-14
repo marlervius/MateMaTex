@@ -58,7 +58,7 @@ class LatexChecker:
                     ],
                     capture_output=True,
                     text=True,
-                    timeout=30,
+                    timeout=120,
                     cwd=tmpdir,
                 )
 
@@ -97,7 +97,7 @@ class LatexChecker:
 
             except subprocess.TimeoutExpired:
                 result.success = False
-                result.errors = ["pdflatex compilation timed out (>30s)"]
+                result.errors = ["pdflatex compilation timed out (>120s)"]
                 logger.error("pdflatex_timeout")
 
         return result
