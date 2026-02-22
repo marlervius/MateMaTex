@@ -33,6 +33,7 @@ class AgentRole(str, Enum):
     MATH_VERIFIER = "math_verifier"
     LATEX_VALIDATOR = "latex_validator"
     LATEX_FIXER = "latex_fixer"
+    LATEX_FALLBACK = "latex_fallback"
     EDITOR = "editor"
     LAYOUT = "layout"
 

@@ -61,12 +61,15 @@ interface AppStore {
 
   // Generation state
   isGenerating: boolean;
+  currentJobId: string | null;
   currentAgent: string | null;
   steps: AgentStep[];
   result: GenerationResult | null;
 
   // Actions
-  startGeneration: () => void;
+  startGeneration: (jobId?: string) => void;
+  setJobId: (jobId: string) => void;
+  cancelGeneration: () => void;
   addStep: (step: AgentStep) => void;
   setCurrentAgent: (agent: string | null) => void;
   setResult: (result: GenerationResult) => void;
@@ -102,13 +105,16 @@ export const useAppStore = create<AppStore>((set) => ({
 
   // Generation state
   isGenerating: false,
+  currentJobId: null,
   currentAgent: null,
   steps: [],
   result: null,
 
   // Actions
-  startGeneration: () =>
-    set({ isGenerating: true, currentAgent: null, steps: [], result: null }),
+  startGeneration: (jobId?: string) =>
+    set({ isGenerating: true, currentJobId: jobId || null, currentAgent: null, steps: [], result: null }),
+  setJobId: (jobId: string) => set({ currentJobId: jobId }),
+  cancelGeneration: () => set({ isGenerating: false, currentJobId: null }),
   addStep: (step) =>
     set((state) => ({ steps: [...state.steps, step] })),
   setCurrentAgent: (agent) => set({ currentAgent: agent }),

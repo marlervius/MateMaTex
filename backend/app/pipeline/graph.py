@@ -38,6 +38,7 @@ from app.models.state import (
 from app.pipeline.agents.author import run_author
 from app.pipeline.agents.editor import run_editor
 from app.pipeline.agents.latex_fixer import run_latex_fixer
+from app.pipeline.agents.latex_fallback import run_latex_fallback
 from app.pipeline.agents.latex_validator import run_latex_validator
 from app.pipeline.agents.math_verifier import run_math_verifier
 from app.pipeline.agents.pedagogue import run_pedagogue
@@ -79,17 +80,18 @@ def should_retry_math(state: PipelineState) -> Literal["author", "editor"]:
         return "editor"
 
 
-def should_retry_latex(state: PipelineState) -> Literal["latex_fixer", "finalize"]:
+def should_retry_latex(state: PipelineState) -> Literal["latex_fixer", "latex_fallback", "finalize"]:
     """
     After LaTeX validation: retry with fixer if compilation failed and retries remain.
+    If max retries reached and still failing, go to fallback.
     """
     config = get_config()
     max_retries = config.max_verification_retries
 
-    if (
-        not state.latex_compilation.success
-        and state.latex_fix_attempts < max_retries
-    ):
+    if state.latex_compilation.success:
+        return "finalize"
+        
+    if state.latex_fix_attempts < max_retries:
         logger.info(
             "latex_retry_decision",
             decision="retry",
@@ -98,7 +100,12 @@ def should_retry_latex(state: PipelineState) -> Literal["latex_fixer", "finalize
         )
         return "latex_fixer"
     else:
-        return "finalize"
+        logger.warning(
+            "latex_retry_decision",
+            decision="fallback",
+            msg="Max retries reached. Using fallback document.",
+        )
+        return "latex_fallback"
 
 
 # ---------------------------------------------------------------------------
@@ -167,6 +174,7 @@ def create_pipeline() -> StateGraph:
     graph.add_node("editor", run_editor)
     graph.add_node("latex_validator", run_latex_validator)
     graph.add_node("latex_fixer", run_latex_fixer)
+    graph.add_node("latex_fallback", run_latex_fallback)
     graph.add_node("finalize", finalize)
 
     # Set entry point
@@ -189,18 +197,22 @@ def create_pipeline() -> StateGraph:
     # Linear: editor → latex validation
     graph.add_edge("editor", "latex_validator")
 
-    # Conditional: latex validation → retry with fixer OR finalize
+    # Conditional: latex validation → retry with fixer OR fallback OR finalize
     graph.add_conditional_edges(
         "latex_validator",
         should_retry_latex,
         {
             "latex_fixer": "latex_fixer",
+            "latex_fallback": "latex_fallback",
             "finalize": "finalize",
         },
     )
 
     # LaTeX fixer goes back to validation
     graph.add_edge("latex_fixer", "latex_validator")
+    
+    # Fallback goes straight to finalize
+    graph.add_edge("latex_fallback", "finalize")
 
     # Finalize → END
     graph.add_edge("finalize", END)

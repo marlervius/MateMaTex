@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useAppStore } from "@/lib/store";
+import { abortGeneration } from "@/lib/api";
 import {
   GraduationCap,
   PenTool,
@@ -12,6 +13,7 @@ import {
   Circle,
   Loader2,
   AlertTriangle,
+  XCircle,
 } from "lucide-react";
 
 const AGENT_INFO: Record<
@@ -59,9 +61,15 @@ const AGENT_INFO: Record<
     description: "Retter kompileringsfeil...",
     color: "accent-red",
   },
+  latex_fallback: {
+    name: "Forenkling (Fallback)",
+    icon: <Wrench size={18} />,
+    description: "Fjerner avansert grafikk for å redde dokumentet...",
+    color: "accent-red",
+  },
 };
 
-const PIPELINE_ORDER = [
+const BASE_PIPELINE_ORDER = [
   "pedagogue",
   "author",
   "math_verifier",
@@ -70,12 +78,31 @@ const PIPELINE_ORDER = [
 ];
 
 export function PipelineProgress() {
-  const { steps, currentAgent } = useAppStore();
+  const { steps, currentAgent, currentJobId, setError } = useAppStore();
   const completedAgents = new Set(steps.map((s) => s.agent));
+
+  const handleAbort = async () => {
+    if (!currentJobId) return;
+    try {
+      await abortGeneration(currentJobId);
+      setError("Genereringen ble avbrutt av bruker.");
+    } catch (err: any) {
+      console.error("Failed to abort:", err);
+    }
+  };
+
+  // Dynamically add fixer/fallback to the timeline if they are used
+  const displayOrder = [...BASE_PIPELINE_ORDER];
+  if (completedAgents.has("latex_fixer") || currentAgent === "latex_fixer") {
+    displayOrder.push("latex_fixer");
+  }
+  if (completedAgents.has("latex_fallback") || currentAgent === "latex_fallback") {
+    displayOrder.push("latex_fallback");
+  }
 
   // Estimate remaining time
   const completedCount = completedAgents.size;
-  const totalAgents = PIPELINE_ORDER.length;
+  const totalAgents = displayOrder.length;
   const avgDuration =
     steps.length > 0
       ? steps.reduce((sum, s) => sum + (s.durationSeconds || 0), 0) /
@@ -103,8 +130,8 @@ export function PipelineProgress() {
         <div className="absolute left-5 top-0 bottom-0 w-px bg-border" />
 
         <div className="space-y-1">
-          {PIPELINE_ORDER.map((agentKey, index) => {
-            const info = AGENT_INFO[agentKey];
+          {displayOrder.map((agentKey, index) => {
+            const info = AGENT_INFO[agentKey] || { name: agentKey, description: "Jobber...", color: "accent-blue" };
             const isCompleted = completedAgents.has(agentKey);
             const isCurrent = currentAgent === agentKey;
             const step = steps.find((s) => s.agent === agentKey);
@@ -209,6 +236,17 @@ export function PipelineProgress() {
           Verifisering kjører — feil rettes automatisk
         </p>
       )}
+
+      {/* Abort Button */}
+      <div className="flex justify-center mt-8">
+        <button
+          onClick={handleAbort}
+          className="btn-ghost text-accent-red hover:bg-accent-red/10 flex items-center gap-2"
+        >
+          <XCircle size={16} />
+          Avbryt generering
+        </button>
+      </div>
     </div>
   );
 }

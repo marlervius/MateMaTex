@@ -99,6 +99,16 @@ export function streamProgress(
   return () => eventSource.close();
 }
 
+export async function abortGeneration(jobId: string): Promise<any> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/generate/${jobId}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!res.ok) throw new Error(`Failed to abort: ${res.statusText}`);
+  return res.json();
+}
+
 export async function getResult(jobId: string): Promise<any> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE}/generate/${jobId}/result`, { headers });

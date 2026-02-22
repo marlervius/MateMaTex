@@ -226,6 +226,21 @@ async def stream_progress(job_id: str) -> StreamingResponse:
     )
 
 
+@app.delete("/generate/{job_id}")
+async def abort_generation(job_id: str, user_id: str = Depends(get_current_user)):
+    """Cancel a running generation job."""
+    state = _jobs.get(job_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if state.status == PipelineStatus.RUNNING or state.status == PipelineStatus.PENDING:
+        state.status = PipelineStatus.FAILED
+        state.error_message = "Avbrutt av bruker"
+        logger.info("generation_aborted", job_id=job_id, user_id=user_id)
+        return {"success": True, "message": "Job cancelled"}
+    else:
+        return {"success": False, "message": "Job already finished"}
+
 @app.get("/generate/{job_id}/result")
 async def get_result(job_id: str, user_id: str = Depends(get_current_user)):
     """Get the result of a completed generation job."""

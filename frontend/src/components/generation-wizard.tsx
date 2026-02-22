@@ -125,6 +125,8 @@ export function GenerationWizard() {
         extra_instructions: request.extraInstructions,
       });
 
+      store.setJobId(job_id);
+
       streamProgress(job_id, {
         onStep: (s) => store.addStep(s),
         onCurrentAgent: (a) => store.setCurrentAgent(a),
