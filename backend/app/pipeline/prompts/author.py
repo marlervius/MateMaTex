@@ -171,6 +171,33 @@ Alle figurer SKAL ha denne strukturen:
 \\caption{Trekant $ABC$ med sider $a$, $b$ og $c$.}
 \\end{figure}
 
+--- MØNSTER 5b: Rettvinklet trekant for trigonometri (med motstående/hosliggende/hypotenus) ---
+\\begin{figure}[H]
+\\centering
+\\begin{tikzpicture}[scale=1.1, font=\\small]
+  \\coordinate (O) at (0,0);
+  \\coordinate (A) at (4,0);
+  \\coordinate (B) at (4,3);
+  % Fyll og kant
+  \\fill[lightBlue!50] (O) -- (A) -- (B) -- cycle;
+  \\draw[thick, mainBlue] (O) -- (A) -- (B) -- cycle;
+  % Rett vinkel
+  \\draw[mainBlue] (4,0.35) -- (3.65,0.35) -- (3.65,0);
+  % Vinkel-markering ved O
+  \\draw[mainOrange, thick] (0.7,0) arc(0:36.87:0.7);
+  \\node[font=\\small] at (1.0, 0.25) {$v$};
+  % Sidetekster inne i/ved figuren
+  \\node[below, mainBlue] at (2,0)   {Hosliggende};
+  \\node[right, mainBlue] at (4,1.5) {Motstående};
+  \\node[above left, mainBlue] at (2,1.7) {Hypotenus};
+  % Hjørnebokstaver
+  \\node[below left]  at (O) {$O$};
+  \\node[below right] at (A) {$A$};
+  \\node[above right] at (B) {$B$};
+\\end{tikzpicture}
+\\caption{Rettvinklet trekant: $\\sin(v) = \\frac{\\text{motstående}}{\\text{hypotenus}}$, $\\cos(v) = \\frac{\\text{hosliggende}}{\\text{hypotenus}}$, $\\tan(v) = \\frac{\\text{motstående}}{\\text{hosliggende}}$.}
+\\end{figure}
+
 --- MØNSTER 6: Posisjonsskjema for desimaltall (bruk tabular, IKKE tikzpicture) ---
 \\begin{center}
 \\begin{tabular}{c|c|c|c|c}
@@ -185,6 +212,65 @@ Alle figurer SKAL ha denne strukturen:
 \\end{center}
 (Merk: posisjonsskjema er et unntak der \\hline er tillatt for å vise rutenett.)
 
+--- MØNSTER 7: Rettvinklet trekant med Pytagoras (ENKEL versjon — INGEN kvadrater utenfor) ---
+\\begin{figure}[H]
+\\centering
+\\begin{tikzpicture}[scale=1.0, font=\\small]
+  \\coordinate (A) at (0,0);
+  \\coordinate (B) at (4,0);
+  \\coordinate (C) at (4,3);
+  % Fyll og kant
+  \\fill[lightBlue] (A) -- (B) -- (C) -- cycle;
+  \\draw[thick, mainBlue] (A) -- (B) -- (C) -- cycle;
+  % Rett vinkel-markering
+  \\draw[mainBlue] (4,0.3) -- (3.7,0.3) -- (3.7,0);
+  % Sidemål langs sidene
+  \\node[below] at (2,0) {$a = 4$};
+  \\node[right] at (4,1.5) {$b = 3$};
+  \\node[above left] at (2,1.5) {$c = 5$};
+  % Hjørnebokstaver
+  \\node[below left] at (A) {$A$};
+  \\node[below right] at (B) {$B$};
+  \\node[above right] at (C) {$C$};
+\\end{tikzpicture}
+\\caption{Rettvinklet trekant med $a^2 + b^2 = c^2$: $4^2 + 3^2 = 16 + 9 = 25 = 5^2$.}
+\\end{figure}
+
+MERK: ALDRI tegn kvadrater utenfor trekanten for Pytagoras — det er for komplekst og ødelegger layouten.
+
+--- MØNSTER 8: Enkle romfigurer (sylinder, kjegle, kule) — bruk ENKEL 2D-representasjon ---
+% Sylinder (enkel):
+\\begin{figure}[H]
+\\centering
+\\begin{tikzpicture}[scale=0.8, font=\\small]
+  % Sylinder
+  \\begin{scope}[xshift=0cm]
+    \\draw[thick, mainBlue, fill=lightBlue!40] (0,0) ellipse (1 and 0.3);
+    \\draw[thick, mainBlue, fill=lightBlue!20] (-1,0) -- (-1,-2.5) arc(180:360:1 and 0.3) -- (1,0) arc(0:180:1 and 0.3);
+    \\draw[thick, mainBlue] (0,-2.5) ellipse (1 and 0.3);
+    \\draw[<->, mainOrange, thick] (1.3,0) -- (1.3,-2.5) node[midway, right] {$h$};
+    \\draw[<->, mainOrange, thick] (0,0) -- (1,0) node[midway, above] {$r$};
+    \\node[below] at (0,-3.2) {Sylinder};
+  \\end{scope}
+  % Kjegle
+  \\begin{scope}[xshift=3.5cm]
+    \\draw[thick, mainBlue, fill=lightBlue!20] (-1,-2.5) -- (0,0) -- (1,-2.5);
+    \\draw[thick, mainBlue] (0,-2.5) ellipse (1 and 0.3);
+    \\draw[<->, mainOrange, thick] (1.3,0) -- (1.3,-2.5) node[midway, right] {$h$};
+    \\draw[<->, mainOrange, thick] (0,-2.5) -- (1,-2.5) node[midway, below] {$r$};
+    \\node[below] at (0,-3.2) {Kjegle};
+  \\end{scope}
+  % Kule
+  \\begin{scope}[xshift=7cm]
+    \\draw[thick, mainBlue, fill=lightBlue!30] (0,0) circle (1.2);
+    \\draw[thick, mainBlue, dashed] (0,0) ellipse (1.2 and 0.35);
+    \\draw[<->, mainOrange, thick] (0,0) -- (1.2,0) node[midway, above] {$r$};
+    \\node[below] at (0,-1.7) {Kule};
+  \\end{scope}
+\\end{tikzpicture}
+\\caption{Sylinder, kjegle og kule med radius $r$ og høyde $h$.}
+\\end{figure}
+
 === TikZ-REGLER ===
 Tilgjengelige farger: mainBlue, lightBlue, mainGreen, lightGreen, mainOrange,
 lightOrange, mainPurple, lightPurple, mainTeal, lightTeal, mainGray, lightGray.
@@ -197,6 +283,9 @@ VIKTIG for TikZ-figurer:
 - Etiketter og piler: plasser INNE i figuren, eller med nok margin
 - Unngå \\Huge inne i tikzpicture — bruk \\large eller \\normalsize
 - Desimalkomma: skriv det som node-tekst: \\node at (x,y) {,};  med font=\\LARGE
+- ALDRI tegn kvadrater rundt alle sider av en trekant (Pytagoras) — bruk Mønster 7 i stedet
+- ALDRI bruk for store koordinater uten scale — figuren kan gå utenfor siden
+- Alle figurer SKAL passe innenfor tekstbredden (max \\textwidth)
 
 === MATEMATIKK ===
 - \\frac{}{} for brøker, ALDRI a/b i display math
@@ -457,7 +546,15 @@ HUSK:
 - Start med \\title, \\author, \\date, \\maketitle
 - Bruk de obligatoriske LaTeX-miljøene (definisjon, eksempel, taskbox, merk, losning)
 - Skriv TikZ-kode DIREKTE — aldri \\includegraphics, aldri [INSERT FIGURE]
-- Bruk mønstrene fra system-prompten for figurer (sirkel, rutenett, graf, geometri)
+- Bruk mønstrene fra system-prompten for figurer:
+  * Graf → Mønster 1 (PGFPlots)
+  * Sirkel/brøk → Mønster 2
+  * Prosentrutenett → Mønster 3
+  * Rektangel/geometri → Mønster 4
+  * Vilkårlig trekant → Mønster 5
+  * Trigonometri-trekant → Mønster 5b (hosliggende/motstående/hypotenus)
+  * Pytagoras-trekant → Mønster 7 (ALDRI kvadrater utenfor trekanten!)
+  * Sylinder/kjegle/kule → Mønster 8 (enkle ellipse-baserte figurer)
 - ALLE tabeller: booktabs (\\toprule/\\midrule/\\bottomrule), ALDRI | eller \\hline (unntatt posisjonsskjema)
 - ALLE beregninger og løsningsforslag MÅ være matematisk korrekte
 - INGEN preamble (\\documentclass, \\usepackage osv.)
