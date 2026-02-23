@@ -95,6 +95,18 @@ def run_author(state: PipelineState) -> PipelineState:
         import re as _re
         body = _re.sub(r'^```(?:latex|tex)?\s*\n?', '', body)
         body = _re.sub(r'\n?```\s*$', '', body)
+
+        # Strip preamble if AI ignored instructions and generated a full document.
+        # Remove everything from \documentclass up to and including \begin{document}.
+        body = _re.sub(
+            r'\\documentclass.*?\\begin\{document\}\s*',
+            '',
+            body,
+            flags=_re.DOTALL,
+        )
+        # Remove \end{document} and anything after it
+        body = _re.sub(r'\\end\{document\}.*$', '', body, flags=_re.DOTALL)
+
         state.raw_latex_body = body.strip()
 
         step.output_summary = f"LaTeX body ({len(state.raw_latex_body)} chars)"

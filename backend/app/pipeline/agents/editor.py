@@ -37,8 +37,25 @@ def run_editor(state: PipelineState) -> PipelineState:
             language_level=state.request.language_level,
         )
 
+        import re as _re
+
         response = llm.invoke(SYSTEM_PROMPT, user_prompt)
-        state.edited_latex_body = response.strip()
+        body = response.strip()
+
+        # Strip markdown code fences
+        body = _re.sub(r'^```(?:latex|tex)?\s*\n?', '', body)
+        body = _re.sub(r'\n?```\s*$', '', body)
+
+        # Strip preamble if editor re-introduced it
+        body = _re.sub(
+            r'\\documentclass.*?\\begin\{document\}\s*',
+            '',
+            body,
+            flags=_re.DOTALL,
+        )
+        body = _re.sub(r'\\end\{document\}.*$', '', body, flags=_re.DOTALL)
+
+        state.edited_latex_body = body.strip()
 
         step.output_summary = f"Edited LaTeX ({len(state.edited_latex_body)} chars)"
         logger.info(
