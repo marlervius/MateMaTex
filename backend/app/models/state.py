@@ -31,6 +31,7 @@ class AgentRole(str, Enum):
     PEDAGOGUE = "pedagogue"
     AUTHOR = "author"
     MATH_VERIFIER = "math_verifier"
+    TIKZ_VALIDATOR = "tikz_validator"
     LATEX_VALIDATOR = "latex_validator"
     LATEX_FIXER = "latex_fixer"
     LATEX_FALLBACK = "latex_fallback"

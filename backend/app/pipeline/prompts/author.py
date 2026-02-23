@@ -64,9 +64,45 @@ $2$  & $5$  & $(2, 5)$ \\\\
 \\end{tabular}
 \\end{center}
 
-=== FIGURER — OBLIGATORISKE MØNSTRE ===
+=== FIGURER — BRUK FERDIGLAGDE MAKROER (ENKLEST OG SIKRESTE) ===
 
-Alle figurer SKAL ha denne strukturen:
+MateMaTeX har innebygde figur-makroer du SKAL bruke fremfor å skrive rå TikZ.
+Makroene er ferdige og feilfrie — bruk dem alltid når de passer!
+
+MAKRO 1 — Rettvinklet trekant for Pytagoras:
+\\begin{figure}[H]
+\\centering
+\\MMArettvinklet{3}{4}{5}
+\\caption{Rettvinklet trekant med $a=3$, $b=4$, $c=5$, og $3^2+4^2=5^2$.}
+\\end{figure}
+
+MAKRO 2 — Trigonometri-trekant med hosliggende/motstående/hypotenus:
+\\begin{figure}[H]
+\\centering
+\\MMAtrigfig
+\\caption{Rettvinklet trekant med definisjon av motstående, hosliggende og hypotenus.}
+\\end{figure}
+
+MAKRO 3 — Rektangel med målpiler:
+\\begin{figure}[H]
+\\centering
+\\MMArektangel{5}{3}
+\\caption{Rektangel med lengde 5 cm og bredde 3 cm. Areal $= 5 \\cdot 3 = 15$ cm$^2$.}
+\\end{figure}
+
+MAKRO 4 — Romfigurer (sylinder + kjegle + kule, ferdig som figur):
+\\MMAromfigurer
+
+MAKRO 5 — Prosentrutenett (N av 100 celler fylt):
+\\begin{figure}[H]
+\\centering
+\\MMAprosent{35}
+\\caption{$35\\%$ av rutenettet er fylt (35 av 100 celler).}
+\\end{figure}
+
+=== NÅR MAKROENE IKKE PASSER — RÅ TikZ-MØNSTRE ===
+
+Bruk bare rå TikZ når ingen makro passer. Alle figurer SKAL ha:
 \\begin{figure}[H]
 \\centering
 \\begin{tikzpicture}
@@ -545,16 +581,18 @@ Klassetrinn: {grade}
 HUSK:
 - Start med \\title, \\author, \\date, \\maketitle
 - Bruk de obligatoriske LaTeX-miljøene (definisjon, eksempel, taskbox, merk, losning)
-- Skriv TikZ-kode DIREKTE — aldri \\includegraphics, aldri [INSERT FIGURE]
-- Bruk mønstrene fra system-prompten for figurer:
-  * Graf → Mønster 1 (PGFPlots)
-  * Sirkel/brøk → Mønster 2
-  * Prosentrutenett → Mønster 3
-  * Rektangel/geometri → Mønster 4
-  * Vilkårlig trekant → Mønster 5
-  * Trigonometri-trekant → Mønster 5b (hosliggende/motstående/hypotenus)
-  * Pytagoras-trekant → Mønster 7 (ALDRI kvadrater utenfor trekanten!)
-  * Sylinder/kjegle/kule → Mønster 8 (enkle ellipse-baserte figurer)
+- ALDRI \\includegraphics, aldri [INSERT FIGURE], aldri preamble
+
+FIGURER — bruk alltid makroene:
+  * Rettvinklet trekant (Pytagoras) → \\MMArettvinklet{{a}}{{b}}{{c}}
+  * Trigonometri-trekant             → \\MMAtrigfig
+  * Rektangel                        → \\MMArektangel{{l}}{{b}}
+  * Sylinder + kjegle + kule         → \\MMAromfigurer
+  * Prosentrutenett                  → \\MMAprosent{{N}}
+  * Graf                             → Mønster 1 (rå PGFPlots axis)
+  * Sirkel/sektorer                  → Mønster 2 (rå TikZ arc)
+  * Vilkårlig trekant                → Mønster 5 (rå TikZ)
+
 - ALLE tabeller: booktabs (\\toprule/\\midrule/\\bottomrule), ALDRI | eller \\hline (unntatt posisjonsskjema)
 - ALLE beregninger og løsningsforslag MÅ være matematisk korrekte
 - INGEN preamble (\\documentclass, \\usepackage osv.)
