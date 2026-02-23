@@ -22,6 +22,7 @@ ALDRI skriv noe av dette — preamble legges til AUTOMATISK:
 - \\usetikzlibrary
 - Markdown-syntaks (**, ##, ```)
 - [INSERT FIGURE: ...] plassholdere
+- \\includegraphics (ALDRI — bruk TikZ direkte)
 
 === OBLIGATORISKE LaTeX-MILJØER ===
 
@@ -48,30 +49,160 @@ Finn stigningstallet til linjen som går gjennom $(2, 5)$ og $(6, 13)$.
 TIPS: \\begin{merk}Husk at stigningstallet...\\end{merk}
 LØSNING: \\begin{losning}...\\end{losning}
 
-=== FIGURER ===
-Skriv TikZ-kode DIREKTE — aldri plassholdere.
+=== TABELLER — KRITISKE REGLER ===
+ALLTID booktabs. ALDRI | eller \\hline.
+
+\\begin{center}
+\\begin{tabular}{lcc}
+\\toprule
+$x$ & $f(x) = 2x + 1$ & $(x, y)$ \\\\
+\\midrule
+$-1$ & $-1$ & $(-1, -1)$ \\\\
+$0$  & $1$  & $(0, 1)$ \\\\
+$2$  & $5$  & $(2, 5)$ \\\\
+\\bottomrule
+\\end{tabular}
+\\end{center}
+
+=== FIGURER — OBLIGATORISKE MØNSTRE ===
+
+Alle figurer SKAL ha denne strukturen:
 \\begin{figure}[H]
 \\centering
 \\begin{tikzpicture}
-\\begin{axis}[width=0.7\\textwidth, height=0.5\\textwidth,
-  xlabel={$x$}, ylabel={$y$}, grid=major, axis lines=middle]
-\\addplot[mainBlue, thick, domain=-4:4, samples=50] {2*x+1};
-\\addplot[only marks, mark=*, mainGreen] coordinates {(0,1) (1,3) (2,5)};
+  % ... kode her ...
+\\end{tikzpicture}
+\\caption{Beskrivende tekst.}
+\\end{figure}
+
+--- MØNSTER 1: Graf med PGFPlots ---
+\\begin{figure}[H]
+\\centering
+\\begin{tikzpicture}
+\\begin{axis}[
+  width=0.72\\textwidth, height=0.50\\textwidth,
+  xlabel={$x$}, ylabel={$y$},
+  grid=major, grid style={dashed, gray!30},
+  axis lines=middle,
+  xmin=-3, xmax=4, ymin=-3, ymax=7,
+  xtick={-3,-2,...,4}, ytick={-3,-2,...,7},
+  tick label style={font=\\small},
+  xlabel style={at={(ticklabel* cs:1)}, anchor=west},
+  ylabel style={at={(ticklabel* cs:1)}, anchor=south},
+]
+\\addplot[mainBlue, thick, domain=-2.5:3.5, samples=60] {2*x+1};
+\\addplot[only marks, mark=*, mark size=3pt, mainGreen]
+  coordinates {(-1,-1) (0,1) (2,5)};
 \\end{axis}
 \\end{tikzpicture}
 \\caption{Grafen til $f(x) = 2x + 1$.}
 \\end{figure}
 
+--- MØNSTER 2: Geometrisk figur — sirkel med sektorer ---
+\\begin{figure}[H]
+\\centering
+\\begin{tikzpicture}[scale=1.0]
+  % Fyll sektorer
+  \\fill[mainBlue!40] (0,0) -- (2,0) arc[start angle=0, end angle=270, radius=2] -- cycle;
+  \\fill[lightGray]   (0,0) -- (0,-2) arc[start angle=270, end angle=360, radius=2] -- cycle;
+  % Sirkelkant og delingslinjer
+  \\draw[thick, mainBlue] (0,0) circle[radius=2cm];
+  \\draw[thick, mainBlue] (0,-2) -- (0,2);
+  \\draw[thick, mainBlue] (-2,0) -- (2,0);
+  % Etiketter inne i sektorene
+  \\node[font=\\bfseries] at ( 0.9,  0.9) {$\\frac{1}{4}$};
+  \\node[font=\\bfseries] at (-0.9,  0.9) {$\\frac{1}{4}$};
+  \\node[font=\\bfseries] at (-0.9, -0.9) {$\\frac{1}{4}$};
+  \\node[font=\\bfseries, gray] at (0.9, -0.9) {$\\frac{1}{4}$};
+\\end{tikzpicture}
+\\caption{Sirkelen er delt i fire like deler. Tre av fire deler ($\\frac{3}{4}$) er fargelagt.}
+\\end{figure}
+
+--- MØNSTER 3: Prosentrutenett 10×10 ---
+\\begin{figure}[H]
+\\centering
+\\begin{tikzpicture}[scale=0.45]
+  % Fyll fargelagte ruter (her 30 av 100)
+  \\fill[mainBlue!50] (0,7) rectangle (10,10);   % rad 8-10: 30 ruter
+  % Rutenett
+  \\draw[step=1cm, gray!50, thin] (0,0) grid (10,10);
+  \\draw[very thick, mainBlue] (0,0) rectangle (10,10);
+  % Forklaring UNDER figuren (i caption, ikke som node)
+\\end{tikzpicture}
+\\caption{Prosentkvadrat: 30 av 100 ruter er fargelagt, som tilsvarer $30\\,\\%$.}
+\\end{figure}
+
+--- MØNSTER 4: Rektangel / geometriske former ---
+\\begin{figure}[H]
+\\centering
+\\begin{tikzpicture}[scale=1.0, font=\\small]
+  % Rektangel
+  \\draw[thick, mainBlue, fill=lightBlue] (0,0) rectangle (5,3);
+  % Mål
+  \\draw[<->, mainOrange, thick] (0,-0.5) -- (5,-0.5)
+    node[midway, below] {$5$ cm};
+  \\draw[<->, mainOrange, thick] (5.5,0) -- (5.5,3)
+    node[midway, right] {$3$ cm};
+  % Areal-tekst inne i figuren
+  \\node at (2.5,1.5) {$A = 5 \\cdot 3 = 15\\text{ cm}^2$};
+\\end{tikzpicture}
+\\caption{Rektangel med lengde 5 cm og bredde 3 cm.}
+\\end{figure}
+
+--- MØNSTER 5: Trekant med vinkler og sider ---
+\\begin{figure}[H]
+\\centering
+\\begin{tikzpicture}[scale=1.0, font=\\small]
+  \\coordinate (A) at (0,0);
+  \\coordinate (B) at (5,0);
+  \\coordinate (C) at (2,3.5);
+  % Fyll og kant
+  \\fill[lightBlue] (A) -- (B) -- (C) -- cycle;
+  \\draw[thick, mainBlue] (A) -- (B) -- (C) -- cycle;
+  % Hjørneetiketter
+  \\node[below left]  at (A) {$A$};
+  \\node[below right] at (B) {$B$};
+  \\node[above]       at (C) {$C$};
+  % Sidemål (midtpunkt på sidene)
+  \\node[below]       at ($(A)!0.5!(B)$) {$c$};
+  \\node[left]        at ($(A)!0.5!(C)$) {$b$};
+  \\node[right]       at ($(B)!0.5!(C)$) {$a$};
+\\end{tikzpicture}
+\\caption{Trekant $ABC$ med sider $a$, $b$ og $c$.}
+\\end{figure}
+
+--- MØNSTER 6: Posisjonsskjema for desimaltall (bruk tabular, IKKE tikzpicture) ---
+\\begin{center}
+\\begin{tabular}{c|c|c|c|c}
+\\multicolumn{1}{c}{Hundrer} &
+\\multicolumn{1}{c}{Tiere} &
+\\multicolumn{1}{c}{Enere} &
+\\multicolumn{1}{c}{Tideler} &
+\\multicolumn{1}{c}{Hundredeler} \\\\
+\\hline
+ &  & 1 & 3 & 5 \\\\
+\\end{tabular}
+\\end{center}
+(Merk: posisjonsskjema er et unntak der \\hline er tillatt for å vise rutenett.)
+
+=== TikZ-REGLER ===
 Tilgjengelige farger: mainBlue, lightBlue, mainGreen, lightGreen, mainOrange,
 lightOrange, mainPurple, lightPurple, mainTeal, lightTeal, mainGray, lightGray.
 TikZ-biblioteker (allerede lastet): arrows.meta, calc, patterns, positioning,
 shapes.geometric, decorations.pathreplacing, decorations.pathmorphing.
 
+VIKTIG for TikZ-figurer:
+- Sett ALLTID scale eller eksplisitte koordinater — aldri la figuren bli for stor
+- Bruk font=\\small inne i tikzpicture for å unngå for store labels
+- Etiketter og piler: plasser INNE i figuren, eller med nok margin
+- Unngå \\Huge inne i tikzpicture — bruk \\large eller \\normalsize
+- Desimalkomma: skriv det som node-tekst: \\node at (x,y) {,};  med font=\\LARGE
+
 === MATEMATIKK ===
 - \\frac{}{} for brøker, ALDRI a/b i display math
 - \\cdot for multiplikasjon, ALDRI *
 - \\sqrt{} for kvadratrot
-- Tabeller: booktabs (\\toprule, \\midrule, \\bottomrule), ALDRI |
+- Norsk desimalkomma: $1{,}35$ (med klammeparenteser)
 
 === LØSNINGSFORSLAG ===
 Plasser ALLTID på slutten:
@@ -117,13 +248,13 @@ Vi skal tegne grafen til $f(x) = 2x + 1$.
 
 Lag en verditabell:
 \begin{center}
-\begin{tabular}{ccc}
+\begin{tabular}{lcc}
 \toprule
 $x$ & $f(x) = 2x + 1$ & $(x, y)$ \\
 \midrule
 $-1$ & $2 \cdot (-1) + 1 = -1$ & $(-1, -1)$ \\
-$0$  & $2 \cdot 0 + 1 = 1$     & $(0, 1)$ \\
-$2$  & $2 \cdot 2 + 1 = 5$     & $(2, 5)$ \\
+$0$  & $2 \cdot 0 + 1 = 1$     & $(0, 1)$   \\
+$2$  & $2 \cdot 2 + 1 = 5$     & $(2, 5)$   \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -132,13 +263,19 @@ $2$  & $2 \cdot 2 + 1 = 5$     & $(2, 5)$ \\
 \centering
 \begin{tikzpicture}
 \begin{axis}[
-  width=0.7\textwidth, height=0.5\textwidth,
+  width=0.72\textwidth, height=0.50\textwidth,
   xlabel={$x$}, ylabel={$y$},
-  grid=major, axis lines=middle,
+  grid=major, grid style={dashed, gray!30},
+  axis lines=middle,
   xmin=-3, xmax=4, ymin=-3, ymax=7,
+  xtick={-3,-2,...,4}, ytick={-3,-2,...,7},
+  tick label style={font=\small},
+  xlabel style={at={(ticklabel* cs:1)}, anchor=west},
+  ylabel style={at={(ticklabel* cs:1)}, anchor=south},
 ]
-\addplot[mainBlue, thick, domain=-2:3, samples=50] {2*x+1};
-\addplot[only marks, mark=*, mark size=3pt, mainGreen] coordinates {(-1,-1) (0,1) (2,5)};
+\addplot[mainBlue, thick, domain=-2.5:3.5, samples=60] {2*x+1};
+\addplot[only marks, mark=*, mark size=3pt, mainGreen]
+  coordinates {(-1,-1) (0,1) (2,5)};
 \end{axis}
 \end{tikzpicture}
 \caption{Grafen til $f(x) = 2x + 1$ med stigningstall $a = 2$ og konstantledd $b = 1$.}
@@ -197,6 +334,105 @@ c) $99 + 0{,}50x = 1{,}50x \Rightarrow 99 = x$. De koster like mye ved 99 minutt
 \end{multicols}
 """,
     },
+    {
+        "input": "Plan: Brøk og prosent, 7. trinn, geometriske illustrasjoner av brøker og prosentrutenett",
+        "output": r"""\title{Brøk og prosent}
+\author{Generert av MateMaTeX AI}
+\date{\today}
+\maketitle
+
+\section{Hva er en brøk?}
+
+\begin{definisjon}
+En \textbf{brøk} skrives som $\dfrac{a}{b}$, der $a$ er \textbf{telleren} og $b$ er \textbf{nevneren}.
+Nevneren forteller hvor mange like deler helheten er delt i, og telleren forteller hvor mange deler vi har.
+\end{definisjon}
+
+\begin{eksempel}[title=Illustrere brøken tre fjerdedeler]
+Vi deler en sirkel i fire like deler og fargeleg tre av dem.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=1.0]
+  \fill[mainBlue!40] (0,0) -- (2,0)
+    arc[start angle=0, end angle=270, radius=2] -- cycle;
+  \fill[lightGray] (0,0) -- (0,-2)
+    arc[start angle=270, end angle=360, radius=2] -- cycle;
+  \draw[thick, mainBlue] (0,0) circle[radius=2cm];
+  \draw[thick, mainBlue] (0,-2) -- (0,2);
+  \draw[thick, mainBlue] (-2,0) -- (2,0);
+  \node[font=\bfseries\small] at ( 0.9,  0.9) {$\frac{1}{4}$};
+  \node[font=\bfseries\small] at (-0.9,  0.9) {$\frac{1}{4}$};
+  \node[font=\bfseries\small] at (-0.9, -0.9) {$\frac{1}{4}$};
+  \node[font=\bfseries\small, gray] at (0.9, -0.9) {$\frac{1}{4}$};
+\end{tikzpicture}
+\caption{Tre av fire like deler er fargelagt — dette illustrerer brøken $\frac{3}{4}$.}
+\end{figure}
+\end{eksempel}
+
+\section{Hva er prosent?}
+
+\begin{definisjon}
+\textbf{Prosent} betyr \emph{per hundre}: $1\,\% = \dfrac{1}{100} = 0{,}01$.
+\end{definisjon}
+
+\begin{eksempel}[title=Visualisere 25 prosent i et rutenett]
+Vi fargeleg 25 av 100 ruter i et 10×10-rutenett.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.42]
+  \fill[mainBlue!50] (0,7.5) rectangle (10,10);
+  \fill[mainBlue!50] (0,5)   rectangle (5,7.5);
+  \draw[step=1cm, gray!40, thin] (0,0) grid (10,10);
+  \draw[very thick, mainBlue] (0,0) rectangle (10,10);
+\end{tikzpicture}
+\caption{25 av 100 ruter er fargelagt, som viser at $25\,\% = \frac{25}{100} = \frac{1}{4}$.}
+\end{figure}
+\end{eksempel}
+
+\section{Oppgaver}
+
+\begin{taskbox}{Oppgave 1}
+Skriv brøkene som prosent:
+\begin{enumerate}[label=\alph*)]
+\item $\dfrac{1}{2}$
+\item $\dfrac{3}{4}$
+\item $\dfrac{1}{5}$
+\end{enumerate}
+\end{taskbox}
+
+\begin{taskbox}{Oppgave 2}
+Fyll ut tabellen:
+\begin{center}
+\begin{tabular}{lcc}
+\toprule
+Brøk & Desimaltall & Prosent \\
+\midrule
+$\dfrac{1}{2}$  & \dots & \dots \\
+$\dfrac{1}{4}$  & \dots & \dots \\
+$\dfrac{3}{4}$  & \dots & \dots \\
+$\dfrac{1}{10}$ & \dots & \dots \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{taskbox}
+
+\section*{Løsningsforslag}
+\begin{multicols}{2}
+\textbf{Oppgave 1}\\
+a) $\frac{1}{2} = \frac{50}{100} = 50\,\%$\\
+b) $\frac{3}{4} = \frac{75}{100} = 75\,\%$\\
+c) $\frac{1}{5} = \frac{20}{100} = 20\,\%$
+
+\textbf{Oppgave 2}\\
+$\frac{1}{2};\; 0{,}5;\; 50\,\%$\\
+$\frac{1}{4};\; 0{,}25;\; 25\,\%$\\
+$\frac{3}{4};\; 0{,}75;\; 75\,\%$\\
+$\frac{1}{10};\; 0{,}1;\; 10\,\%$
+\end{multicols}
+""",
+    },
 ]
 
 
@@ -220,7 +456,9 @@ Klassetrinn: {grade}
 HUSK:
 - Start med \\title, \\author, \\date, \\maketitle
 - Bruk de obligatoriske LaTeX-miljøene (definisjon, eksempel, taskbox, merk, losning)
-- Skriv TikZ-kode DIREKTE — ingen [INSERT FIGURE]
+- Skriv TikZ-kode DIREKTE — aldri \\includegraphics, aldri [INSERT FIGURE]
+- Bruk mønstrene fra system-prompten for figurer (sirkel, rutenett, graf, geometri)
+- ALLE tabeller: booktabs (\\toprule/\\midrule/\\bottomrule), ALDRI | eller \\hline (unntatt posisjonsskjema)
 - ALLE beregninger og løsningsforslag MÅ være matematisk korrekte
 - INGEN preamble (\\documentclass, \\usepackage osv.)
 """

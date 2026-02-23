@@ -107,6 +107,9 @@ def run_author(state: PipelineState) -> PipelineState:
         # Remove \end{document} and anything after it
         body = _re.sub(r'\\end\{document\}.*$', '', body, flags=_re.DOTALL)
 
+        # Remove any \includegraphics lines — images must be TikZ only
+        body = _re.sub(r'\\includegraphics\s*(?:\[.*?\])?\s*\{.*?\}', '', body)
+
         state.raw_latex_body = body.strip()
 
         step.output_summary = f"LaTeX body ({len(state.raw_latex_body)} chars)"
