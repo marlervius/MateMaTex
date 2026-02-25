@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { DM_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ConditionalShell } from "@/components/conditional-shell";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -49,7 +50,9 @@ export default function RootLayout({
             `,
           }}
         />
-        <ConditionalShell>{children}</ConditionalShell>
+        <ErrorBoundary>
+          <ConditionalShell>{children}</ConditionalShell>
+        </ErrorBoundary>
       </body>
     </html>
   );
