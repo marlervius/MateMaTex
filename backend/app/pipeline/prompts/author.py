@@ -100,6 +100,20 @@ MAKRO 5 — Prosentrutenett (N av 100 celler fylt):
 \\caption{$35\\%$ av rutenettet er fylt (35 av 100 celler).}
 \\end{figure}
 
+MAKRO 6 — Indirekte måling / formlike trekanter (person + objekt med skygger):
+\\begin{figure}[H]
+\\centering
+\\MMAformlikhet{1.8}{2.4}{12}
+\\caption{Indirekte måling: personen er $1{,}8$ m høy med $2{,}4$ m skygge. Flaggstangens skygge er $12$ m, altså $h = \\frac{1{,}8 \\cdot 12}{2{,}4} = 9$ m.}
+\\end{figure}
+
+MAKRO 7 — Trekant med tverrlinje parallell med grunnlinje (formlikhet):
+\\begin{figure}[H]
+\\centering
+\\MMAtverrlinje{4}{2}{9}
+\\caption{Trekant $\\triangle ABC$ med tverrlinje $DE \\parallel BC$, der $AD = 4$ cm, $DB = 2$ cm og $BC = 9$ cm.}
+\\end{figure}
+
 === NÅR MAKROENE IKKE PASSER — RÅ TikZ-MØNSTRE ===
 
 Bruk bare rå TikZ når ingen makro passer. Alle figurer SKAL ha:
@@ -274,7 +288,108 @@ Bruk bare rå TikZ når ingen makro passer. Alle figurer SKAL ha:
 
 MERK: ALDRI tegn kvadrater utenfor trekanten for Pytagoras — det er for komplekst og ødelegger layouten.
 
---- MØNSTER 8: Enkle romfigurer (sylinder, kjegle, kule) — bruk ENKEL 2D-representasjon ---
+--- MØNSTER 8: Kartmålestokk med linjal, elv og vei ---
+\\begin{figure}[H]
+\\centering
+\\begin{tikzpicture}[scale=1.0, font=\\small]
+  % Kart-bakgrunn
+  \\fill[lightGray!30] (0,0) rectangle (8,5);
+  \\draw[thick, mainGray] (0,0) rectangle (8,5);
+  % Elv (bølgete blå stripe)
+  \\fill[mainBlue!20, decorate, decoration={snake, amplitude=3mm, segment length=15mm}]
+    (0,1.5) -- (8,2.2) -- (8,3.0) -- (0,2.3) -- cycle;
+  % Vei (grå diagonal linje)
+  \\draw[mainGray, line width=3pt] (2,5) -- (5,0);
+  % Linjal mellom punkt A og B
+  \\fill[lightOrange!60] (1.5,3.5) rectangle (6.5,4.0);
+  \\draw[thick, mainGray] (1.5,3.5) rectangle (6.5,4.0);
+  \\foreach \\x in {0,1,...,5} {
+    \\draw[thick] ({1.5+\\x},3.5) -- ({1.5+\\x},4.0);
+    \\node[below, font=\\scriptsize] at ({1.5+\\x},3.5) {\\x};
+  }
+  \\node[font=\\scriptsize, right] at (6.5,3.75) {cm};
+  % Punkt A og B
+  \\fill[red] (1.5,4.2) circle (3pt) node[above] {Punkt A};
+  \\fill[red] (5.5,4.2) circle (3pt) node[above] {Punkt B};
+  % Målestokk-boks
+  \\draw[thick] (5.5,0.5) rectangle (7.5,1.5);
+  \\node[font=\\small] at (6.5,1.15) {1 : 20\\,000};
+  \\draw[thick] (5.8,0.7) -- (7.2,0.7);
+  \\node[font=\\scriptsize, below] at (6.5,0.65) {1 cm på kartet};
+\\end{tikzpicture}
+\\caption{Kart med målestokk 1:20\\,000. Avstanden mellom Punkt A og B er ca.\\ 4 cm på kartet.}
+\\end{figure}
+
+--- MØNSTER 9: Indirekte måling med sol, skygger og formlike trekanter ---
+\\begin{figure}[H]
+\\centering
+\\begin{tikzpicture}[scale=0.55, font=\\small]
+  % Grunnlinje
+  \\draw[thick, mainGray] (-1,0) -- (18,0);
+  % Sol
+  \\fill[yellow!80!orange] (-0.5,8) circle (0.6);
+  \\foreach \\a in {0,45,...,315} {
+    \\draw[yellow!80!orange, thick] ({-0.5+0.8*cos(\\a)},{8+0.8*sin(\\a)})
+      -- ({-0.5+1.1*cos(\\a)},{8+1.1*sin(\\a)});
+  }
+  % Person
+  \\draw[thick, mainBlue] (2,0) -- (2,1.8);
+  \\draw[mainBlue] (2,1.8) circle (0.15);
+  \\node[left] at (2,0.9) {$1{,}8$ m};
+  % Rettvinklet-markering person
+  \\draw[mainBlue] (2.3,0) -- (2.3,0.3) -- (2,0.3);
+  % Persons skygge
+  \\draw[dashed, mainOrange, thick] (2,1.8) -- (4.4,0);
+  \\draw[<->, mainOrange] (2,-0.5) -- (4.4,-0.5) node[midway, below] {$2{,}4$ m};
+  % Flaggstang
+  \\draw[thick, mainGreen, line width=2pt] (10,0) -- (10,9);
+  \\fill[red!70] (10,9) -- (11.5,8.5) -- (10,8) -- cycle;
+  \\node[right] at (10.5,4.5) {$h = \\text{?}$};
+  % Rettvinklet-markering flaggstang
+  \\draw[mainGreen] (10.3,0) -- (10.3,0.3) -- (10,0.3);
+  % Flaggstangens skygge
+  \\draw[dashed, mainOrange, thick] (10,9) -- (22,0);
+  \\draw[<->, mainOrange] (10,-0.5) -- (22,-0.5) node[midway, below] {$12$ m};
+  % Sol-stråler (stiplet)
+  \\draw[dashed, yellow!70!orange, thin] (-0.5,8) -- (4.4,0);
+  \\draw[dashed, yellow!70!orange, thin] (-0.5,8) -- (22,0);
+\\end{tikzpicture}
+\\caption{Indirekte måling: personen ($1{,}8$ m) kaster skygge $2{,}4$ m. Flaggstangens skygge er $12$ m.}
+\\end{figure}
+
+--- MØNSTER 10: Trekant med tverrlinje parallell med grunnlinjen (formlikhet) ---
+\\begin{figure}[H]
+\\centering
+\\begin{tikzpicture}[scale=0.7, font=\\small]
+  % Trekant ABC
+  \\coordinate (A) at (0,6);
+  \\coordinate (B) at (-3,0);
+  \\coordinate (C) at (4.5,0);
+  % D og E på AB og AC (AD=4, DB=2 → D er 2/6 opp fra B)
+  \\coordinate (D) at ({-3*4/6}, {6*2/6});
+  \\coordinate (E) at ({4.5*4/6}, {6*2/6});
+  % Trekant
+  \\draw[thick, mainBlue] (A) -- (B) -- (C) -- cycle;
+  % Tverrlinje DE (oransje)
+  \\draw[thick, mainOrange] (D) -- (E);
+  % Parallell-piler
+  \\draw[mainOrange, ->, thick] ($(D)!0.45!(E)$) -- ($(D)!0.55!(E)$);
+  \\draw[mainOrange, ->, thick] ($(B)!0.45!(C)$) -- ($(B)!0.55!(C)$);
+  % Hjørneetiketter
+  \\node[above] at (A) {$A$};
+  \\node[below left] at (B) {$B$};
+  \\node[below right] at (C) {$C$};
+  \\node[left] at (D) {$D$};
+  \\node[right] at (E) {$E$};
+  % Sidemål
+  \\node[left] at ($(A)!0.5!(D)$) {$4$ cm};
+  \\node[left] at ($(D)!0.5!(B)$) {$2$ cm};
+  \\draw[<->, mainOrange] ($(B)+(0,-0.5)$) -- ($(C)+(0,-0.5)$) node[midway, below] {$9$ cm};
+\\end{tikzpicture}
+\\caption{Trekant $\\triangle ABC$ med tverrlinje $DE \\parallel BC$.}
+\\end{figure}
+
+--- MØNSTER 11: Enkle romfigurer (sylinder, kjegle, kule) — bruk ENKEL 2D-representasjon ---
 % Sylinder (enkel):
 \\begin{figure}[H]
 \\centering
@@ -312,6 +427,7 @@ Tilgjengelige farger: mainBlue, lightBlue, mainGreen, lightGreen, mainOrange,
 lightOrange, mainPurple, lightPurple, mainTeal, lightTeal, mainGray, lightGray.
 TikZ-biblioteker (allerede lastet): arrows.meta, calc, patterns, positioning,
 shapes.geometric, decorations.pathreplacing, decorations.pathmorphing.
+(decorations.pathmorphing gir tilgang til snake, zigzag og random steps for bølgete linjer som elver o.l.)
 
 VIKTIG for TikZ-figurer:
 - Sett ALLTID scale eller eksplisitte koordinater — aldri la figuren bli for stor
@@ -337,6 +453,19 @@ Plasser ALLTID på slutten:
 a) $a = \\frac{13-5}{6-2} = \\frac{8}{4} = 2$\\\\
 b) Se figur.
 \\end{multicols}
+
+=== ILLUSTRASJONSKVALITET ===
+Illustrasjonene skal være PROFESJONELLE og INFORMATIVE:
+- Bruk farger med mening: mainBlue for hovedfigur, mainOrange for mål/piler, mainGreen for ekstra elementer
+- Bruk \\draw[<->] for målepiler med enheter som node
+- Bruk \\fill med lys farge for å fylle geometriske figurer
+- Marker rette vinkler med små firkanter (\\draw (x,0.3) -- (x-0.3,0.3) -- (x-0.3,0))
+- Bruk dashed for hjelpelinjer, stiplede stråler eller skyggelinjer
+- Bruk decoration={snake} for naturlige former som elver og bølger
+- Plasser etiketter TYDELIG med node[above/below/left/right]
+- Lag REALISTISKE figurer med riktige proporsjoner
+- Bruk scale for å holde figurer innenfor \\textwidth
+- Legg til konkrete detaljer som gjør figuren livfull (sol, flagg, person-figur osv.)
 
 === KVALITETSKRAV ===
 - ALLE beregninger i løsningsforslag SKAL være korrekte — de verifiseres automatisk
@@ -589,9 +718,14 @@ FIGURER — bruk alltid makroene:
   * Rektangel                        → \\MMArektangel{{l}}{{b}}
   * Sylinder + kjegle + kule         → \\MMAromfigurer
   * Prosentrutenett                  → \\MMAprosent{{N}}
+  * Indirekte måling / formlikhet    → \\MMAformlikhet{{personH}}{{personS}}{{objektS}}
+  * Trekant med tverrlinje (DE∥BC)  → \\MMAtverrlinje{{AD}}{{DB}}{{BC}}
   * Graf                             → Mønster 1 (rå PGFPlots axis)
   * Sirkel/sektorer                  → Mønster 2 (rå TikZ arc)
   * Vilkårlig trekant                → Mønster 5 (rå TikZ)
+  * Kartmålestokk                   → Mønster 8 (rå TikZ)
+  * Indirekte måling m/sol+skygge   → Mønster 9 (rå TikZ, mer detaljert)
+  * Trekant m/tverrlinje (detaljert) → Mønster 10 (rå TikZ)
 
 - ALLE tabeller: booktabs (\\toprule/\\midrule/\\bottomrule), ALDRI | eller \\hline (unntatt posisjonsskjema)
 - ALLE beregninger og løsningsforslag MÅ være matematisk korrekte

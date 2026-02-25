@@ -26,7 +26,7 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
 % Graphics
 \usepackage{tikz, pgfplots}
 \pgfplotsset{compat=1.18}
-\usetikzlibrary{arrows.meta, calc, patterns, positioning, shapes.geometric, decorations.pathreplacing}
+\usetikzlibrary{arrows.meta, calc, patterns, positioning, shapes.geometric, decorations.pathreplacing, decorations.pathmorphing}
 
 % Layout
 \usepackage[margin=2.5cm]{geometry}
@@ -304,6 +304,72 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
       }
     }
     \draw[thick, mainBlue] (0,0) rectangle (10,10);
+  \end{tikzpicture}%
+}
+
+% \MMAformlikhet{personH}{personS}{objektS} — indirect measurement with similar triangles
+% Usage: \MMAformlikhet{1.8}{2.4}{12}  → person 1.8m, shadow 2.4m, object shadow 12m
+\newcommand{\MMAformlikhet}[3]{%
+  \begin{tikzpicture}[scale=0.55, font=\small]
+    % Person triangle
+    \coordinate (P0) at (0,0);
+    \coordinate (P1) at (#2,0);
+    \coordinate (P2) at (0,#1);
+    % Object triangle (scaled)
+    \pgfmathsetmacro{\objH}{#1 * #3 / #2}
+    \coordinate (O0) at ({#2+0.8},0);
+    \coordinate (O1) at ({#2+0.8+#3},0);
+    \coordinate (O2) at ({#2+0.8},\objH);
+    % Ground line
+    \draw[thick, mainGray] (-0.5,0) -- ({#2+0.8+#3+1},0);
+    % Person triangle
+    \fill[lightBlue!40] (P0) -- (P1) -- (P2) -- cycle;
+    \draw[thick, mainBlue] (P0) -- (P1) -- (P2) -- cycle;
+    \draw[mainBlue] (0,0.3) -- (0.3,0.3) -- (0.3,0);
+    % Shadow lines (dashed, orange)
+    \draw[dashed, mainOrange] (P1) -- (P2);
+    \draw[dashed, mainOrange] (O1) -- (O2);
+    % Object triangle
+    \fill[lightGreen!30] (O0) -- (O1) -- (O2) -- cycle;
+    \draw[thick, mainGreen] (O0) -- (O1) -- (O2) -- cycle;
+    \draw[mainGreen] ({#2+0.8},0.3) -- ({#2+0.8+0.3},0.3) -- ({#2+0.8+0.3},0);
+    % Labels
+    \node[left] at (0,{#1/2}) {$#1$ m};
+    \draw[<->, mainOrange, thick] (0,-0.5) -- (#2,-0.5) node[midway,below] {$#2$ m};
+    \node[right] at ({#2+0.8},{\objH/2}) {$h = \text{?}$};
+    \draw[<->, mainOrange, thick] ({#2+0.8},-0.5) -- ({#2+0.8+#3},-0.5) node[midway,below] {$#3$ m};
+  \end{tikzpicture}%
+}
+
+% \MMAtverrlinje{AD}{DB}{BC} — triangle ABC with transversal DE parallel to BC
+% Usage: \MMAtverrlinje{4}{2}{9}
+\newcommand{\MMAtverrlinje}[3]{%
+  \begin{tikzpicture}[scale=0.55, font=\small]
+    \pgfmathsetmacro{\totalH}{#1 + #2}
+    \pgfmathsetmacro{\ratioD}{#2 / \totalH}
+    \pgfmathsetmacro{\ratioA}{#1 / \totalH}
+    \pgfmathsetmacro{\halfBC}{#3 / 2}
+    % Vertices
+    \coordinate (A) at (0,\totalH);
+    \coordinate (B) at (-\halfBC,0);
+    \coordinate (C) at (\halfBC,0);
+    % D and E on AB and AC at height = DB from B
+    \coordinate (D) at ({-\halfBC*\ratioA}, #2);
+    \coordinate (E) at ({\halfBC*\ratioA}, #2);
+    % Triangle
+    \draw[thick, mainBlue] (A) -- (B) -- (C) -- cycle;
+    % Transversal DE
+    \draw[thick, mainOrange] (D) -- (E);
+    % Labels
+    \node[above] at (A) {$A$};
+    \node[below left] at (B) {$B$};
+    \node[below right] at (C) {$C$};
+    \node[left] at (D) {$D$};
+    \node[right] at (E) {$E$};
+    % Side labels
+    \node[left] at ({(-\halfBC*\ratioA)/2}, {#2 + #1/2}) {$#1$ cm};
+    \node[left] at ({(-\halfBC*\ratioA + (-\halfBC))/2}, {#2/2}) {$#2$ cm};
+    \draw[<->, mainOrange] ({-\halfBC*0.3},-0.5) -- ({\halfBC*0.3},-0.5) node[midway,below] {$#3$ cm};
   \end{tikzpicture}%
 }
 

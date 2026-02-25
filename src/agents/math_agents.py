@@ -198,7 +198,8 @@ class MathBookAgents:
 
                 "TILGJENGELIGE TikZ-BIBLIOTEKER (allerede lastet i preamble):\n"
                 "arrows.meta, calc, patterns, positioning, shapes.geometric,\n"
-                "decorations.pathreplacing\n"
+                "decorations.pathreplacing, decorations.pathmorphing\n"
+                "(decorations.pathmorphing gir snake, zigzag for bølgete linjer som elver)\n"
                 "IKKE bruk andre biblioteker - de er IKKE tilgjengelige.\n\n"
 
                 "TILGJENGELIGE PAKKER: tikz, pgfplots (compat=1.18), "
