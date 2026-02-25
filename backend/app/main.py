@@ -16,6 +16,8 @@ Exposes:
 
 import asyncio
 import json
+import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -125,9 +127,29 @@ app.include_router(qr_router)
 app.include_router(sharing_router)
 app.include_router(collab_router)
 
-# In-memory job store (replace with Redis/DB in production)
+# Thread-safe in-memory job store with TTL eviction
 _jobs: dict[str, PipelineState] = {}
+_job_owners: dict[str, str] = {}  # job_id → user_id
+_jobs_lock = threading.Lock()
+_JOB_TTL_SECONDS = 3600  # 1 hour
 _executor = ThreadPoolExecutor(max_workers=4)
+
+
+def _evict_old_jobs() -> None:
+    """Remove jobs older than TTL to prevent memory leaks."""
+    now = time.time()
+    with _jobs_lock:
+        expired = [
+            jid for jid, state in _jobs.items()
+            if state.status in (PipelineStatus.COMPLETED, PipelineStatus.FAILED)
+            and hasattr(state, '_created_at')
+            and now - state._created_at > _JOB_TTL_SECONDS
+        ]
+        for jid in expired:
+            del _jobs[jid]
+            _job_owners.pop(jid, None)
+    if expired:
+        logger.info("jobs_evicted", count=len(expired))
 
 
 # ---------------------------------------------------------------------------
@@ -160,7 +182,11 @@ async def start_generation(request: GenerationRequest, user_id: str = Depends(ge
         request=request,
         status=PipelineStatus.PENDING,
     )
-    _jobs[state.job_id] = state
+    state._created_at = time.time()
+    with _jobs_lock:
+        _jobs[state.job_id] = state
+        _job_owners[state.job_id] = user_id
+    _evict_old_jobs()
 
     loop = asyncio.get_event_loop()
     loop.run_in_executor(_executor, _run_job, state.job_id, request)
@@ -175,8 +201,13 @@ async def start_generation(request: GenerationRequest, user_id: str = Depends(ge
 
 
 @app.get("/generate/{job_id}/stream")
-async def stream_progress(job_id: str) -> StreamingResponse:
+async def stream_progress(
+    job_id: str, user_id: str = Depends(get_current_user),
+) -> StreamingResponse:
     """Stream agent progress via Server-Sent Events."""
+    owner = _job_owners.get(job_id)
+    if owner and owner != user_id and owner != "dev-user-00000000":
+        raise HTTPException(status_code=403, detail="Access denied")
 
     async def event_generator() -> AsyncGenerator[str, None]:
         last_step_count = 0
@@ -232,6 +263,9 @@ async def abort_generation(job_id: str, user_id: str = Depends(get_current_user)
     state = _jobs.get(job_id)
     if state is None:
         raise HTTPException(status_code=404, detail="Job not found")
+    owner = _job_owners.get(job_id)
+    if owner and owner != user_id and owner != "dev-user-00000000":
+        raise HTTPException(status_code=403, detail="Access denied")
 
     if state.status == PipelineStatus.RUNNING or state.status == PipelineStatus.PENDING:
         state.status = PipelineStatus.FAILED
@@ -248,6 +282,9 @@ async def get_result(job_id: str, user_id: str = Depends(get_current_user)):
     state = _jobs.get(job_id)
     if state is None:
         raise HTTPException(status_code=404, detail="Job not found")
+    owner = _job_owners.get(job_id)
+    if owner and owner != user_id and owner != "dev-user-00000000":
+        raise HTTPException(status_code=403, detail="Access denied")
 
     if state.status == PipelineStatus.RUNNING:
         raise HTTPException(status_code=202, detail="Job still running")
@@ -321,12 +358,36 @@ async def clear_cache(user_id: str = Depends(get_current_user)):
 
 @app.get("/health")
 async def health():
-    """Health check for Render."""
+    """Health check — reports service and dependency status."""
+    checks = {"api": "ok"}
+
+    if settings.database_url:
+        try:
+            from app.db import get_pool
+            pool = await get_pool()
+            async with pool.acquire() as conn:
+                await conn.fetchval("SELECT 1")
+            checks["database"] = "ok"
+        except Exception as e:
+            checks["database"] = f"error: {e}"
+    else:
+        checks["database"] = "not_configured"
+
+    has_llm = bool(
+        settings.google_api_key
+        or settings.anthropic_api_key
+        or settings.openai_api_key
+    )
+    checks["llm"] = "configured" if has_llm else "not_configured"
+
+    overall = "ok" if checks["api"] == "ok" else "degraded"
+
     return {
-        "status": "ok",
+        "status": overall,
         "version": "2.0.0",
         "environment": settings.environment,
         "timestamp": datetime.now().isoformat(),
+        "checks": checks,
     }
 
 
@@ -338,14 +399,19 @@ def _run_job(job_id: str, request: GenerationRequest) -> None:
     from app.pipeline.graph import run_pipeline
 
     try:
-        _jobs[job_id].status = PipelineStatus.RUNNING
+        with _jobs_lock:
+            if job_id in _jobs:
+                _jobs[job_id].status = PipelineStatus.RUNNING
         result = run_pipeline(request)
-        _jobs[job_id] = result
+        with _jobs_lock:
+            _jobs[job_id] = result
+            result._created_at = time.time()
     except Exception as e:
-        state = _jobs.get(job_id)
-        if state:
-            state.status = PipelineStatus.FAILED
-            state.error_message = str(e)
+        with _jobs_lock:
+            state = _jobs.get(job_id)
+            if state:
+                state.status = PipelineStatus.FAILED
+                state.error_message = str(e)
         logger.error("job_failed", job_id=job_id, error=str(e))
 
 

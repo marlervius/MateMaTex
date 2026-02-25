@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from app.sharing.router import (
     ShareRequest,
     _hash_password,
+    _verify_password,
     _check_link_valid,
     _shared_links,
     _shared_resources,
@@ -33,13 +34,11 @@ def clean_stores():
 class TestPasswordHashing:
     def test_consistent_hashing(self):
         h1 = _hash_password("test123")
-        h2 = _hash_password("test123")
-        assert h1 == h2
+        assert _verify_password("test123", h1)
 
     def test_different_passwords_different_hash(self):
         h1 = _hash_password("test123")
-        h2 = _hash_password("test456")
-        assert h1 != h2
+        assert not _verify_password("test456", h1)
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +169,7 @@ class TestSharingIntegration:
         }
 
         # Correct password
-        assert _hash_password("mypassword") == link["password_hash"]
+        assert _verify_password("mypassword", link["password_hash"])
 
         # Wrong password
-        assert _hash_password("wrongpassword") != link["password_hash"]
+        assert not _verify_password("wrongpassword", link["password_hash"])

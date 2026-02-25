@@ -6,7 +6,7 @@ Supports: password protection, expiry dates, view limits, cloning.
 
 from __future__ import annotations
 
-import hashlib
+import bcrypt
 import secrets
 import uuid
 from datetime import datetime, timedelta
@@ -96,7 +96,11 @@ class VerifyPasswordRequest(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 def _hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def _verify_password(password: str, hashed: str) -> bool:
+    return bcrypt.checkpw(password.encode(), hashed.encode())
 
 
 def _check_link_valid(link: dict) -> tuple[bool, str]:
@@ -188,7 +192,7 @@ async def get_shared(token: str, password: str | None = None) -> SharedResourceR
     if link["password_hash"]:
         if not password:
             raise HTTPException(401, "Password required")
-        if _hash_password(password) != link["password_hash"]:
+        if not _verify_password(password, link["password_hash"]):
             raise HTTPException(403, "Incorrect password")
 
     # Increment view count

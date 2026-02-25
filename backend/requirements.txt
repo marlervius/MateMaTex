@@ -22,6 +22,9 @@ asyncpg>=0.30.0
 # Auth (JWT verification)
 python-jose[cryptography]>=3.3.0
 
+# Password hashing
+bcrypt>=4.0.0
+
 # LaTeX
 # pdflatex is a system dependency (installed via TeX Live in Docker)
 
