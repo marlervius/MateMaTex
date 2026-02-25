@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
-import { useAppStore } from "@/lib/store";
+import { useAppStore, type AgentStep } from "@/lib/store";
 import { startGeneration, streamProgress, getResult } from "@/lib/api";
 
 /* -----------------------------------------------------------------------
@@ -128,25 +128,27 @@ export function GenerationWizard() {
       store.setJobId(job_id);
 
       streamProgress(job_id, {
-        onStep: (s) => store.addStep(s),
+        onStep: (s) => store.addStep(s as unknown as AgentStep),
         onCurrentAgent: (a) => store.setCurrentAgent(a),
         onComplete: async (data) => {
           const result = await getResult(job_id);
+          const mathChecks = data.math_checks as number;
+          const mathCorrect = data.math_correct as number;
           store.setResult({
             jobId: job_id,
-            status: data.status,
-            fullDocument: result.full_document,
-            pdfUrl: result.pdf_path,
-            steps: result.steps,
+            status: data.status as "pending" | "running" | "completed" | "failed",
+            fullDocument: result.full_document as string,
+            pdfUrl: result.pdf_path as string,
+            steps: result.steps as AgentStep[],
             mathVerification: {
-              claimsChecked: data.math_checks,
-              claimsCorrect: data.math_correct,
-              claimsIncorrect: data.math_checks - data.math_correct,
-              allCorrect: data.math_checks === data.math_correct,
+              claimsChecked: mathChecks,
+              claimsCorrect: mathCorrect,
+              claimsIncorrect: mathChecks - mathCorrect,
+              allCorrect: mathChecks === mathCorrect,
             },
-            latexCompiled: data.latex_compiled,
-            totalDuration: data.total_duration,
-            error: data.error || "",
+            latexCompiled: data.latex_compiled as boolean,
+            totalDuration: data.total_duration as number,
+            error: (data.error as string) || "",
           });
         },
         onError: (err) => store.setError(err),

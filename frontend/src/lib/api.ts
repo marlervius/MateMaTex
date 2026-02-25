@@ -32,6 +32,14 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   return { "Content-Type": "application/json" };
 }
 
+async function handleResponse<T>(res: Response): Promise<T> {
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`API error ${res.status}: ${text}`);
+  }
+  return res.json();
+}
+
 // ---------------------------------------------------------------------------
 // Generation
 // ---------------------------------------------------------------------------
@@ -73,9 +81,9 @@ export async function startGeneration(
 export function streamProgress(
   jobId: string,
   callbacks: {
-    onStep?: (step: any) => void;
+    onStep?: (step: Record<string, unknown>) => void;
     onCurrentAgent?: (agent: string) => void;
-    onComplete?: (data: any) => void;
+    onComplete?: (data: Record<string, unknown>) => void;
     onError?: (error: string) => void;
   }
 ): () => void {
@@ -99,7 +107,7 @@ export function streamProgress(
   return () => eventSource.close();
 }
 
-export async function abortGeneration(jobId: string): Promise<any> {
+export async function abortGeneration(jobId: string): Promise<{ success: boolean; message: string }> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE}/generate/${jobId}`, {
     method: "DELETE",
@@ -109,21 +117,21 @@ export async function abortGeneration(jobId: string): Promise<any> {
   return res.json();
 }
 
-export async function getResult(jobId: string): Promise<any> {
+export async function getResult(jobId: string): Promise<Record<string, unknown>> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE}/generate/${jobId}/result`, { headers });
   if (!res.ok) throw new Error(`Failed to get result: ${res.statusText}`);
   return res.json();
 }
 
-export async function estimateCost(request: GenerateRequest): Promise<any> {
+export async function estimateCost(request: GenerateRequest): Promise<Record<string, unknown>> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE}/estimate`, {
     method: "POST",
     headers,
     body: JSON.stringify(request),
   });
-  return res.json();
+  return handleResponse(res);
 }
 
 // ---------------------------------------------------------------------------
@@ -145,7 +153,7 @@ export async function compileLatex(
     headers,
     body: JSON.stringify({ latex_body: latexBody, filename }),
   });
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function editorAction(
@@ -169,7 +177,7 @@ export async function editorAction(
       extra_instructions: extra,
     }),
   });
-  return res.json();
+  return handleResponse(res);
 }
 
 // ---------------------------------------------------------------------------
@@ -220,7 +228,7 @@ export async function listExercises(params?: {
   const res = await fetch(`${API_BASE}/exercises?${sp.toString()}`, {
     headers,
   });
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function searchExercises(
@@ -232,7 +240,7 @@ export async function searchExercises(
     `${API_BASE}/exercises/search?q=${encodeURIComponent(query)}&limit=${limit}`,
     { headers }
   );
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function ingestExercises(
@@ -252,7 +260,7 @@ export async function ingestExercises(
       generation_id: generationId,
     }),
   });
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function findSimilarExercises(
@@ -264,7 +272,7 @@ export async function findSimilarExercises(
     `${API_BASE}/exercises/${exerciseId}/similar?limit=${limit}`,
     { headers }
   );
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function generateVariant(
@@ -277,7 +285,7 @@ export async function generateVariant(
     headers,
     body: JSON.stringify({ instructions }),
   });
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function exportExercises(
@@ -302,7 +310,7 @@ export async function exportExercises(
       title,
     }),
   });
-  return res.json();
+  return handleResponse(res);
 }
 
 // ---------------------------------------------------------------------------
@@ -332,7 +340,7 @@ export async function differentiate(
       grade,
     }),
   });
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function generateHints(
@@ -353,7 +361,7 @@ export async function generateHints(
       solution,
     }),
   });
-  return res.json();
+  return handleResponse(res);
 }
 
 // ---------------------------------------------------------------------------
@@ -381,7 +389,7 @@ export async function exportPdf(params: {
     headers,
     body: JSON.stringify(params),
   });
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function exportDocx(
@@ -405,7 +413,7 @@ export async function exportDocx(
       include_solutions: includeSolutions,
     }),
   });
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function exportPptx(
@@ -429,7 +437,7 @@ export async function exportPptx(
       solutions_as: solutionsAs,
     }),
   });
-  return res.json();
+  return handleResponse(res);
 }
 
 // ---------------------------------------------------------------------------
@@ -453,7 +461,7 @@ export async function createShare(params: {
     headers,
     body: JSON.stringify(params),
   });
-  return res.json();
+  return handleResponse(res);
 }
 
 export async function getShared(
@@ -462,7 +470,7 @@ export async function getShared(
 ): Promise<{
   success: boolean;
   resource_type: string;
-  content: any;
+  content: Record<string, unknown>;
   allow_download: boolean;
   allow_clone: boolean;
 }> {
@@ -470,7 +478,7 @@ export async function getShared(
     ? `${API_BASE}/sharing/${token}?password=${encodeURIComponent(password)}`
     : `${API_BASE}/sharing/${token}`;
   const res = await fetch(url);
-  return res.json();
+  return handleResponse(res);
 }
 
 // ---------------------------------------------------------------------------
