@@ -101,7 +101,7 @@ class TestLatexRetryRouting:
             ),
             latex_fix_attempts=3,
         )
-        assert should_retry_latex(state) == "finalize"
+        assert should_retry_latex(state) == "latex_fallback"
 
 
 class TestGraphStructure:
@@ -118,8 +118,15 @@ class TestGraphStructure:
         graph = create_pipeline()
         # LangGraph stores nodes internally
         expected_nodes = {
-            "pedagogue", "author", "math_verifier",
-            "editor", "latex_validator", "latex_fixer", "finalize",
+            "pedagogue",
+            "author",
+            "math_verifier",
+            "editor",
+            "tikz_validator",
+            "latex_validator",
+            "latex_fixer",
+            "latex_fallback",
+            "finalize",
         }
         # Verify nodes exist by compiling (will fail if nodes are missing)
         compiled = graph.compile()
