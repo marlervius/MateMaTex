@@ -101,10 +101,7 @@ class LLMInterface:
         self._primary = self._build(primary_provider, primary_model)
 
         # Fallback model (only if different from primary)
-        if (
-            cfg.fallback_provider != primary_provider
-            or cfg.fallback_model != primary_model
-        ):
+        if cfg.fallback_provider != primary_provider or cfg.fallback_model != primary_model:
             try:
                 self._fallback = self._build(cfg.fallback_provider, cfg.fallback_model)
             except Exception:
@@ -132,19 +129,36 @@ class LLMInterface:
     def model(self) -> str:
         return self._model_name
 
-    def invoke(self, system_prompt: str, user_prompt: str) -> str:
+    def invoke(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        *,
+        timeout_seconds: int = 300,
+    ) -> str:
         """
         Send a system+user prompt pair to the LLM. Returns the text response.
         Falls back to secondary model on failure.
         """
+        import signal
+
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_prompt),
         ]
 
+        def _timeout_handler(signum, frame):
+            raise TimeoutError(f"LLM call timed out after {timeout_seconds}s")
+
         try:
-            response = self._primary.invoke(messages)
-            return response.content
+            old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
+            signal.alarm(timeout_seconds)
+            try:
+                response = self._primary.invoke(messages)
+                return response.content
+            finally:
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, old_handler)
         except Exception as primary_err:
             logger.warning(
                 "primary_llm_failed",
@@ -167,15 +181,26 @@ class LLMInterface:
 
             raise primary_err
 
-    async def ainvoke(self, system_prompt: str, user_prompt: str) -> str:
+    async def ainvoke(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        *,
+        timeout_seconds: int = 300,
+    ) -> str:
         """Async version of invoke."""
+        import asyncio
+
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_prompt),
         ]
 
         try:
-            response = await self._primary.ainvoke(messages)
+            response = await asyncio.wait_for(
+                self._primary.ainvoke(messages),
+                timeout=timeout_seconds,
+            )
             return response.content
         except Exception as primary_err:
             if self._fallback is not None:
