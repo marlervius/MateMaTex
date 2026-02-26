@@ -8,6 +8,7 @@ langchain-openai>=0.2.0
 
 # Math verification
 sympy>=1.13.0
+antlr4-python3-runtime==4.13.2  # Needed by SymPy's LaTeX parser (suppresses warning)
 
 # API
 fastapi>=0.115.0
