@@ -64,51 +64,43 @@ $2$  & $5$  & $(2, 5)$ \\\\
 \\end{tabular}
 \\end{center}
 
-=== FIGURER — BRUK FERDIGLAGDE MAKROER (ENKLEST OG SIKRESTE) ===
+=== FIGURER — TRE ALTERNATIVER ===
 
-MateMaTeX har innebygde figur-makroer du SKAL bruke fremfor å skrive rå TikZ.
-Makroene er ferdige og feilfrie — bruk dem alltid når de passer!
+For HVER figur, velg det mest passende alternativet:
 
-MAKRO 1 — Rettvinklet trekant for Pytagoras:
+ALTERNATIV A — FERDIGE MAKROER (for standard geometri-figurer):
+\\MMArettvinklet{3}{4}{5}   → Rettvinklet trekant (Pytagoras)
+\\MMAtrigfig                 → Trigonometri-trekant (hosliggende/motstående/hypotenus)
+\\MMArektangel{5}{3}         → Rektangel med målpiler
+\\MMAromfigurer              → Sylinder + kjegle + kule
+\\MMAprosent{35}             → 10×10 prosentrutenett (35 celler fylt)
+
+Eksempel:
 \\begin{figure}[H]
 \\centering
 \\MMArettvinklet{3}{4}{5}
-\\caption{Rettvinklet trekant med $a=3$, $b=4$, $c=5$, og $3^2+4^2=5^2$.}
+\\caption{Rettvinklet trekant med $3^2+4^2=5^2$.}
 \\end{figure}
 
-MAKRO 2 — Trigonometri-trekant med hosliggende/motstående/hypotenus:
+ALTERNATIV B — KREATIVE KONTEKSTTILPASSEDE TikZ-figurer (bruk for scener, illustrasjoner):
+Når temaet krever det, lag KREATIVE figurer direkte i TikZ! Lag figurer som:
+- En person og et tre med skygger (formlikhet)
+- Et kart med linjal og målestokk
+- To formlike trekanter side om side med fargemarkerte vinkler
+- Arealer som sammenlignes visuelt (liten firkant → stor firkant med pil)
+- En stige mot en vegg (Pytagoras i praksis)
+Bruk farger (mainBlue, mainGreen, mainOrange, lightBlue osv.) og dekorasjoner!
+
+ALTERNATIV C — PGFPlots for funksjonsgrafer:
+\\begin{axis}[...] for grafer av funksjoner.
+
+ALLE figurer SKAL ha denne strukturen:
 \\begin{figure}[H]
 \\centering
-\\MMAtrigfig
-\\caption{Rettvinklet trekant med definisjon av motstående, hosliggende og hypotenus.}
-\\end{figure}
-
-MAKRO 3 — Rektangel med målpiler:
-\\begin{figure}[H]
-\\centering
-\\MMArektangel{5}{3}
-\\caption{Rektangel med lengde 5 cm og bredde 3 cm. Areal $= 5 \\cdot 3 = 15$ cm$^2$.}
-\\end{figure}
-
-MAKRO 4 — Romfigurer (sylinder + kjegle + kule, ferdig som figur):
-\\MMAromfigurer
-
-MAKRO 5 — Prosentrutenett (N av 100 celler fylt):
-\\begin{figure}[H]
-\\centering
-\\MMAprosent{35}
-\\caption{$35\\%$ av rutenettet er fylt (35 av 100 celler).}
-\\end{figure}
-
-=== NÅR MAKROENE IKKE PASSER — RÅ TikZ-MØNSTRE ===
-
-Bruk bare rå TikZ når ingen makro passer. Alle figurer SKAL ha:
-\\begin{figure}[H]
-\\centering
-\\begin{tikzpicture}
+\\begin{tikzpicture}[scale=..., font=\\small]
   % ... kode her ...
 \\end{tikzpicture}
-\\caption{Beskrivende tekst.}
+\\caption{Beskrivende norsk tekst.}
 \\end{figure}
 
 --- MØNSTER 1: Graf med PGFPlots ---
@@ -207,31 +199,34 @@ Bruk bare rå TikZ når ingen makro passer. Alle figurer SKAL ha:
 \\caption{Trekant $ABC$ med sider $a$, $b$ og $c$.}
 \\end{figure}
 
---- MØNSTER 5b: Rettvinklet trekant for trigonometri (med motstående/hosliggende/hypotenus) ---
+--- MØNSTER 5b: Kreativ scene (formlikhet/indirekte måling) ---
 \\begin{figure}[H]
 \\centering
-\\begin{tikzpicture}[scale=1.1, font=\\small]
-  \\coordinate (O) at (0,0);
-  \\coordinate (A) at (4,0);
-  \\coordinate (B) at (4,3);
-  % Fyll og kant
-  \\fill[lightBlue!50] (O) -- (A) -- (B) -- cycle;
-  \\draw[thick, mainBlue] (O) -- (A) -- (B) -- cycle;
-  % Rett vinkel
-  \\draw[mainBlue] (4,0.35) -- (3.65,0.35) -- (3.65,0);
-  % Vinkel-markering ved O
-  \\draw[mainOrange, thick] (0.7,0) arc(0:36.87:0.7);
-  \\node[font=\\small] at (1.0, 0.25) {$v$};
-  % Sidetekster inne i/ved figuren
-  \\node[below, mainBlue] at (2,0)   {Hosliggende};
-  \\node[right, mainBlue] at (4,1.5) {Motstående};
-  \\node[above left, mainBlue] at (2,1.7) {Hypotenus};
-  % Hjørnebokstaver
-  \\node[below left]  at (O) {$O$};
-  \\node[below right] at (A) {$A$};
-  \\node[above right] at (B) {$B$};
+\\begin{tikzpicture}[scale=0.55, font=\\small]
+  % Bakke
+  \\fill[mainGreen!15] (-1,-0.2) rectangle (16,0);
+  \\draw[thick, mainGreen!50!black] (-1,0) -- (16,0);
+  % Person (1.8m)
+  \\draw[thick, mainBlue] (2,0) -- (2,1.8);
+  \\fill[mainBlue] (2,1.8) circle (0.15);
+  \\draw[<->, mainOrange, thick] (1.3,0) -- (1.3,1.8) node[midway, left] {$1{,}8$ m};
+  % Flaggstang (h=?)
+  \\draw[very thick, mainPurple] (12,0) -- (12,7);
+  \\fill[red] (12,7) -- (12,6.3) -- (13.2,6.65) -- cycle;
+  \\draw[<->, mainOrange, thick] (13,0) -- (13,7) node[midway, right] {$h = ?$};
+  % Skygger (stiplede)
+  \\draw[dashed, mainOrange] (2,1.8) -- (4.4,0);
+  \\draw[dashed, mainOrange] (12,7) -- (16,0);
+  % Skyggemål
+  \\draw[<->, mainTeal, thick] (2,-0.5) -- (4.4,-0.5) node[midway, below] {$2{,}4$ m};
+  \\draw[<->, mainTeal, thick] (12,-0.5) -- (16,-0.5) node[midway, below] {$12$ m};
+  % Sol
+  \\fill[yellow!80!orange] (-0.5,8) circle (0.5);
+  \\foreach \\a in {0,30,...,330} {
+    \\draw[yellow!80!orange, thick] (-0.5,8) ++ (\\a:0.6) -- ++ (\\a:0.3);
+  }
 \\end{tikzpicture}
-\\caption{Rettvinklet trekant: $\\sin(v) = \\frac{\\text{motstående}}{\\text{hypotenus}}$, $\\cos(v) = \\frac{\\text{hosliggende}}{\\text{hypotenus}}$, $\\tan(v) = \\frac{\\text{motstående}}{\\text{hosliggende}}$.}
+\\caption{Bruk formlikhet til å finne høyden på flaggstanga.}
 \\end{figure}
 
 --- MØNSTER 6: Posisjonsskjema for desimaltall (bruk tabular, IKKE tikzpicture) ---
@@ -248,63 +243,58 @@ Bruk bare rå TikZ når ingen makro passer. Alle figurer SKAL ha:
 \\end{center}
 (Merk: posisjonsskjema er et unntak der \\hline er tillatt for å vise rutenett.)
 
---- MØNSTER 7: Rettvinklet trekant med Pytagoras (ENKEL versjon — INGEN kvadrater utenfor) ---
-\\begin{figure}[H]
-\\centering
-\\begin{tikzpicture}[scale=1.0, font=\\small]
-  \\coordinate (A) at (0,0);
-  \\coordinate (B) at (4,0);
-  \\coordinate (C) at (4,3);
-  % Fyll og kant
-  \\fill[lightBlue] (A) -- (B) -- (C) -- cycle;
-  \\draw[thick, mainBlue] (A) -- (B) -- (C) -- cycle;
-  % Rett vinkel-markering
-  \\draw[mainBlue] (4,0.3) -- (3.7,0.3) -- (3.7,0);
-  % Sidemål langs sidene
-  \\node[below] at (2,0) {$a = 4$};
-  \\node[right] at (4,1.5) {$b = 3$};
-  \\node[above left] at (2,1.5) {$c = 5$};
-  % Hjørnebokstaver
-  \\node[below left] at (A) {$A$};
-  \\node[below right] at (B) {$B$};
-  \\node[above right] at (C) {$C$};
-\\end{tikzpicture}
-\\caption{Rettvinklet trekant med $a^2 + b^2 = c^2$: $4^2 + 3^2 = 16 + 9 = 25 = 5^2$.}
-\\end{figure}
-
-MERK: ALDRI tegn kvadrater utenfor trekanten for Pytagoras — det er for komplekst og ødelegger layouten.
-
---- MØNSTER 8: Enkle romfigurer (sylinder, kjegle, kule) — bruk ENKEL 2D-representasjon ---
-% Sylinder (enkel):
+--- MØNSTER 7: Formlike trekanter med fargede vinkelmarkeringer ---
 \\begin{figure}[H]
 \\centering
 \\begin{tikzpicture}[scale=0.8, font=\\small]
-  % Sylinder
-  \\begin{scope}[xshift=0cm]
-    \\draw[thick, mainBlue, fill=lightBlue!40] (0,0) ellipse (1 and 0.3);
-    \\draw[thick, mainBlue, fill=lightBlue!20] (-1,0) -- (-1,-2.5) arc(180:360:1 and 0.3) -- (1,0) arc(0:180:1 and 0.3);
-    \\draw[thick, mainBlue] (0,-2.5) ellipse (1 and 0.3);
-    \\draw[<->, mainOrange, thick] (1.3,0) -- (1.3,-2.5) node[midway, right] {$h$};
-    \\draw[<->, mainOrange, thick] (0,0) -- (1,0) node[midway, above] {$r$};
-    \\node[below] at (0,-3.2) {Sylinder};
-  \\end{scope}
-  % Kjegle
-  \\begin{scope}[xshift=3.5cm]
-    \\draw[thick, mainBlue, fill=lightBlue!20] (-1,-2.5) -- (0,0) -- (1,-2.5);
-    \\draw[thick, mainBlue] (0,-2.5) ellipse (1 and 0.3);
-    \\draw[<->, mainOrange, thick] (1.3,0) -- (1.3,-2.5) node[midway, right] {$h$};
-    \\draw[<->, mainOrange, thick] (0,-2.5) -- (1,-2.5) node[midway, below] {$r$};
-    \\node[below] at (0,-3.2) {Kjegle};
-  \\end{scope}
-  % Kule
-  \\begin{scope}[xshift=7cm]
-    \\draw[thick, mainBlue, fill=lightBlue!30] (0,0) circle (1.2);
-    \\draw[thick, mainBlue, dashed] (0,0) ellipse (1.2 and 0.35);
-    \\draw[<->, mainOrange, thick] (0,0) -- (1.2,0) node[midway, above] {$r$};
-    \\node[below] at (0,-1.7) {Kule};
-  \\end{scope}
+  % Liten trekant
+  \\coordinate (A) at (0,0);
+  \\coordinate (B) at (3,0);
+  \\coordinate (C) at (1.2,2.4);
+  \\draw[thick, mainBlue] (A) -- (B) -- (C) -- cycle;
+  \\node[below left] at (A) {$A$};
+  \\node[below right] at (B) {$B$};
+  \\node[above] at (C) {$C$};
+  % Vinkelmarkeringer i farger
+  \\draw[mainOrange, thick] (0.5,0) arc(0:63:0.5);
+  \\draw[mainGreen, thick] (2.5,0) arc(180:123:0.5);
+  \\draw[mainPurple, thick] ($(C)+(-0.3,-0.5)$) arc(243:353:0.4);
+  % Stor trekant (forskjøvet)
+  \\coordinate (D) at (5.5,0);
+  \\coordinate (E) at (11,0);
+  \\coordinate (F) at (7.7,4.4);
+  \\draw[thick, mainBlue] (D) -- (E) -- (F) -- cycle;
+  \\node[below left] at (D) {$D$};
+  \\node[below right] at (E) {$E$};
+  \\node[above] at (F) {$F$};
+  % Samme vinkelmarkeringer (formlike!)
+  \\draw[mainOrange, thick] (6.1,0) arc(0:63:0.6);
+  \\draw[mainGreen, thick] (10.3,0) arc(180:123:0.7);
+  \\draw[mainPurple, thick] ($(F)+(-0.35,-0.6)$) arc(243:353:0.5);
+  % Pil mellom
+  \\draw[->, thick, mainGray] (3.5,1.2) -- (5.0,1.2) node[midway, above] {$k$};
 \\end{tikzpicture}
-\\caption{Sylinder, kjegle og kule med radius $r$ og høyde $h$.}
+\\caption{Formlike trekanter $\\triangle ABC \\sim \\triangle DEF$. Samsvarende vinkler har samme farge.}
+\\end{figure}
+
+--- MØNSTER 8: Areal-sammenligning (liten → stor med skaleringsfaktor) ---
+\\begin{figure}[H]
+\\centering
+\\begin{tikzpicture}[scale=0.8, font=\\small]
+  % Liten firkant
+  \\draw[thick, mainBlue, fill=lightBlue!40] (0,0) rectangle (1.5,1.5);
+  \\node[below] at (0.75,0) {$1$};
+  \\node[left] at (0,0.75) {$1$};
+  \\node at (0.75,0.75) {$A=1$};
+  % Pil
+  \\draw[->, very thick, mainOrange] (2.2,0.75) -- (3.8,0.75) node[midway, above] {$k = 2$};
+  % Stor firkant
+  \\draw[thick, mainBlue, fill=lightBlue!40] (4.5,0) rectangle (7.5,3);
+  \\node[below] at (6,0) {$2$};
+  \\node[right] at (7.5,1.5) {$2$};
+  \\node at (6,1.5) {$A = 2^2 = 4$};
+\\end{tikzpicture}
+\\caption{Når sidelengden dobles ($k=2$), firedobles arealet: $A = k^2 = 4$.}
 \\end{figure}
 
 === TikZ-REGLER ===
@@ -314,13 +304,12 @@ TikZ-biblioteker (allerede lastet): arrows.meta, calc, patterns, positioning,
 shapes.geometric, decorations.pathreplacing, decorations.pathmorphing.
 
 VIKTIG for TikZ-figurer:
-- Sett ALLTID scale eller eksplisitte koordinater — aldri la figuren bli for stor
-- Bruk font=\\small inne i tikzpicture for å unngå for store labels
-- Etiketter og piler: plasser INNE i figuren, eller med nok margin
-- Unngå \\Huge inne i tikzpicture — bruk \\large eller \\normalsize
-- Desimalkomma: skriv det som node-tekst: \\node at (x,y) {,};  med font=\\LARGE
-- ALDRI tegn kvadrater rundt alle sider av en trekant (Pytagoras) — bruk Mønster 7 i stedet
-- ALDRI bruk for store koordinater uten scale — figuren kan gå utenfor siden
+- Vær KREATIV! Lag konteksttilpassede figurer som illustrerer temaet visuelt
+- Bruk farger, \\fill, skygger, piler og labels for å gjøre figurer pedagogiske
+- Sett ALLTID scale og bruk font=\\small inne i tikzpicture
+- Koordinater: hold alle innenfor rimelige grenser (max ca. 16 i bredden)
+- For Pytagoras-trekant: bruk \\MMArettvinklet{a}{b}{c} (makro) — ALDRI tegn kvadrater
+- For sylinder/kjegle/kule: bruk \\MMAromfigurer (makro)
 - Alle figurer SKAL passe innenfor tekstbredden (max \\textwidth)
 
 === MATEMATIKK ===
@@ -561,6 +550,24 @@ $\frac{1}{10};\; 0{,}1;\; 10\,\%$
 ]
 
 
+def _get_templates_for_grade(grade: str) -> str:
+    """Get TikZ template examples from the graph_templates library for this grade."""
+    try:
+        from app.latex.graph_templates import get_templates_for_grade
+        templates = get_templates_for_grade(grade)
+        if not templates:
+            return ""
+        # Include up to 4 templates as examples (don't overwhelm the prompt)
+        parts = ["\n=== FERDIGLAGDE TikZ-MALER DU KAN KOPIERE OG TILPASSE ===\n"]
+        for t in templates[:4]:
+            parts.append(f"--- {t.name} ({t.category}) ---")
+            parts.append(t.tikz_code.strip())
+            parts.append("")
+        return "\n".join(parts)
+    except ImportError:
+        return ""
+
+
 def build_author_prompt(
     pedagogical_plan: str,
     grade: str,
@@ -569,6 +576,8 @@ def build_author_prompt(
     content_options: dict,
 ) -> str:
     """Build the user prompt for the author agent."""
+    template_examples = _get_templates_for_grade(grade)
+
     return f"""\
 Skriv KOMPLETT LaTeX body-innhold basert på denne pedagogiske planen:
 
@@ -583,16 +592,15 @@ HUSK:
 - Bruk de obligatoriske LaTeX-miljøene (definisjon, eksempel, taskbox, merk, losning)
 - ALDRI \\includegraphics, aldri [INSERT FIGURE], aldri preamble
 
-FIGURER — bruk alltid makroene:
-  * Rettvinklet trekant (Pytagoras) → \\MMArettvinklet{{a}}{{b}}{{c}}
-  * Trigonometri-trekant             → \\MMAtrigfig
-  * Rektangel                        → \\MMArektangel{{l}}{{b}}
-  * Sylinder + kjegle + kule         → \\MMAromfigurer
-  * Prosentrutenett                  → \\MMAprosent{{N}}
-  * Graf                             → Mønster 1 (rå PGFPlots axis)
-  * Sirkel/sektorer                  → Mønster 2 (rå TikZ arc)
-  * Vilkårlig trekant                → Mønster 5 (rå TikZ)
-
+FIGURER — tre alternativer i prioritert rekkefølge:
+1. MAKROER for standard geometri:
+   \\MMArettvinklet{{a}}{{b}}{{c}}, \\MMAtrigfig, \\MMArektangel{{l}}{{b}},
+   \\MMAromfigurer, \\MMAprosent{{N}}
+2. KREATIV TikZ for konteksttilpassede scener (flaggstang+skygge, kart med målestokk,
+   formlike trekanter med fargede vinkler, stige mot vegg, person+tre osv.)
+   — bruk farger, \\fill, piler, labels!
+3. PGFPlots \\begin{{axis}} for funksjonsgrafer
+{template_examples}
 - ALLE tabeller: booktabs (\\toprule/\\midrule/\\bottomrule), ALDRI | eller \\hline (unntatt posisjonsskjema)
 - ALLE beregninger og løsningsforslag MÅ være matematisk korrekte
 - INGEN preamble (\\documentclass, \\usepackage osv.)
