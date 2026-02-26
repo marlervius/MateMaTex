@@ -44,10 +44,13 @@ def compile_to_pdf(
                         str(tex_path),
                     ],
                     capture_output=True,
-                    text=True,
+                    text=False,  # Read as bytes — pdflatex may output latin1
                     timeout=120,
                     cwd=tmpdir,
                 )
+                # Decode stdout/stderr safely (pdflatex mixes UTF-8 and latin1)
+                proc.stdout = proc.stdout.decode("utf-8", errors="replace") if proc.stdout else ""
+                proc.stderr = proc.stderr.decode("utf-8", errors="replace") if proc.stderr else ""
             except (FileNotFoundError, subprocess.TimeoutExpired) as e:
                 logger.error("pdflatex_error", error=str(e))
                 return None
