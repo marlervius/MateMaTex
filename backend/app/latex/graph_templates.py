@@ -4,6 +4,7 @@ Pre-built TikZ/PGFPlots templates for common mathematical visualizations.
 Organized by grade level and topic.
 """
 
+import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -627,6 +628,8 @@ TEMPLATES_BY_CATEGORY = {
     "Telling": [COUNTING_BLOCKS, TEN_FRAME],
 }
 
+_TEMPLATES_BY_ID: dict[str, GraphTemplate] = {t.id: t for t in ALL_TEMPLATES}
+
 TEMPLATES_BY_GRADE = {
     "1-4": [NUMBERLINE_BASIC, FRACTION_CIRCLE, FRACTION_RECTANGLE, COUNTING_BLOCKS, TEN_FRAME],
     "5-7": [NUMBERLINE_NEGATIVE, NUMBERLINE_FRACTIONS, FRACTION_CIRCLE, FRACTION_RECTANGLE, 
@@ -639,15 +642,17 @@ TEMPLATES_BY_GRADE = {
 
 def get_templates_for_grade(grade: str) -> list[GraphTemplate]:
     """Get all templates suitable for a grade level."""
-    if "1" in grade and ("trinn" in grade or "-" in grade):
-        if "4" in grade or "3" in grade or "2" in grade:
-            return TEMPLATES_BY_GRADE["1-4"]
-    if "5" in grade or "6" in grade or "7" in grade:
-        return TEMPLATES_BY_GRADE["5-7"]
-    if "8" in grade or "9" in grade or "10" in grade:
-        return TEMPLATES_BY_GRADE["8-10"]
-    if "VG" in grade or "vg" in grade:
+    if "VG" in grade.upper():
         return TEMPLATES_BY_GRADE["VG"]
+    numbers = [int(m) for m in re.findall(r"\b(\d+)\b", grade)]
+    if numbers:
+        n = numbers[0]
+        if 1 <= n <= 4:
+            return TEMPLATES_BY_GRADE["1-4"]
+        if 5 <= n <= 7:
+            return TEMPLATES_BY_GRADE["5-7"]
+        if 8 <= n <= 10:
+            return TEMPLATES_BY_GRADE["8-10"]
     return ALL_TEMPLATES
 
 
@@ -658,10 +663,7 @@ def get_templates_for_category(category: str) -> list[GraphTemplate]:
 
 def get_template_by_id(template_id: str) -> Optional[GraphTemplate]:
     """Get a specific template by ID."""
-    for t in ALL_TEMPLATES:
-        if t.id == template_id:
-            return t
-    return None
+    return _TEMPLATES_BY_ID.get(template_id)
 
 
 def get_all_categories() -> list[str]:

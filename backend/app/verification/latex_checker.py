@@ -57,13 +57,11 @@ class LatexChecker:
                         str(tex_path),
                     ],
                     capture_output=True,
-                    text=False,  # Read as bytes — pdflatex may output latin1
+                    encoding="utf-8",
+                    errors="replace",
                     timeout=120,
                     cwd=tmpdir,
                 )
-                # Decode safely (pdflatex mixes UTF-8 and latin1)
-                proc.stdout = proc.stdout.decode("utf-8", errors="replace") if proc.stdout else ""
-                proc.stderr = proc.stderr.decode("utf-8", errors="replace") if proc.stderr else ""
 
                 # Read the log
                 if log_path.exists():

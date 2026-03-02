@@ -147,12 +147,10 @@ def _compile_latex(full_content: str, filename: str) -> tuple[str, list[dict], l
                         tex_path,
                     ],
                     capture_output=True,
-                    text=False,  # Read as bytes — pdflatex may output latin1
+                    encoding="utf-8",
+                    errors="replace",
                     timeout=120,
                 )
-                # Decode safely (pdflatex mixes UTF-8 and latin1)
-                proc_result.stdout = proc_result.stdout.decode("utf-8", errors="replace") if proc_result.stdout else ""
-                proc_result.stderr = proc_result.stderr.decode("utf-8", errors="replace") if proc_result.stderr else ""
                 result = proc_result
             except subprocess.TimeoutExpired:
                 return "", [{"line": 0, "message": "Compilation timed out (120s)", "severity": "error"}], []

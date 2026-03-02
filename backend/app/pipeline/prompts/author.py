@@ -7,6 +7,14 @@ Contains:
 - Explicit negative list
 """
 
+try:
+    from app.latex.graph_templates import get_templates_for_grade as _get_grade_templates
+    _TEMPLATES_AVAILABLE = True
+except ImportError:
+    _TEMPLATES_AVAILABLE = False
+
+_TEMPLATE_CACHE: dict[str, str] = {}
+
 SYSTEM_PROMPT = """\
 Du er en profesjonell matematiker og lærebokforfatter som skriver LaTeX-innhold med TikZ-illustrasjoner.
 
@@ -552,20 +560,23 @@ $\frac{1}{10};\; 0{,}1;\; 10\,\%$
 
 def _get_templates_for_grade(grade: str) -> str:
     """Get TikZ template examples from the graph_templates library for this grade."""
-    try:
-        from app.latex.graph_templates import get_templates_for_grade
-        templates = get_templates_for_grade(grade)
-        if not templates:
-            return ""
+    if not _TEMPLATES_AVAILABLE:
+        return ""
+    if grade in _TEMPLATE_CACHE:
+        return _TEMPLATE_CACHE[grade]
+    templates = _get_grade_templates(grade)
+    if not templates:
+        result = ""
+    else:
         # Include up to 4 templates as examples (don't overwhelm the prompt)
         parts = ["\n=== FERDIGLAGDE TikZ-MALER DU KAN KOPIERE OG TILPASSE ===\n"]
         for t in templates[:4]:
             parts.append(f"--- {t.name} ({t.category}) ---")
             parts.append(t.tikz_code.strip())
             parts.append("")
-        return "\n".join(parts)
-    except ImportError:
-        return ""
+        result = "\n".join(parts)
+    _TEMPLATE_CACHE[grade] = result
+    return result
 
 
 def build_author_prompt(
