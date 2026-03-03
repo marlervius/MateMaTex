@@ -326,6 +326,92 @@ VIKTIG for TikZ-figurer:
 - \\sqrt{} for kvadratrot
 - Norsk desimalkomma: $1{,}35$ (med klammeparenteser)
 
+Brøk, potenser, røtter:
+  \\frac{a}{b}   \\quad   x^{n}   \\quad   \\sqrt{x}   \\quad   \\sqrt[n]{x}
+
+Derivasjon:
+  $f'(x)$, $f''(x)$   (Newtons notasjon)
+  $\\frac{\\mathrm{d}f}{\\mathrm{d}x}$   (Leibniz)
+  $\\int_a^b f(x)\\,\\mathrm{d}x$   (bestemt integral — bruk \\dd fra preamble: $\\int_a^b f(x)\\dd x$)
+  $\\lim_{x \\to \\infty} f(x)$   $\\sum_{k=1}^{n} k^2$
+
+Statistikk:
+  $\\bar{x}$ (gjennomsnitt)   $\\sigma$, $\\sigma^2$ (standardavvik, varians)
+  $P(A \\cup B)$   $\\binom{n}{k}$
+
+Geometri og vektorer:
+  $\\angle ABC$   $\\overrightarrow{AB}$   $\\|\\vec{v}\\|$   $\\vec{v} \\cdot \\vec{u}$
+
+Ligningssystemer:
+  \\begin{align}
+    2x + 3y &= 7 \\\\\\\\
+    x - y   &= 1
+  \\end{align}
+
+=== VANSKELIGHETSGRAD I OPPGAVER ===
+Marker oppgaver tydelig når innholdet krever nivåinndeling:
+\\begin{taskbox}{Oppgave 1 \\hfill \\textcolor{green!60!black}{★☆☆ Grunnleggende}}
+...
+\\end{taskbox}
+\\begin{taskbox}{Oppgave 2 \\hfill \\textcolor{mainOrange}{★★☆ Middels}}
+...
+\\end{taskbox}
+\\begin{taskbox}{Oppgave 3 \\hfill \\textcolor{red}{★★★ Utfordrende}}
+...
+\\end{taskbox}
+
+=== PRØVE/EKSAMEN-STRUKTUR ===
+Når innholdstypen er prøve eller eksamen, bruk IKKE \\maketitle — bruk denne strukturen i stedet:
+
+\\begin{center}
+  {\\LARGE\\bfseries Prøve i [Fag]}\\\\[0.5em]
+  {\\large [Dato] \\quad Varighet: [X] timer}\\\\[0.3em]
+  {\\normalsize Hjelpemidler: [Tillatte hjelpemidler]}
+\\end{center}
+
+\\vspace{1em}
+\\noindent\\rule{\\textwidth}{0.5pt}
+\\vspace{0.5em}
+
+\\noindent\\textbf{Navn:} \\underline{\\hspace{8cm}} \\quad \\textbf{Klasse:} \\underline{\\hspace{3cm}}
+
+\\vspace{1em}
+
+\\begin{tcolorbox}[colback=blue!5, colframe=blue!40, title=Informasjon]
+  Vis all utregning. Delpoeng gis for delvis korrekt løsning.
+  Totalt: \\textbf{[X] poeng}
+\\end{tcolorbox}
+
+\\section*{Del 1 --- Uten hjelpemidler}
+
+\\begin{enumerate}[label=\\textbf{Oppgave \\arabic*.}, leftmargin=*, itemsep=2em]
+\\item
+  [Oppgavetekst] \\textit{([X] poeng)}
+\\end{enumerate}
+
+\\newpage
+
+\\section*{Del 2 --- Med hjelpemidler}
+
+\\begin{enumerate}[label=\\textbf{Oppgave \\arabic*.}, leftmargin=*, itemsep=2em, resume]
+\\item
+  [Oppgavetekst] \\textit{([X] poeng)}
+\\end{enumerate}
+
+=== FASIT-BOKS ===
+Bruk for svarark eller når fasit skal inkluderes:
+\\begin{fasit}
+\\begin{enumerate}[label=\\arabic*.]
+  \\item $x = \\frac{3}{2}$ eller $x = 1$
+  \\item $f'(x) = 3x^2 - 2$, stigningstall $= 10$
+\\end{enumerate}
+\\end{fasit}
+
+=== PLASS TIL UTREGNING (arbeidsark) ===
+Legg til under oppgaver der elever skal skrive:
+\\noindent\\textbf{Løsning:}\\\\[2cm]
+\\noindent\\rule{\\textwidth}{0.3pt}
+
 === LØSNINGSFORSLAG ===
 Plasser ALLTID på slutten:
 \\section*{Løsningsforslag}
@@ -339,7 +425,11 @@ b) Se figur.
 - ALLE beregninger i løsningsforslag SKAL være korrekte — de verifiseres automatisk
 - Vis utregning steg for steg
 - ALDRI bruk tomme eller generiske titler (title=Eksempel, title=title)
-- Start med \\title{...}, \\author{...}, \\date{\\today}, \\maketitle
+- Start med \\title{...}, \\author{...}, \\date{\\today}, \\maketitle (unntatt prøve-format)
+- KONTEKSTRIKE oppgaver: legg alltid til realistisk norsk kontekst der det er pedagogisk:
+  * Bruk norske navn (Kari, Ole, Sofie, Jonas) og norske steder (Oslo, Bergen, Tromsø)
+  * Bruk relevante scenarioer: priser, avstand, areal, befolkningsvekst, temperatur
+  * Tilpass alder og interesser til klassetrinnet
 """
 
 FEW_SHOT_EXAMPLES = [

@@ -143,6 +143,15 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
   #1
 }
 
+% Answer/Fasit Box (Yellow-Orange)
+\newtcolorbox{fasit}[1][]{
+  matebox,
+  colback=yellow!10, colframe=mainOrange,
+  fonttitle=\bfseries\sffamily, title={Fasit},
+  boxed title style={colback=mainOrange, colframe=mainOrange},
+  #1
+}
+
 % Theorem environments (fallback)
 \newtheorem{theorem}{Teorem}[section]
 \newtheorem{definition}[theorem]{Definisjon}
@@ -154,6 +163,7 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
 \newcommand{\Z}{\mathbb{Z}}
 \newcommand{\Q}{\mathbb{Q}}
 \newcommand{\R}{\mathbb{R}}
+\newcommand{\dd}{\,\mathrm{d}}
 
 % Section styling
 \usepackage{titlesec}
@@ -312,15 +322,16 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
 
 % Header/Footer
 \usepackage{fancyhdr}
+\usepackage{lastpage}
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[L]{\small\color{mainGray}\textit{Generert av MateMaTeX AI}}
 \fancyhead[R]{\small\color{mainGray}\today}
-\fancyfoot[C]{\small\color{mainGray}\thepage}
+\fancyfoot[C]{\small\color{mainGray}Side \thepage\ av \pageref{LastPage}}
 \renewcommand{\headrulewidth}{0.4pt}
 \renewcommand{\footrulewidth}{0pt}
 
-\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\small\color{mainGray}\thepage}\renewcommand{\headrulewidth}{0pt}}
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\small\color{mainGray}Side \thepage\ av \pageref{LastPage}}\renewcommand{\headrulewidth}{0pt}}
 
 """
 
