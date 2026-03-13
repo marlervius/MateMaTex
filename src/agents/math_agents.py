@@ -7,6 +7,9 @@ Temperature lowered to 0.3 for mathematical accuracy.
 import os
 from crewai import Agent, LLM
 from src.curriculum import format_boundaries_for_prompt, get_grade_boundaries
+from src.skills import MatteLatexSkill
+
+_skill = MatteLatexSkill()
 
 
 # Language level configurations for simplified Norwegian
@@ -243,7 +246,10 @@ class MathBookAgents:
                 "a) $x = 3$ ...\n"
                 "\\end{multicols}\n\n"
 
-                "FORBUDT:\n"
+                + _skill.get_difficulty_system() + "\n\n"
+                + _skill.get_contextual_guide() + "\n\n"
+
+                + "FORBUDT:\n"
                 "- Ren tekst 'Definisjon:', 'Eksempel:' uten boks\n"
                 "- Markdown-syntaks\n"
                 "- [INSERT FIGURE: ...] plassholdere\n"
@@ -301,16 +307,8 @@ class MathBookAgents:
                 "\\maketitle\n"
                 "...resten av innholdet...\n\n"
 
-                "=== KVALITETSKONTROLL ===\n\n"
-
-                "a) DEFINISJONER: Ren tekst 'Definisjon:' → \\begin{definisjon}...\\end{definisjon}\n"
-                "b) EKSEMPLER: Ren tekst 'Eksempel:' → \\begin{eksempel}[title=Beskrivende]...\\end{eksempel}\n"
-                "c) FIGURER: \\begin{figure} → \\begin{figure}[H] + \\centering + \\caption{}\n"
-                "d) OPPGAVER: Ren tekst oppgaver → \\begin{taskbox}{Oppgave N}...\\end{taskbox}\n"
-                "e) MATEMATIKK: Sjekk \\frac{}{}, \\sqrt{}, \\cdot\n"
-                "f) KLAMMER: Tell at alle { har matchende }\n"
-                "g) MILJØER: Alle \\begin{} har matchende \\end{}\n"
-                f"{language_check}\n"
+                + _skill.get_editor_checklist() + "\n"
+                + f"{language_check}\n"
 
                 "=== FASIT-VALIDERING ===\n\n"
                 "For HVER oppgave med fasit:\n"

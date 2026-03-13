@@ -44,6 +44,7 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
 \usepackage{enumitem}
 \usepackage{booktabs}
 \usepackage{multicol}
+\usepackage{lastpage}      % \pageref{LastPage} — siste sidenummer
 
 % Paragraph spacing
 \setlength{\parskip}{0.8em}
@@ -154,6 +155,17 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
   #1
 }
 
+% --- Exam Info Box (Blue, used in prøver/eksamener) ---
+\newtcolorbox{infobox}[1][Informasjon]{
+  enhanced, breakable,
+  colback=blue!5, colframe=blue!40,
+  fonttitle=\bfseries\sffamily, title={#1},
+  arc=3mm, left=8pt, right=8pt, top=6pt, bottom=6pt,
+}
+
+% --- Poeng-/score display (compact inline box) ---
+\newcommand{\poeng}[1]{\textit{(#1 poeng)}}
+
 % Theorem environments (fallback for simple usage)
 \newtheorem{theorem}{Teorem}[section]
 \newtheorem{definition}[theorem]{Definisjon}
@@ -165,6 +177,8 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
 \newcommand{\Z}{\mathbb{Z}}
 \newcommand{\Q}{\mathbb{Q}}
 \newcommand{\R}{\mathbb{R}}
+\newcommand{\C}{\mathbb{C}}
+\newcommand{\dd}{\,\mathrm{d}}  % Oppreist differensial-d: \int f(x)\dd x
 
 % Section styling
 \usepackage{titlesec}
@@ -203,12 +217,12 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
 \fancyhf{}
 \fancyhead[L]{\small\color{mainGray}\textit{Generert av MateMaTeX AI}}
 \fancyhead[R]{\small\color{mainGray}\today}
-\fancyfoot[C]{\small\color{mainGray}\thepage}
+\fancyfoot[C]{\small\color{mainGray}Side \thepage\ av \pageref{LastPage}}
 \renewcommand{\headrulewidth}{0.4pt}
 \renewcommand{\footrulewidth}{0pt}
 
 % First page: no header/footer (clean title page)
-\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\small\color{mainGray}\thepage}\renewcommand{\headrulewidth}{0pt}}
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\small\color{mainGray}Side \thepage\ av \pageref{LastPage}}\renewcommand{\headrulewidth}{0pt}}
 
 """
 

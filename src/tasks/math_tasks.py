@@ -2,9 +2,13 @@
 MathTasks - CrewAI tasks for the AI Editorial Team.
 Streamlined to 3 tasks: Plan → Write (with illustrations) → Edit & Validate.
 Writer produces body content + TikZ inline. Editor validates math and removes preamble.
+Uses MatteLatexSkill for professional LaTeX PDF generation standards.
 """
 
 from crewai import Task, Agent
+from src.skills import MatteLatexSkill
+
+_skill = MatteLatexSkill()
 
 
 class MathTasks:
@@ -328,7 +332,10 @@ SKRIV KUN:
 
 FORMATERING:
 - KUN LaTeX-syntaks, ALDRI Markdown
-- \\frac{{}}{{}} for brøker, \\cdot for multiplikasjon
+- \\frac{{}}{{}} for brøker, \\cdot for multiplikasjon (ALDRI *)
+- \\dd for differensial: $\\int f(x)\\dd x$
+- Merk ALLE oppgaver: ★☆☆ Grunnleggende / ★★☆ Middels / ★★★ Utfordrende
+- Norske navn og steder der det er naturlig
 - Alt på norsk (Bokmål)
 """,
                 expected_output=f"""
@@ -396,8 +403,11 @@ INGEN \\documentclass eller \\usepackage.
         task_parts.append(f"""
 FORMATERING:
 - KUN LaTeX, ALDRI Markdown
-- \\frac{{}}{{}} for brøker, \\cdot for multiplikasjon
-- booktabs (\\toprule, \\midrule, \\bottomrule) for tabeller
+- \\frac{{}}{{}} for brøker, \\cdot for multiplikasjon (ALDRI *)
+- booktabs (\\toprule, \\midrule, \\bottomrule) for tabeller — INGEN |
+- \\dd for differensial: $\\int f(x)\\dd x$
+- Merk ALLE oppgaver med vanskelighetsgrad: ★☆☆ Grunnleggende / ★★☆ Middels / ★★★ Utfordrende
+- Bruk norske navn (Ola, Kari, Lars) og steder der det er naturlig
 - Alt på norsk (Bokmål)
 {language_instruction}
 {exercise_types_instruction}""")
