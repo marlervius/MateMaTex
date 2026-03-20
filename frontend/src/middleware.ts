@@ -28,9 +28,17 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Use getSession() instead of getUser() — reads from cookies with no network
+  // call, avoiding middleware timeouts. Actual token verification is done in
+  // server components / API routes where getUser() is called securely.
+  let session = null;
+  try {
+    const { data } = await supabase.auth.getSession();
+    session = data.session;
+  } catch {
+    // If session check fails, allow request through and let client handle auth
+    return response;
+  }
 
   // Public paths that don't require authentication
   const publicPaths = ["/login", "/register", "/auth/callback", "/shared", "/reset-password", "/update-password"];
@@ -39,14 +47,14 @@ export async function middleware(request: NextRequest) {
   );
 
   // Redirect unauthenticated users to login
-  if (!user && !isPublic) {
+  if (!session && !isPublic) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
   // Redirect authenticated users away from login/register
   // (but NOT from update-password — they need that after recovery)
   if (
-    user &&
+    session &&
     (request.nextUrl.pathname === "/login" ||
       request.nextUrl.pathname === "/register")
   ) {
