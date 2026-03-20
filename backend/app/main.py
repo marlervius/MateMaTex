@@ -89,7 +89,17 @@ async def startup():
             await get_pool()
             logger.info("startup_complete", environment=settings.environment)
         except Exception as e:
-            logger.error("startup_database_failed", error=str(e))
+            err_msg = str(e)
+            logger.error("startup_database_failed", error=err_msg)
+            if "tenant" in err_msg.lower() or "user not found" in err_msg.lower():
+                logger.warning(
+                    "database_pooler_hint",
+                    msg=(
+                        "Database avviste bruker/tenant — sjekk DATABASE_URL "
+                        "(vert, port, brukernavn, passord). Ved connection pooler, "
+                        "bekreft format fra leverandørens dashboard."
+                    ),
+                )
             logger.warning("startup_continuing_without_db", msg="App will start but DB features are unavailable")
     else:
         logger.warning("startup_no_database", msg="DATABASE_URL not set — running without DB")

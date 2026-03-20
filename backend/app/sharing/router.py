@@ -15,7 +15,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.auth import get_current_user, get_optional_user
+from app.auth import get_current_user
 
 logger = structlog.get_logger()
 

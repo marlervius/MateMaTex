@@ -2,34 +2,37 @@
  * API client for the MateMaTeX 2.0 backend.
  *
  * Covers: generation, exercises, editor, differentiation, export, sharing.
- * All authenticated requests include the Supabase JWT.
+ * Optional: set NEXT_PUBLIC_MATE_API_KEY if the backend has MATE_API_KEY set.
  */
-
-import { createClient } from "./supabase";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // ---------------------------------------------------------------------------
-// Auth helper
+// Auth helper (optional shared API key — must match backend MATE_API_KEY)
 // ---------------------------------------------------------------------------
 async function getAuthHeaders(): Promise<Record<string, string>> {
-  try {
-    const supabase = createClient();
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const key =
+    typeof window !== "undefined"
+      ? process.env.NEXT_PUBLIC_MATE_API_KEY
+      : undefined;
+  if (key) {
+    headers["X-API-Key"] = key;
+  }
+  return headers;
+}
 
-    if (session?.access_token) {
-      return {
-        Authorization: `Bearer ${session.access_token}`,
-        "Content-Type": "application/json",
-      };
+async function readErrorMessage(res: Response): Promise<string> {
+  try {
+    const data = await res.json();
+    if (typeof data?.detail === "string") return data.detail;
+    if (Array.isArray(data?.detail)) {
+      return data.detail.map((d: { msg?: string }) => d.msg || "").filter(Boolean).join("; ");
     }
   } catch {
-    // Supabase not configured (local dev) — proceed without auth
+    /* ignore */
   }
-
-  return { "Content-Type": "application/json" };
+  return res.statusText || `HTTP ${res.status}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -66,7 +69,15 @@ export async function startGeneration(
     headers,
     body: JSON.stringify(request),
   });
-  if (!res.ok) throw new Error(`Generation failed: ${res.statusText}`);
+  if (!res.ok) {
+    const msg = await readErrorMessage(res);
+    if (res.status === 401) {
+      throw new Error(
+        "Ingen tilgang (401). Sjekk at backend MATE_API_KEY matcher NEXT_PUBLIC_MATE_API_KEY, eller at nøkkel ikke er påkrevd."
+      );
+    }
+    throw new Error(msg || `Generation failed: ${res.statusText}`);
+  }
   return res.json();
 }
 

@@ -1,9 +1,11 @@
-# MateMaTeX 2.0 — Deployment: Vercel + Render + Supabase
+# MateMaTeX 2.0 — Deployment: Vercel + Render (+ valgfri PostgreSQL)
+
+> **Merk:** Kodebasen bruker ikke lenger Supabase. Database er valgfri generell PostgreSQL; auth er valgfri `MATE_API_KEY` på backend og evt. `NEXT_PUBLIC_MATE_API_KEY` på frontend.
 
 Du skal gjøre MateMaTeX 2.0 produksjonsklar og deploye til:
 - **Frontend:** Vercel (Next.js)
 - **Backend:** Render (FastAPI i Docker)
-- **Database:** Supabase (PostgreSQL med pgvector)
+- **Database:** Valgfri (f.eks. Neon, Railway Postgres, eller lokal PostgreSQL)
 
 **Les gjennom hele den eksisterende kodebasen før du begynner.** Mange filer trenger små justeringer for å fungere i produksjon.
 

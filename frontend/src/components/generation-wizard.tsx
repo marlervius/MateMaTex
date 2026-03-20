@@ -106,6 +106,7 @@ export function GenerationWizard() {
 
   const handleGenerate = async () => {
     if (!canGenerate) return;
+
     store.startGeneration();
 
     try {

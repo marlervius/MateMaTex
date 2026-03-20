@@ -1,5 +1,5 @@
 """
-Async database connection pool for Supabase PostgreSQL.
+Async PostgreSQL connection pool (asyncpg).
 
 Usage in routers:
     from app.db import get_db
@@ -12,7 +12,7 @@ Usage in routers:
 from __future__ import annotations
 
 import ssl as _ssl
-from urllib.parse import urlparse, unquote
+from urllib.parse import unquote
 
 import asyncpg
 import structlog
@@ -143,11 +143,19 @@ async def get_pool() -> asyncpg.Pool:
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode = _ssl.CERT_NONE
 
+        # PgBouncer / transaction poolers often break asyncpg prepared statements.
+        # Disable statement cache when using a typical pooled host (port 6543 or hostname).
+        pool_extra: dict = {}
+        host_lower = conn_kwargs["host"].lower()
+        if "pooler" in host_lower or conn_kwargs["port"] == 6543:
+            pool_extra["statement_cache_size"] = 0
+
         _pool = await asyncpg.create_pool(
             min_size=2,
             max_size=10,
             command_timeout=30,
             ssl=ssl_ctx,
+            **pool_extra,
             **conn_kwargs,
         )
         logger.info("database_pool_created")

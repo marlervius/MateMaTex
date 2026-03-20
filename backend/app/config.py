@@ -15,26 +15,16 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """Unified application settings."""
 
-    # ---- Database (Supabase) ----
+    # ---- Database (PostgreSQL; optional) ----
     database_url: str = Field(
         default="",
-        description="Supabase PostgreSQL connection string",
+        description="PostgreSQL connection string (asyncpg), e.g. Neon or self-hosted",
     )
-    supabase_url: str = Field(
+
+    # ---- Optional API protection ----
+    mate_api_key: str = Field(
         default="",
-        description="Supabase project URL (for auth)",
-    )
-    supabase_anon_key: str = Field(
-        default="",
-        description="Supabase anon (public) key",
-    )
-    supabase_service_role_key: str = Field(
-        default="",
-        description="Supabase service role key (server-side only)",
-    )
-    supabase_jwt_secret: str = Field(
-        default="",
-        description="Supabase JWT secret for token verification",
+        description="If set, protected routes require X-API-Key or Bearer matching this value",
     )
 
     # ---- LLM API keys ----
