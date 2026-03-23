@@ -7,6 +7,8 @@ Implements automatic fallback: if primary model fails, tries secondary.
 
 from __future__ import annotations
 
+from typing import Any
+
 import structlog
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -14,6 +16,35 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from app.config import LLMProviderConfig, get_config
 
 logger = structlog.get_logger()
+
+
+def _message_content_to_str(content: Any) -> str:
+    """
+    Normalize AIMessage.content to a single string.
+
+    Newer Gemini / multimodal models may return a list of blocks (dicts or str)
+    instead of a plain string — callers expect str and would fail on .strip().
+    """
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                if "text" in block:
+                    parts.append(str(block["text"]))
+            else:
+                t = getattr(block, "text", None)
+                if t is not None:
+                    parts.append(str(t))
+                else:
+                    parts.append(str(block))
+        return "".join(parts)
+    return str(content)
 
 
 # ---------------------------------------------------------------------------
@@ -144,7 +175,7 @@ class LLMInterface:
 
         try:
             response = self._primary.invoke(messages)
-            return response.content
+            return _message_content_to_str(response.content)
         except Exception as primary_err:
             logger.warning(
                 "primary_llm_failed",
@@ -157,7 +188,7 @@ class LLMInterface:
                 try:
                     logger.info("attempting_fallback_llm")
                     response = self._fallback.invoke(messages)
-                    return response.content
+                    return _message_content_to_str(response.content)
                 except Exception as fallback_err:
                     logger.error(
                         "fallback_llm_failed",
@@ -176,12 +207,12 @@ class LLMInterface:
 
         try:
             response = await self._primary.ainvoke(messages)
-            return response.content
+            return _message_content_to_str(response.content)
         except Exception as primary_err:
             if self._fallback is not None:
                 try:
                     response = await self._fallback.ainvoke(messages)
-                    return response.content
+                    return _message_content_to_str(response.content)
                 except Exception as fallback_err:
                     raise fallback_err from primary_err
             raise primary_err
