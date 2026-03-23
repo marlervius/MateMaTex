@@ -37,11 +37,11 @@ class Settings(BaseSettings):
     )
 
     # ---- LLM defaults ----
-    default_model: str = Field(default="gemini-2.0-flash")
+    default_model: str = Field(default="gemini-3-flash-preview")
     primary_provider: str = Field(default="google")
-    primary_model: str = Field(default="gemini-2.0-flash")
+    primary_model: str = Field(default="gemini-3-flash-preview")
     fallback_provider: str = Field(default="google")
-    fallback_model: str = Field(default="gemini-2.0-flash")
+    fallback_model: str = Field(default="gemini-3-flash-preview")
     temperature: float = Field(default=0.15, ge=0.0, le=2.0)
     max_retries: int = Field(default=3, ge=1, le=10)
 
