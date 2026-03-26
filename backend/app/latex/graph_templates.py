@@ -221,29 +221,12 @@ TRIANGLE_RIGHT_ANGLE = GraphTemplate(
     name="Rettvinklet trekant (Pytagoras)",
     category="Geometri",
     grade_range="8-10",
-    description="Rettvinklet trekant med katetene og hypotenusen merket",
+    description="Rettvinklet trekant med katetene og hypotenusen — bruk makroen MMArettvinklet",
     tikz_code=r"""
 \begin{figure}[H]
 \centering
-\begin{tikzpicture}[scale=0.8]
-    % Draw triangle
-    \draw[thick, mainBlue] (0,0) -- (4,0) -- (4,3) -- cycle;
-    % Right angle mark
-    \draw[thick] (3.7,0) -- (3.7,0.3) -- (4,0.3);
-    % Labels
-    \node[below] at (2,0) {$a = 4$};
-    \node[right] at (4,1.5) {$b = 3$};
-    \node[above left] at (2,1.5) {$c = 5$};
-    % Squares on sides (Pythagorean visualization)
-    \draw[mainGreen!50, fill=mainGreen!20] (0,0) -- (0,-4) -- (4,-4) -- (4,0);
-    \draw[mainOrange!50, fill=mainOrange!20] (4,0) -- (7,0) -- (7,3) -- (4,3);
-    \draw[mainBlue!50, fill=mainBlue!20] (0,0) -- (-3,4) -- (1,7) -- (4,3);
-    % Area labels
-    \node at (2,-2) {$a^2 = 16$};
-    \node at (5.5,1.5) {$b^2 = 9$};
-    \node at (0.5,3.5) {$c^2 = 25$};
-\end{tikzpicture}
-\caption{Pytagoras' setning: $a^2 + b^2 = c^2$, her: $16 + 9 = 25$.}
+\MMArettvinklet{4}{3}{5}
+\caption{Pytagoras' setning: $a^2 + b^2 = c^2$, her: $4^2 + 3^2 = 5^2$.}
 \end{figure}
 """,
     parameters=[]
@@ -590,6 +573,100 @@ TEN_FRAME = GraphTemplate(
 
 
 # =============================================================================
+# VECTORS (Vektorer) - Grades 10-VG
+# =============================================================================
+
+VECTOR_ADDITION = GraphTemplate(
+    id="vector_addition",
+    name="Vektoraddisjon og skalarmultiplikasjon",
+    category="Vektorer",
+    grade_range="10-VG",
+    description="Vektorer i koordinatsystem med addisjon og skalarmultiplikasjon",
+    tikz_code=r"""
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.85, font=\small, >=Stealth]
+  % Grid and axes
+  \draw[lightGray, thin] (-0.5,-0.5) grid (5.5,5.5);
+  \draw[thick, ->] (-0.5,0) -- (5.8,0) node[right] {$x$};
+  \draw[thick, ->] (0,-0.5) -- (0,5.8) node[above] {$y$};
+  \foreach \x in {1,2,3,4,5} { \node[below, font=\scriptsize] at (\x,-0.15) {\x}; }
+  \foreach \y in {1,2,3,4,5} { \node[left, font=\scriptsize] at (-0.15,\y) {\y}; }
+  \node[below left, font=\scriptsize] at (0,0) {$0$};
+  % Vector u = [1,2]
+  \draw[->, very thick, mainBlue] (0,0) -- (1,2) node[midway, left] {$\vec{u}$};
+  % Vector v = [3,1]
+  \draw[->, very thick, mainGreen] (0,0) -- (3,1) node[midway, below] {$\vec{v}$};
+  % Sum u+v = [4,3] using triangle method
+  \draw[->, thick, mainGreen!70, dashed] (1,2) -- (4,3);
+  \draw[->, very thick, mainOrange] (0,0) -- (4,3) node[near end, above left] {$\vec{u}+\vec{v}$};
+  % 2u = [2,4]
+  \draw[->, very thick, mainPurple] (0,0) -- (2,4) node[right] {$2\vec{u}$};
+\end{tikzpicture}
+\caption{$\vec{u}=[1,2]$ (blå), $\vec{v}=[3,1]$ (grønn), $\vec{u}+\vec{v}=[4,3]$ (oransje), $2\vec{u}=[2,4]$ (lilla).}
+\end{figure}
+""",
+    parameters=[]
+)
+
+VECTOR_PARAMETER_LINE = GraphTemplate(
+    id="vector_parameter_line",
+    name="Parameterframstilling av linje",
+    category="Vektorer",
+    grade_range="10-VG",
+    description="Linje i koordinatsystem med retningsvektor og t-verdier",
+    tikz_code=r"""
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=1.0, font=\small, >=Stealth]
+  % Axes
+  \draw[thick, ->] (-0.5,0) -- (6,0) node[right] {$x$};
+  \draw[thick, ->] (0,-0.5) -- (0,4.5) node[above] {$y$};
+  \foreach \x in {1,2,3,4,5} { \node[below, font=\scriptsize] at (\x,-0.15) {\x}; }
+  \foreach \y in {1,2,3,4} { \node[left, font=\scriptsize] at (-0.15,\y) {\y}; }
+  % Line through P0=(1,1) with direction v=[2,1]
+  \draw[thick, mainBlue] (-0.1,0.45) -- (5.5,3.75);
+  % Direction vector arrow from P0 to t=1
+  \draw[->, very thick, mainOrange] (1,1) -- (3,2) node[midway, above] {$\vec{v}=[2,1]$};
+  % Points for different t-values
+  \fill[mainPurple] (1,1) circle (3pt) node[below left] {$P_0(1,1)$};
+  \fill[mainBlue] (3,2) circle (2.5pt) node[above right, font=\scriptsize] {$t=1$};
+  \fill[mainBlue] (5,3) circle (2.5pt) node[above right, font=\scriptsize] {$t=2$};
+\end{tikzpicture}
+\caption{Linjen $\begin{bmatrix}x\\y\end{bmatrix}=\begin{bmatrix}1\\1\end{bmatrix}+t\begin{bmatrix}2\\1\end{bmatrix}$ med retningsvektor $\vec{v}=[2,1]$.}
+\end{figure}
+""",
+    parameters=[]
+)
+
+VECTOR_ANGLE = GraphTemplate(
+    id="vector_angle",
+    name="Vinkel mellom to vektorer",
+    category="Vektorer",
+    grade_range="10-VG",
+    description="To vektorer fra origo med vinkelmarkering",
+    tikz_code=r"""
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=1.2, font=\small, >=Stealth]
+  \coordinate (O) at (0,0);
+  \coordinate (U) at (3,1);
+  \coordinate (V) at (1,2.5);
+  % Vectors from origin
+  \draw[->, very thick, mainBlue] (O) -- (U) node[right] {$\vec{u}$};
+  \draw[->, very thick, mainGreen] (O) -- (V) node[above] {$\vec{v}$};
+  % Angle marking
+  \draw[mainOrange, thick] (0.65,0.22) arc[start angle=18, end angle=68, radius=0.68];
+  \node[mainOrange, font=\normalsize] at (0.45,0.55) {$\theta$};
+\end{tikzpicture}
+\caption{Vinkelen $\theta$ mellom $\vec{u}$ og $\vec{v}$: $\cos\theta = \dfrac{\vec{u}\cdot\vec{v}}{|\vec{u}||\vec{v}|}$.}
+\end{figure}
+""",
+    parameters=[]
+)
+
+
+# =============================================================================
 # TEMPLATE COLLECTIONS BY GRADE
 # =============================================================================
 
@@ -616,6 +693,10 @@ ALL_TEMPLATES = [
     # Counting
     COUNTING_BLOCKS,
     TEN_FRAME,
+    # Vectors
+    VECTOR_ADDITION,
+    VECTOR_PARAMETER_LINE,
+    VECTOR_ANGLE,
 ]
 
 TEMPLATES_BY_CATEGORY = {
@@ -625,15 +706,18 @@ TEMPLATES_BY_CATEGORY = {
     "Funksjoner": [LINEAR_FUNCTION, QUADRATIC_FUNCTION],
     "Statistikk": [HISTOGRAM, BOX_PLOT, PIE_CHART],
     "Telling": [COUNTING_BLOCKS, TEN_FRAME],
+    "Vektorer": [VECTOR_ADDITION, VECTOR_PARAMETER_LINE, VECTOR_ANGLE],
 }
 
 TEMPLATES_BY_GRADE = {
     "1-4": [NUMBERLINE_BASIC, FRACTION_CIRCLE, FRACTION_RECTANGLE, COUNTING_BLOCKS, TEN_FRAME],
-    "5-7": [NUMBERLINE_NEGATIVE, NUMBERLINE_FRACTIONS, FRACTION_CIRCLE, FRACTION_RECTANGLE, 
+    "5-7": [NUMBERLINE_NEGATIVE, NUMBERLINE_FRACTIONS, FRACTION_CIRCLE, FRACTION_RECTANGLE,
             TRIANGLE_LABELED, CIRCLE_WITH_PARTS, COORDINATE_SYSTEM, HISTOGRAM, PIE_CHART],
     "8-10": [NUMBERLINE_NEGATIVE, TRIANGLE_LABELED, TRIANGLE_RIGHT_ANGLE, CIRCLE_WITH_PARTS,
-             COORDINATE_SYSTEM, LINEAR_FUNCTION, HISTOGRAM, BOX_PLOT, PIE_CHART],
-    "VG": [COORDINATE_SYSTEM, LINEAR_FUNCTION, QUADRATIC_FUNCTION, HISTOGRAM, BOX_PLOT, PIE_CHART],
+             COORDINATE_SYSTEM, LINEAR_FUNCTION, HISTOGRAM, BOX_PLOT, PIE_CHART,
+             VECTOR_ADDITION, VECTOR_PARAMETER_LINE, VECTOR_ANGLE],
+    "VG": [COORDINATE_SYSTEM, LINEAR_FUNCTION, QUADRATIC_FUNCTION, HISTOGRAM, BOX_PLOT, PIE_CHART,
+           VECTOR_ADDITION, VECTOR_PARAMETER_LINE, VECTOR_ANGLE],
 }
 
 

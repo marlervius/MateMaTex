@@ -49,6 +49,18 @@ const AGENT_INFO: Record<
     description: "Kvalitetssikrer innholdet...",
     color: "accent-teal",
   },
+  tikz_validator: {
+    name: "Figur-kontroll (TikZ)",
+    icon: <Code2 size={18} />,
+    description: "Sjekker og retter TikZ-figurer...",
+    color: "accent-orange",
+  },
+  table_validator: {
+    name: "Tabell-kontroll",
+    icon: <Code2 size={18} />,
+    description: "Sjekker tabeller i LaTeX...",
+    color: "accent-orange",
+  },
   latex_validator: {
     name: "LaTeX-kompilering",
     icon: <Code2 size={18} />,
@@ -74,6 +86,8 @@ const BASE_PIPELINE_ORDER = [
   "author",
   "math_verifier",
   "editor",
+  "tikz_validator",
+  "table_validator",
   "latex_validator",
 ];
 

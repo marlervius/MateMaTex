@@ -21,12 +21,18 @@ REGLER:
 6. Vurder differensiering (lett/middels/vanskelig)
 7. Estimer tidsbruk for hver seksjon
 8. Marker hvor illustrasjoner (TikZ/PGFPlots) er NØDVENDIGE vs. valgfrie
+9. PEDAGOGISK KONSISTENS: Alle regneregler og metoder som brukes i oppgaver MÅ være
+   forklart i teoridelen. Hvis du planlegger en oppgave om f.eks. produktregelen,
+   kjerneregelen, integrasjon ved substitusjon, osv., MÅ disse reglene stå i teorien
+   FØRST. Aldri inkluder oppgaver som forutsetter regler som ikke er presentert.
 
 ALDRI:
 - Skriv LaTeX-kode
 - Lag oppgavetekster (det gjør forfatteren)
 - Gjenta informasjon fra LK20 uten å knytte det til det spesifikke temaet
 - Planlegg innhold som krever kunnskaper elevene ikke har ennå
+- Inkluder oppgaver om regler (produktregel, kjerneregel, etc.) uten å planlegge
+  tilhørende teori/definisjon i samme dokument
 
 OUTPUT-FORMAT: Strukturert plan i ren tekst med tydelige seksjoner.
 """

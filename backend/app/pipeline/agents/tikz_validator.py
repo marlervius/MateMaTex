@@ -7,11 +7,14 @@ automatically or replaces the broken figure with a safe fallback.
 
 Rules applied (in order):
 1. Strip any remaining \\includegraphics
-2. Ensure every \\begin{tikzpicture} is inside \\begin{figure}[H]
-3. Remove node coordinates that are clearly out-of-bounds (outside figure bounds)
-4. Replace known bad Pytagoras patterns (squares outside triangle) with \\MMArettvinklet
-5. Ensure every \\begin{axis} (pgfplots) is wrapped in figure
-6. Log a summary of all changes made
+2. Fix double-caption / orphaned-caption bug (Figur N: ... after \\end{figure})
+3. Move figures out of taskbox environments
+4. Ensure every \\begin{figure} has [H] placement
+5. Add \\centering where missing
+6. Wrap bare \\begin{tikzpicture} in figure environment
+7. Wrap bare \\begin{axis} (pgfplots) in figure+tikzpicture
+8. Replace known bad Pytagoras patterns with \\MMArettvinklet macro
+9. Log a summary of all changes made
 """
 
 from __future__ import annotations
@@ -150,20 +153,18 @@ def _wrap_bare_axis(body: str) -> tuple[str, int]:
 
 def _replace_pytagoras_squares(body: str) -> tuple[str, int]:
     """
-    Detect the anti-pattern where AI draws squares on all sides of a Pythagorean
-    triangle. This produces figures that overflow the page.
+    Detect the specific anti-pattern where AI draws squares on ALL FOUR sides of a
+    Pythagorean triangle (a^2, b^2, c^2 as filled rectangles extending far off-page).
 
-    Heuristic: any tikzpicture that contains BOTH:
-    - coordinate definitions named A, B, C (or similar)
-    - multiple \\fill or \\draw with rectangular coordinates suggesting squares
+    This is a very conservative heuristic — only triggers when ALL of:
+    1. Figure has all three square-area labels WITH numeric values (e.g. $a^2 = 16$)
+    2. Figure has many nodes (10+) suggesting squares are drawn as separate shapes
+    3. Figure has extreme out-of-bounds coordinates (abs > 9)
 
-    Replace the entire figure block with \\MMArettvinklet{3}{4}{5} as a safe fallback.
+    Avoids false positives on creative scenes, 3D figures, vector diagrams, etc.
     """
     count = 0
 
-    # Pattern: figure environment containing a tikzpicture with the squares heuristic
-    # Look for tikzpictures that have "a^2" or "b^2" or "c^2" as node text
-    # AND have coordinates clearly outside the triangle (large negative or >8 coordinates)
     fig_re = re.compile(
         r'\\begin\{figure\}.*?\\end\{figure\}',
         re.DOTALL,
@@ -173,37 +174,239 @@ def _replace_pytagoras_squares(body: str) -> tuple[str, int]:
         nonlocal count
         fig_text = m.group(0)
 
-        # Heuristic 1: contains "a^2" or similar AND a tikzpicture
-        has_squares_label = bool(re.search(r'\$a\^2\$|\$b\^2\$|\$c\^2\$', fig_text))
-        has_tikz = '\\begin{tikzpicture}' in fig_text
+        # Must have a tikzpicture
+        if '\\begin{tikzpicture}' not in fig_text:
+            return fig_text
 
-        if not (has_squares_label and has_tikz):
-            return fig_text  # Not the problematic pattern
+        # Must have all three Pythagorean area labels WITH numeric values
+        # e.g. "$a^2 = 16$" or "node at (...) {$a^2 = 9$}"
+        has_a2 = bool(re.search(r'[$]a\^2\s*=\s*\d', fig_text))
+        has_b2 = bool(re.search(r'[$]b\^2\s*=\s*\d', fig_text))
+        has_c2 = bool(re.search(r'[$]c\^2\s*=\s*\d', fig_text))
 
-        # Heuristic 2: coordinates go outside reasonable page bounds
-        # Extract all coordinate tuples like (x,y) or at (x,y)
-        coords = re.findall(r'at\s*\((-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\)', fig_text)
-        out_of_bounds = any(
-            abs(float(x)) > 8 or abs(float(y)) > 8
+        if not (has_a2 and has_b2 and has_c2):
+            return fig_text  # Not the Pytagoras-squares anti-pattern
+
+        # Must also have many node/draw commands (squares take many lines)
+        node_count = len(re.findall(r'\\(?:node|draw|fill)\b', fig_text))
+        if node_count < 10:
+            return fig_text  # Too few elements — not the squares pattern
+
+        # Must have coordinates with extreme out-of-bounds (abs > 9)
+        # Normal scenes with people/flags/etc. may have x up to 16 (width), but
+        # the Pytagoras squares pattern specifically creates negative y < -8
+        coords = re.findall(
+            r'\((-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\)',
+            fig_text,
+        )
+        extreme_oob = any(
+            abs(float(x)) > 9 or abs(float(y)) > 9
             for x, y in coords
         )
 
-        if out_of_bounds or has_squares_label:
-            # Extract caption if present
-            caption_m = re.search(r'\\caption\{([^}]*)\}', fig_text)
-            caption = caption_m.group(1) if caption_m else 'Rettvinklet trekant med Pytagoras\\textquotesingle{} setning.'
-            count += 1
-            return (
-                '\\begin{figure}[H]\n'
-                '\\centering\n'
-                '\\MMArettvinklet{3}{4}{5}\n'
-                f'\\caption{{{caption}}}\n'
-                '\\end{figure}'
-            )
+        if not extreme_oob:
+            return fig_text  # Coordinates within bounds — leave it alone
 
-        return fig_text
+        # All conditions met: this is the problematic squares-on-all-sides pattern
+        caption_m = re.search(r'\\caption\{([^}]*)\}', fig_text)
+        caption = caption_m.group(1) if caption_m else 'Rettvinklet trekant med Pytagoras\\textquotesingle{} setning.'
+        count += 1
+        return (
+            '\\begin{figure}[H]\n'
+            '\\centering\n'
+            '\\MMArettvinklet{3}{4}{5}\n'
+            f'\\caption{{{caption}}}\n'
+            '\\end{figure}'
+        )
 
     new_body = fig_re.sub(replace_figure, body)
+    return new_body, count
+
+
+def _fix_double_caption(body: str) -> tuple[str, int]:
+    """
+    Fix the double-figure / double-caption bug where AI generates:
+
+    Pattern A (most common — seen in tettt.pdf and vektorer.pdf):
+        \\begin{figure}[H]
+          ...tikzpicture or axis...
+        \\caption{Figur}          <- generic placeholder
+        \\end{figure}
+                                  <- blank lines
+        Figur N: Real caption.   <- orphaned line OUTSIDE figure
+
+    Pattern B:
+        \\begin{figure}[H]...\\caption{Figur}\\end{figure}
+                                  <- blank lines
+        \\begin{figure}[H]
+        Figur N: Real caption.   <- orphaned figure-env, no tikzpicture inside
+        \\end{figure}
+
+    Two-pass approach:
+    Pass 1: Remove orphaned figure-envs that contain only a caption line (Pattern B preprocess).
+    Pass 2: Replace \\caption{Figur} with the real orphaned caption line (Pattern A).
+    """
+    count = 0
+
+    # --- Pass 1: Remove figure-envs that contain ONLY a "Figur N: ..." line ---
+    # These are the orphaned wrappers from Pattern B
+    def remove_caption_only_figures(text: str) -> tuple[str, int]:
+        """
+        Find and remove figure environments that contain no tikzpicture/axis,
+        only a bare text line starting with 'Figur N:'.
+        Return (modified_text, caption_extracted) where caption_extracted is
+        a dict mapping position → real caption text for use in Pass 2.
+        """
+        removed = 0
+        # Match figure envs that have NO tikzpicture or axis inside
+        # \begin{figure} optionally followed by [H] or similar specifier, then content
+        fig_re = re.compile(r'\\begin\{figure\}(?:\[[^\]]*\])?(.*?)\\end\{figure\}', re.DOTALL)
+
+        def check_and_remove(m: re.Match) -> str:
+            nonlocal removed
+            content = m.group(1)
+            if '\\begin{tikzpicture}' in content or '\\begin{axis}' in content:
+                return m.group(0)  # Real figure — keep it
+            # Check if it's an orphaned caption-only wrapper
+            cap_m = re.search(r'Figur\s+\d+\s*:\s*([^\n]+)', content)
+            if cap_m:
+                removed += 1
+                # Convert the figure-env wrapper into a bare orphaned caption line
+                # so that Pass 2 (fix_orphaned_lines) can pick it up
+                return '\n' + cap_m.group(0).strip()
+            return m.group(0)
+
+        new_text = fig_re.sub(check_and_remove, text)
+        return new_text, removed
+
+    # --- Pass 2: Replace \caption{Figur} with orphaned standalone caption lines ---
+    def fix_orphaned_lines(text: str) -> tuple[str, int]:
+        """
+        Find \\caption{Figur} (or Graf/empty) inside a figure, followed after
+        \\end{figure} by a standalone 'Figur N: Real text.' line, and merge them.
+        """
+        fixed = 0
+        fig_re = re.compile(r'\\begin\{figure\}.*?\\end\{figure\}', re.DOTALL)
+
+        # Generic words that indicate a placeholder caption
+        _GENERIC_CAPTIONS = {'figur', 'graf', 'figur.', 'graf.', '', 'figure', 'graph'}
+
+        def has_generic_caption(fig_text: str) -> bool:
+            m = re.search(r'\\caption\{([^}]*)\}', fig_text)
+            if not m:
+                return False
+            return m.group(1).strip().lower() in _GENERIC_CAPTIONS
+
+        output = []
+        pos = 0
+
+        for m in fig_re.finditer(text):
+            fig_start, fig_end = m.start(), m.end()
+            fig_text = m.group(0)
+            output.append(text[pos:fig_start])
+
+            if has_generic_caption(fig_text):
+                rest = text[fig_end:]
+                ma = re.match(r'\s*\n+Figur\s+\d+\s*:\s*([^\n]+)', rest)
+                if ma:
+                    real_caption = ma.group(1).strip()
+                    fixed_fig = re.sub(
+                        r'\\caption\{[^}]*\}',
+                        '\\\\caption{' + real_caption + '}',
+                        fig_text,
+                        count=1,
+                    )
+                    output.append(fixed_fig)
+                    pos = fig_end + ma.end()
+                    fixed += 1
+                    continue
+
+            output.append(fig_text)
+            pos = fig_end
+
+        output.append(text[pos:])
+        return ''.join(output), fixed
+
+    # --- Pass 3: Remove remaining orphaned "Figur N: ..." lines that are
+    #             still floating outside any figure environment (generic or not).
+    def remove_orphaned_figur_lines(text: str) -> tuple[str, int]:
+        """
+        After passes 1 and 2, any remaining bare lines like
+            'Figur 2: Grafen til ...'
+        outside a figure environment are spurious and must be removed.
+        """
+        removed = 0
+
+        # Build a set of positions that are inside a figure env
+        figure_ranges = []
+        for fm in re.finditer(r'\\begin\{figure\}.*?\\end\{figure\}', text, re.DOTALL):
+            figure_ranges.append((fm.start(), fm.end()))
+
+        def is_inside_figure(pos: int) -> bool:
+            return any(s <= pos < e for s, e in figure_ranges)
+
+        def remove_line(m: re.Match) -> str:
+            nonlocal removed
+            if not is_inside_figure(m.start()):
+                removed += 1
+                return ''
+            return m.group(0)
+
+        # Match lines like "Figur 2: something" or "Figur 2: Figur"
+        pattern = re.compile(r'^Figur\s+\d+\s*:[^\n]+$', re.MULTILINE)
+        new_text = pattern.sub(remove_line, text)
+        return new_text, removed
+
+    body, n1 = remove_caption_only_figures(body)
+    body, n2 = fix_orphaned_lines(body)
+    body, n3 = remove_orphaned_figur_lines(body)
+    count = n1 + n2 + n3
+    return body, count
+
+
+def _move_figures_out_of_taskbox(body: str) -> tuple[str, int]:
+    """
+    Detect figure environments nested inside taskbox and move them AFTER
+    the closing \\end{taskbox}.
+
+    The AI sometimes places \\begin{figure}...\\end{figure} inside
+    \\begin{taskbox}{...}...\\end{taskbox}, which breaks tcolorbox layout.
+
+    Strategy: for each taskbox, extract any embedded figures and append
+    them immediately after \\end{taskbox}.
+    """
+    count = 0
+
+    taskbox_re = re.compile(
+        r'(\\begin\{taskbox\}\{[^}]*\})(.*?)(\\end\{taskbox\})',
+        re.DOTALL,
+    )
+    figure_re = re.compile(
+        r'\\begin\{figure\}.*?\\end\{figure\}',
+        re.DOTALL,
+    )
+
+    def extract_figures(m: re.Match) -> str:
+        nonlocal count
+        open_tag = m.group(1)
+        content = m.group(2)
+        close_tag = m.group(3)
+
+        # Find all figures inside taskbox
+        figures_found = figure_re.findall(content)
+        if not figures_found:
+            return m.group(0)
+
+        # Remove figures from inside taskbox content
+        cleaned_content = figure_re.sub('', content)
+        # Collapse excess blank lines created by removal
+        cleaned_content = re.sub(r'\n{3,}', '\n\n', cleaned_content)
+
+        count += len(figures_found)
+        figures_block = '\n\n' + '\n\n'.join(figures_found)
+        return open_tag + cleaned_content + close_tag + figures_block
+
+    new_body = taskbox_re.sub(extract_figures, body)
     return new_body, count
 
 
@@ -263,27 +466,37 @@ def run_tikz_validator(state: PipelineState) -> PipelineState:
         if n:
             fixes.append(f"Removed {n} \\includegraphics")
 
-        # Rule 2: fix figure[H] placement
+        # Rule 2: fix double caption / orphaned caption bug
+        body, n = _fix_double_caption(body)
+        if n:
+            fixes.append(f"Fixed {n} double-caption/orphaned-caption figure(s)")
+
+        # Rule 3: move figures out of taskbox environments
+        body, n = _move_figures_out_of_taskbox(body)
+        if n:
+            fixes.append(f"Moved {n} figure(s) out of taskbox environment(s)")
+
+        # Rule 4: fix figure[H] placement
         body, n = _fix_figure_placement(body)
         if n:
             fixes.append(f"Added [H] to {n} figure(s)")
 
-        # Rule 3: add \centering
+        # Rule 5: add \centering
         body, n = _add_missing_centering(body)
         if n:
             fixes.append(f"Added \\centering to {n} figure(s)")
 
-        # Rule 4: wrap bare tikzpicture in figure
+        # Rule 6: wrap bare tikzpicture in figure
         body, n = _wrap_bare_tikzpicture(body)
         if n:
             fixes.append(f"Wrapped {n} bare tikzpicture(s) in figure environment")
 
-        # Rule 5: wrap bare axis (pgfplots) in figure+tikzpicture
+        # Rule 7: wrap bare axis (pgfplots) in figure+tikzpicture
         body, n = _wrap_bare_axis(body)
         if n:
             fixes.append(f"Wrapped {n} bare axis environment(s) in figure")
 
-        # Rule 6: replace problematic Pytagoras square patterns
+        # Rule 8: replace problematic Pytagoras square patterns
         body, n = _replace_pytagoras_squares(body)
         if n:
             fixes.append(f"Replaced {n} complex Pytagoras figure(s) with \\MMArettvinklet macro")

@@ -43,6 +43,7 @@ from app.pipeline.agents.latex_validator import run_latex_validator
 from app.pipeline.agents.math_verifier import run_math_verifier
 from app.pipeline.agents.pedagogue import run_pedagogue
 from app.pipeline.agents.tikz_validator import run_tikz_validator
+from app.pipeline.agents.table_validator import run_table_validator
 
 logger = structlog.get_logger()
 
@@ -157,13 +158,13 @@ def create_pipeline() -> StateGraph:
                         +-----------+
                                     |
                                     ↓
-                              editor → latex_validator
-                                              ↑          |
-                                              |   (retry if errors)
-                                              +----------+
-                                                         |
-                                                         ↓
-                                                     finalize → END
+                              editor → tikz_validator → table_validator → latex_validator
+                                                                                  ↑         |
+                                                                                  |  (retry if errors)
+                                                                                  +---------+
+                                                                                            |
+                                                                                            ↓
+                                                                                        finalize → END
     """
     # Define the graph with PipelineState
     graph = StateGraph(PipelineState)
@@ -173,7 +174,8 @@ def create_pipeline() -> StateGraph:
     graph.add_node("author", run_author)
     graph.add_node("math_verifier", run_math_verifier)
     graph.add_node("editor", run_editor)
-    graph.add_node("tikz_validator", run_tikz_validator)  # Rule-based figure fixer
+    graph.add_node("tikz_validator", run_tikz_validator)    # Rule-based figure fixer
+    graph.add_node("table_validator", run_table_validator)  # Rule-based table fixer
     graph.add_node("latex_validator", run_latex_validator)
     graph.add_node("latex_fixer", run_latex_fixer)
     graph.add_node("latex_fallback", run_latex_fallback)
@@ -196,9 +198,10 @@ def create_pipeline() -> StateGraph:
         },
     )
 
-    # Linear: editor → tikz_validator → latex validation
+    # Linear: editor → tikz_validator → table_validator → latex validation
     graph.add_edge("editor", "tikz_validator")
-    graph.add_edge("tikz_validator", "latex_validator")
+    graph.add_edge("tikz_validator", "table_validator")
+    graph.add_edge("table_validator", "latex_validator")
 
     # Conditional: latex validation → retry with fixer OR fallback OR finalize
     graph.add_conditional_edges(

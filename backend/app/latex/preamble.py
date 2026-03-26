@@ -26,7 +26,14 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
 % Graphics
 \usepackage{tikz, pgfplots}
 \pgfplotsset{compat=1.18}
-\usetikzlibrary{arrows.meta, calc, patterns, positioning, shapes.geometric, decorations.pathreplacing}
+\usetikzlibrary{%
+  arrows.meta, calc, patterns, positioning, shapes.geometric,%
+  decorations.pathreplacing, decorations.pathmorphing, decorations.markings,%
+  angles, quotes, intersections, through,%
+  3d, perspective,%
+  shadings, fadings,%
+  matrix, fit, backgrounds%
+}
 
 % Layout
 \usepackage[margin=2.5cm]{geometry}
@@ -304,6 +311,19 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
       }
     }
     \draw[thick, mainBlue] (0,0) rectangle (10,10);
+  \end{tikzpicture}%
+}
+
+% \MMAvektor{xmax}{ymax}  — clean coordinate system for vector diagrams
+% Usage: \MMAvektor{5}{5}  → 5×5 grid with axes, ready for vector arrows
+\newcommand{\MMAvektor}[2]{%
+  \begin{tikzpicture}[scale=0.85, font=\small, >=Stealth]
+    \draw[lightGray, thin] (-0.5,-0.5) grid (#1+0.5,#2+0.5);
+    \draw[thick, ->] (-0.5,0) -- (#1+0.8,0) node[right] {$x$};
+    \draw[thick, ->] (0,-0.5) -- (0,#2+0.8) node[above] {$y$};
+    \foreach \x in {1,...,#1} { \node[below, font=\scriptsize] at (\x,-0.15) {\x}; }
+    \foreach \y in {1,...,#2} { \node[left, font=\scriptsize] at (-0.15,\y) {\y}; }
+    \node[below left, font=\scriptsize] at (0,0) {$0$};
   \end{tikzpicture}%
 }
 

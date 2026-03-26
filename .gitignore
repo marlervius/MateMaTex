@@ -36,7 +36,8 @@ output/*.tex
 output/*.log
 output/*.aux
 
-# IDE
+# IDE / local AI
+.claude/
 .idea/
 .vscode/
 *.swp
