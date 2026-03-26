@@ -20,5 +20,13 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
+      - key: DEFAULT_MODEL
+        sync: false
+      - key: PRIMARY_MODEL
+        sync: false
+      - key: FALLBACK_MODEL
+        sync: false
+      - key: OUTPUT_DIR
+        value: /tmp/matematex_out
       - key: ENVIRONMENT
         value: production

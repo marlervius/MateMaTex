@@ -96,7 +96,15 @@ def run_pedagogue(state: PipelineState) -> PipelineState:
     except Exception as e:
         step.error = str(e)
         logger.error("pedagogue_failed", job_id=state.job_id, error=str(e))
-        raise
+        req = state.request
+        state.pedagogical_plan = (
+            f"[FALLBACK] Pedagogisk plan fra LLM feilet ({e!s}).\n\n"
+            f"Lag et {req.material_type} for {req.grade} om «{req.topic}».\n"
+            f"Følg LK20, språknivå {req.language_level}, "
+            f"{req.num_exercises} oppgaver, vanskelighetsgrad {req.difficulty}.\n"
+            f"Respekter valgene for teori/eksempler/oppgaver/løsninger/grafer i forespørselen."
+        )
+        step.output_summary = "Fallback-plan etter LLM-feil"
 
     finally:
         step.completed_at = datetime.now()

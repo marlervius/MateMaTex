@@ -22,18 +22,24 @@ from datetime import datetime
 from typing import AsyncGenerator, Optional
 
 import structlog
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
-from app.auth import get_current_user
+from app.auth import get_current_user, require_stream_access
 from app.config import get_config, get_settings
+from app.job_store import persist_terminal_job, resolve_job
 from app.models.state import GenerationRequest, PipelineState, PipelineStatus
 
 logger = structlog.get_logger()
 
 settings = get_settings()
+
+limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(
     title="MateMaTeX 2.0 API",
@@ -51,6 +57,8 @@ app = FastAPI(
         {"name": "collaboration", "description": "School bank, comments, version history"},
     ],
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ---------------------------------------------------------------------------
 # CORS — restrict in production
@@ -164,18 +172,23 @@ class CompileResponse(BaseModel):
 # Endpoints
 # ---------------------------------------------------------------------------
 @app.post("/generate", response_model=GenerateResponse)
-async def start_generation(request: GenerationRequest, user_id: str = Depends(get_current_user)) -> GenerateResponse:
+@limiter.limit("30/minute")
+async def start_generation(
+    request: Request,
+    generation_request: GenerationRequest,
+    user_id: str = Depends(get_current_user),
+) -> GenerateResponse:
     """Start an asynchronous generation job."""
     state = PipelineState(
-        request=request,
+        request=generation_request,
         status=PipelineStatus.PENDING,
     )
     _jobs[state.job_id] = state
 
     loop = asyncio.get_event_loop()
-    loop.run_in_executor(_executor, _run_job, state.job_id, request)
+    loop.run_in_executor(_executor, _run_job, state.job_id, generation_request)
 
-    logger.info("generation_started", job_id=state.job_id, topic=request.topic)
+    logger.info("generation_started", job_id=state.job_id, topic=generation_request.topic)
 
     return GenerateResponse(
         job_id=state.job_id,
@@ -185,14 +198,17 @@ async def start_generation(request: GenerationRequest, user_id: str = Depends(ge
 
 
 @app.get("/generate/{job_id}/stream")
-async def stream_progress(job_id: str) -> StreamingResponse:
+async def stream_progress(
+    job_id: str,
+    _user_id: str = Depends(require_stream_access),
+) -> StreamingResponse:
     """Stream agent progress via Server-Sent Events."""
 
     async def event_generator() -> AsyncGenerator[str, None]:
         last_step_count = 0
 
         while True:
-            state = _jobs.get(job_id)
+            state = resolve_job(job_id, _jobs)
             if state is None:
                 yield _sse_event("error", {"message": "Job not found"})
                 break
@@ -246,6 +262,7 @@ async def abort_generation(job_id: str, user_id: str = Depends(get_current_user)
     if state.status == PipelineStatus.RUNNING or state.status == PipelineStatus.PENDING:
         state.status = PipelineStatus.FAILED
         state.error_message = "Avbrutt av bruker"
+        persist_terminal_job(state)
         logger.info("generation_aborted", job_id=job_id, user_id=user_id)
         return {"success": True, "message": "Job cancelled"}
     else:
@@ -255,7 +272,7 @@ async def abort_generation(job_id: str, user_id: str = Depends(get_current_user)
 async def get_result(job_id: str, user_id: str = Depends(get_current_user)):
     """Get the result of a completed generation job."""
 
-    state = _jobs.get(job_id)
+    state = resolve_job(job_id, _jobs)
     if state is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -351,11 +368,13 @@ def _run_job(job_id: str, request: GenerationRequest) -> None:
         _jobs[job_id].status = PipelineStatus.RUNNING
         result = run_pipeline(request)
         _jobs[job_id] = result
+        persist_terminal_job(result)
     except Exception as e:
         state = _jobs.get(job_id)
         if state:
             state.status = PipelineStatus.FAILED
             state.error_message = str(e)
+            persist_terminal_job(state)
         logger.error("job_failed", job_id=job_id, error=str(e))
 
 

@@ -2,10 +2,29 @@
  * API client for the MateMaTeX 2.0 backend.
  *
  * Covers: generation, exercises, editor, differentiation, export, sharing.
- * Optional: set NEXT_PUBLIC_MATE_API_KEY if the backend has MATE_API_KEY set.
+ * - POST/DELETE/GET result: optional NEXT_PUBLIC_MATE_API_KEY (exposed in browser).
+ * - SSE: default same-origin proxy `/api/generate/.../stream` uses server-only MATE_API_KEY.
  */
 
+import type {
+  StreamCompletePayload,
+  StreamCurrentAgentPayload,
+  StreamStepPayload,
+} from "@/types/generation";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+/** SSE URL: Next.js proxy (recommended) or direct backend with ?api_key= (discouraged). */
+function getGenerationStreamUrl(jobId: string): string {
+  if (typeof window === "undefined") return "";
+  if (process.env.NEXT_PUBLIC_STREAM_PROXY === "false") {
+    const u = new URL(`${API_BASE}/generate/${encodeURIComponent(jobId)}/stream`);
+    const k = process.env.NEXT_PUBLIC_MATE_API_KEY;
+    if (k) u.searchParams.set("api_key", k);
+    return u.toString();
+  }
+  return `/api/generate/${encodeURIComponent(jobId)}/stream`;
+}
 
 // ---------------------------------------------------------------------------
 // Auth helper (optional shared API key — must match backend MATE_API_KEY)
@@ -84,26 +103,41 @@ export async function startGeneration(
 export function streamProgress(
   jobId: string,
   callbacks: {
-    onStep?: (step: any) => void;
+    onStep?: (step: StreamStepPayload) => void;
     onCurrentAgent?: (agent: string) => void;
-    onComplete?: (data: any) => void;
+    onComplete?: (data: StreamCompletePayload) => void;
     onError?: (error: string) => void;
   }
 ): () => void {
-  const eventSource = new EventSource(`${API_BASE}/generate/${jobId}/stream`);
+  const url = getGenerationStreamUrl(jobId);
+  const eventSource = new EventSource(url);
 
-  eventSource.addEventListener("step", (e) => {
-    callbacks.onStep?.(JSON.parse(e.data));
+  eventSource.addEventListener("step", (e: MessageEvent) => {
+    callbacks.onStep?.(JSON.parse(e.data) as StreamStepPayload);
   });
-  eventSource.addEventListener("current_agent", (e) => {
-    callbacks.onCurrentAgent?.(JSON.parse(e.data).agent);
+  eventSource.addEventListener("current_agent", (e: MessageEvent) => {
+    const p = JSON.parse(e.data) as StreamCurrentAgentPayload;
+    callbacks.onCurrentAgent?.(p.agent);
   });
-  eventSource.addEventListener("complete", (e) => {
-    callbacks.onComplete?.(JSON.parse(e.data));
+  eventSource.addEventListener("complete", (e: MessageEvent) => {
+    callbacks.onComplete?.(JSON.parse(e.data) as StreamCompletePayload);
     eventSource.close();
   });
-  eventSource.addEventListener("error", () => {
-    callbacks.onError?.("Connection lost");
+  eventSource.addEventListener("error", (e: Event) => {
+    if ("data" in e && (e as MessageEvent).data) {
+      try {
+        const j = JSON.parse((e as MessageEvent).data) as { message?: string };
+        callbacks.onError?.(j.message || "Feil fra strømmen");
+        eventSource.close();
+        return;
+      } catch {
+        /* connection error */
+      }
+    }
+    callbacks.onError?.(
+      "Mistet kontakt under generering. Sjekk nettverk og at backend kjører. " +
+        "Med API-nøkkel: sett MATE_API_KEY på Vercel (server) for SSE-proxy, eller NEXT_PUBLIC_STREAM_PROXY=false og NEXT_PUBLIC_MATE_API_KEY for direkte strøm."
+    );
     eventSource.close();
   });
 

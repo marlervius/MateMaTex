@@ -76,6 +76,17 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* Data / backend */}
+        <div className="card">
+          <h2 className="text-sm font-medium mb-2">Data og funksjoner</h2>
+          <p className="text-xs text-text-secondary leading-relaxed">
+            Oppgavebank, historikk på tvers av økter og skolefunksjoner krever at
+            backend er satt opp med <code className="text-text-primary">DATABASE_URL</code>{" "}
+            (PostgreSQL). Uten database fungerer generering og redigering som vanlig, men
+            ikke persistent lagring av disse modulene.
+          </p>
+        </div>
+
         {/* About */}
         <div className="card">
           <h2 className="text-sm font-medium mb-2">Om MateMaTeX</h2>
