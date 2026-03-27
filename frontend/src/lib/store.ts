@@ -37,7 +37,7 @@ export interface GenerationResult {
   jobId: string;
   status: "pending" | "running" | "completed" | "failed";
   fullDocument: string;
-  pdfUrl: string;
+  pdfBase64: string;
   steps: AgentStep[];
   mathVerification: {
     claimsChecked: number;
@@ -126,7 +126,7 @@ export const useAppStore = create<AppStore>((set) => ({
         jobId: "",
         status: "failed",
         fullDocument: "",
-        pdfUrl: "",
+        pdfBase64: "",
         steps: [],
         mathVerification: {
           claimsChecked: 0,

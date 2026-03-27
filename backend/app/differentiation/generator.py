@@ -210,7 +210,7 @@ async def differentiate(req: DifferentiateRequest, user_id: str = Depends(get_cu
         )
 
         def _count_exercises(latex: str) -> int:
-            return latex.count(r"\begin{taskbox}")
+            return latex.count("\\begin{taskbox}")
 
         return DifferentiateResponse(
             success=True,

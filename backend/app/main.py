@@ -284,6 +284,7 @@ async def get_result(job_id: str, user_id: str = Depends(get_current_user)):
         "status": state.status.value,
         "full_document": state.full_document,
         "pdf_path": state.pdf_path,
+        "pdf_base64": state.pdf_base64,
         "math_verification": state.math_verification.model_dump(),
         "latex_compilation": state.latex_compilation.model_dump(),
         "steps": [s.model_dump() for s in state.steps],

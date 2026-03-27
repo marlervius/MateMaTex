@@ -22,7 +22,9 @@ Implements the multi-agent pipeline with verification loops:
 
 from __future__ import annotations
 
+import base64
 from datetime import datetime
+from pathlib import Path
 from typing import Literal
 
 import structlog
@@ -122,6 +124,21 @@ def finalize(state: PipelineState) -> PipelineState:
     if not state.full_document:
         body = state.final_latex_body or state.edited_latex_body or state.verified_latex_body or state.raw_latex_body
         state.full_document = wrap_with_preamble(body)
+
+    # Compile full document to PDF and encode as base64
+    try:
+        from app.latex.compiler import compile_to_pdf
+        config = get_config()
+        pdf_path = compile_to_pdf(
+            latex_content=state.full_document,
+            output_path=f"{config.output_dir}/{state.job_id}.pdf",
+            pdflatex_path=config.pdflatex_path,
+        )
+        if pdf_path:
+            state.pdf_path = pdf_path
+            state.pdf_base64 = base64.b64encode(Path(pdf_path).read_bytes()).decode()
+    except Exception as e:
+        logger.warning("finalize_pdf_compilation_failed", error=str(e))
 
     # Compute totals
     state.total_duration_seconds = sum(s.duration_seconds for s in state.steps)

@@ -137,7 +137,7 @@ export function GenerationWizard() {
             jobId: job_id,
             status: data.status,
             fullDocument: result.full_document,
-            pdfUrl: result.pdf_path,
+            pdfBase64: result.pdf_base64 || "",
             steps: result.steps,
             mathVerification: {
               claimsChecked: data.math_checks,

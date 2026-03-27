@@ -154,4 +154,5 @@ class PipelineState(BaseModel):
 
     # --- Output ---
     pdf_path: str = ""
+    pdf_base64: str = ""
     error_message: str = ""

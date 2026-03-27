@@ -27,6 +27,7 @@ import {
   downloadBase64,
   ingestExercises,
   differentiate,
+  compileLatex,
 } from "@/lib/api";
 
 type Tab = "document" | "editor" | "differentiation";
@@ -43,6 +44,8 @@ export function ResultView() {
   const [diffData, setDiffData] = useState<any>(null);
   const [diffLoading, setDiffLoading] = useState(false);
   const [activeLevel, setActiveLevel] = useState<"basic" | "standard" | "advanced">("standard");
+  const [diffPdfs, setDiffPdfs] = useState<Partial<Record<"basic" | "standard" | "advanced", string>>>({});
+  const [compilingPdf, setCompilingPdf] = useState(false);
 
   // Export
   const [exportLoading, setExportLoading] = useState("");
@@ -77,9 +80,29 @@ export function ResultView() {
   const handleDifferentiate = async () => {
     setDiffLoading(true);
     setActiveTab("differentiation");
+    setDiffPdfs({});
     try {
       const res = await differentiate(result.fullDocument);
-      if (res.success) setDiffData(res);
+      if (res.success) {
+        setDiffData(res);
+        // Compile all three levels to PDF in background
+        setCompilingPdf(true);
+        const levels: Array<["basic" | "standard" | "advanced", string]> = [
+          ["basic", res.basic_latex],
+          ["standard", res.standard_latex],
+          ["advanced", res.advanced_latex],
+        ];
+        for (const [level, latex] of levels) {
+          if (latex) {
+            compileLatex(latex).then((compiled) => {
+              if (compiled.success && compiled.pdf_base64) {
+                setDiffPdfs((prev) => ({ ...prev, [level]: compiled.pdf_base64 }));
+              }
+            });
+          }
+        }
+        setCompilingPdf(false);
+      }
     } finally {
       setDiffLoading(false);
     }
@@ -211,16 +234,25 @@ export function ResultView() {
               >
                 {/* PDF Preview */}
                 <div className="card !p-0 overflow-hidden">
-                  <div className="bg-surface-elevated p-8 text-center min-h-[400px] flex items-center justify-center">
-                    <div className="text-text-muted">
-                      <FileText size={48} className="mx-auto mb-3 opacity-30" />
-                      <p className="text-sm">
-                        {result.latexCompiled
-                          ? "PDF-forhåndsvisning"
-                          : "PDF kunne ikke genereres"}
-                      </p>
+                  {result.pdfBase64 ? (
+                    <iframe
+                      src={`data:application/pdf;base64,${result.pdfBase64}`}
+                      className="w-full border-0"
+                      style={{ height: "70vh" }}
+                      title="PDF-forhåndsvisning"
+                    />
+                  ) : (
+                    <div className="bg-surface-elevated p-8 text-center min-h-[400px] flex items-center justify-center">
+                      <div className="text-text-muted">
+                        <FileText size={48} className="mx-auto mb-3 opacity-30" />
+                        <p className="text-sm">
+                          {result.latexCompiled
+                            ? "PDF-forhåndsvisning ikke tilgjengelig"
+                            : "PDF kunne ikke genereres"}
+                        </p>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* LaTeX source (collapsible) */}
@@ -339,14 +371,34 @@ export function ResultView() {
                     </div>
 
                     {/* Content */}
-                    <div className="card !p-0">
-                      <pre className="p-4 text-xs font-mono text-text-secondary overflow-x-auto max-h-96 overflow-y-auto">
-                        {activeLevel === "basic"
-                          ? diffData.basic_latex
-                          : activeLevel === "standard"
-                          ? diffData.standard_latex
-                          : diffData.advanced_latex}
-                      </pre>
+                    <div className="card !p-0 overflow-hidden">
+                      {diffPdfs[activeLevel] ? (
+                        <iframe
+                          src={`data:application/pdf;base64,${diffPdfs[activeLevel]}`}
+                          className="w-full border-0"
+                          style={{ height: "60vh" }}
+                          title={`PDF ${activeLevel}`}
+                        />
+                      ) : (
+                        <div className="relative">
+                          {compilingPdf && !diffPdfs[activeLevel] && (
+                            <div className="absolute inset-0 bg-surface/60 flex items-center justify-center z-10">
+                              <motion.div
+                                animate={{ rotate: 360 }}
+                                transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+                                className="w-6 h-6 border-2 border-accent-blue border-t-transparent rounded-full"
+                              />
+                            </div>
+                          )}
+                          <pre className="p-4 text-xs font-mono text-text-secondary overflow-x-auto max-h-96 overflow-y-auto">
+                            {activeLevel === "basic"
+                              ? diffData.basic_latex
+                              : activeLevel === "standard"
+                              ? diffData.standard_latex
+                              : diffData.advanced_latex}
+                          </pre>
+                        </div>
+                      )}
                     </div>
 
                     {/* Download per level */}
