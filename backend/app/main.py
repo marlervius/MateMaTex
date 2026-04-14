@@ -18,6 +18,7 @@ import asyncio
 import json
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import AsyncGenerator, Optional
 
@@ -41,10 +42,48 @@ settings = get_settings()
 
 limiter = Limiter(key_func=get_remote_address)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan: initialise on startup, clean up on shutdown."""
+    # ---- Startup ----
+    if settings.database_url:
+        try:
+            from app.db import get_pool
+            await get_pool()
+            logger.info("startup_complete", environment=settings.environment)
+        except Exception as e:
+            err_msg = str(e)
+            logger.error("startup_database_failed", error=err_msg)
+            if "tenant" in err_msg.lower() or "user not found" in err_msg.lower():
+                logger.warning(
+                    "database_pooler_hint",
+                    msg=(
+                        "Database avviste bruker/tenant — sjekk DATABASE_URL "
+                        "(vert, port, brukernavn, passord). Ved connection pooler, "
+                        "bekreft format fra leverandørens dashboard."
+                    ),
+                )
+            logger.warning(
+                "startup_continuing_without_db",
+                msg="App will start but DB features are unavailable",
+            )
+    else:
+        logger.warning("startup_no_database", msg="DATABASE_URL not set — running without DB")
+
+    yield
+
+    # ---- Shutdown ----
+    from app.db import close_pool
+    await close_pool()
+    logger.info("shutdown_complete")
+
+
 app = FastAPI(
     title="MateMaTeX 2.0 API",
     version="2.0.0",
     description="AI-powered math education content generator for Norwegian schools",
+    lifespan=lifespan,
     docs_url="/docs" if settings.environment == "development" else None,
     redoc_url="/redoc" if settings.environment == "development" else None,
     openapi_tags=[
@@ -71,8 +110,6 @@ if settings.environment == "development":
 # e.g. https://mate-ma-xyz123-username.vercel.app
 _frontend = settings.frontend_url or ""
 if ".vercel.app" in _frontend:
-    # Extract the project prefix before .vercel.app for preview URLs
-    # Also allow the bare vercel.app domain pattern
     allowed_origins.append("https://*.vercel.app")
 
 logger.info("cors_origins", origins=allowed_origins)
@@ -85,40 +122,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# ---------------------------------------------------------------------------
-# Startup / Shutdown (database pool)
-# ---------------------------------------------------------------------------
-@app.on_event("startup")
-async def startup():
-    if settings.database_url:
-        try:
-            from app.db import get_pool
-            await get_pool()
-            logger.info("startup_complete", environment=settings.environment)
-        except Exception as e:
-            err_msg = str(e)
-            logger.error("startup_database_failed", error=err_msg)
-            if "tenant" in err_msg.lower() or "user not found" in err_msg.lower():
-                logger.warning(
-                    "database_pooler_hint",
-                    msg=(
-                        "Database avviste bruker/tenant — sjekk DATABASE_URL "
-                        "(vert, port, brukernavn, passord). Ved connection pooler, "
-                        "bekreft format fra leverandørens dashboard."
-                    ),
-                )
-            logger.warning("startup_continuing_without_db", msg="App will start but DB features are unavailable")
-    else:
-        logger.warning("startup_no_database", msg="DATABASE_URL not set — running without DB")
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    from app.db import close_pool
-    await close_pool()
-    logger.info("shutdown_complete")
-
 
 # ---------------------------------------------------------------------------
 # Mount sub-routers (Fase 2 modules)
@@ -268,10 +271,10 @@ async def abort_generation(job_id: str, user_id: str = Depends(get_current_user)
     else:
         return {"success": False, "message": "Job already finished"}
 
+
 @app.get("/generate/{job_id}/result")
 async def get_result(job_id: str, user_id: str = Depends(get_current_user)):
     """Get the result of a completed generation job."""
-
     state = resolve_job(job_id, _jobs)
     if state is None:
         raise HTTPException(status_code=404, detail="Job not found")
