@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Download,
@@ -18,6 +18,9 @@ import {
   Clock,
   Cpu,
   Plus,
+  RefreshCw,
+  AlertTriangle,
+  CheckSquare,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import {
@@ -28,16 +31,27 @@ import {
   ingestExercises,
   differentiate,
 } from "@/lib/api";
+import {
+  isJobFavorite,
+  updateHistoryFavorite,
+} from "@/lib/generation-history";
+import { errorCategoryLabel } from "@/lib/map-api-result";
 
 type Tab = "document" | "editor" | "differentiation";
 
 export function ResultView() {
-  const { result } = useAppStore();
+  const { result, request, setRequest, lastFailedRequest, clearLastFailedRequest } = useAppStore();
   const store = useAppStore();
   const [activeTab, setActiveTab] = useState<Tab>("document");
   const [showLatex, setShowLatex] = useState(false);
   const [showDownloads, setShowDownloads] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [includeSolutionsExport, setIncludeSolutionsExport] = useState(true);
+  const [approvalChecks, setApprovalChecks] = useState({
+    reviewed: false,
+    language: false,
+    classFit: false,
+  });
 
   // Differentiation
   const [diffData, setDiffData] = useState<any>(null);
@@ -50,6 +64,20 @@ export function ResultView() {
 
   if (!result) return null;
   const isSuccess = result.status === "completed";
+  const canShare = approvalChecks.reviewed && approvalChecks.language && approvalChecks.classFit;
+  const hasMathIssues =
+    result.mathVerification.claimsIncorrect > 0 ||
+    result.mathVerification.claimsUnparseable > 0;
+
+  useEffect(() => {
+    if (!result?.jobId) return;
+    setIsFavorite(isJobFavorite(result.jobId));
+  }, [result?.jobId]);
+
+  const selectedCompetencyGoals = useMemo(
+    () => result.generationMeta?.competencyGoals || [],
+    [result.generationMeta]
+  );
 
   /* ---- Export handlers ---- */
   const handleExport = async (format: string) => {
@@ -59,10 +87,11 @@ export function ResultView() {
         const res = await exportPdf({
           latex_content: result.fullDocument,
           print_optimized: format === "pdf-print",
+          include_solutions: includeSolutionsExport,
         });
         if (res.success) downloadBase64(res.content_base64, res.filename, res.mime_type);
       } else if (format === "docx") {
-        const res = await exportDocx(result.fullDocument);
+        const res = await exportDocx(result.fullDocument, "Oppgaveark", includeSolutionsExport);
         if (res.success) downloadBase64(res.content_base64, res.filename, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
       } else if (format === "pptx") {
         const res = await exportPptx(result.fullDocument);
@@ -95,6 +124,21 @@ export function ResultView() {
     }
   };
 
+  const goToWizardWithSameSettings = () => {
+    const base = lastFailedRequest || result.generationMeta || request;
+    setRequest({ ...base });
+    store.setResult(null as any);
+    clearLastFailedRequest();
+  };
+
+  const toggleFavorite = () => {
+    const next = !isFavorite;
+    setIsFavorite(next);
+    if (result.jobId) {
+      updateHistoryFavorite(result.jobId, next);
+    }
+  };
+
   return (
     <div className="max-w-content mx-auto pb-24">
       {/* Status banner */}
@@ -113,7 +157,7 @@ export function ResultView() {
               {isSuccess ? (
                 <CheckCircle2 size={20} className="text-accent-green" />
               ) : (
-                <XCircle size={20} className="text-accent-red" />
+                <AlertTriangle size={20} className="text-accent-red" />
               )}
               {isSuccess ? "Materiale generert" : "Generering feilet"}
             </h2>
@@ -122,22 +166,48 @@ export function ResultView() {
                 ? `Ferdig på ${result.totalDuration.toFixed(1)} sekunder`
                 : result.error}
             </p>
+            {!isSuccess && (
+              <p className="text-xs text-text-muted mt-1">
+                Feilkategori: {errorCategoryLabel(result.errorCategory || "unknown")}
+              </p>
+            )}
           </div>
-          <button
-            onClick={() => {
-              store.setResult(null as any);
-              store.resetRequest();
-            }}
-            className="btn-ghost"
-          >
-            <Plus size={16} className="rotate-45" />
-            Ny generering
-          </button>
+          <div className="flex items-center gap-2">
+            {!isSuccess && (
+              <button onClick={goToWizardWithSameSettings} className="btn-secondary">
+                <RefreshCw size={14} />
+                Prøv igjen
+              </button>
+            )}
+            <button
+              onClick={() => {
+                store.setResult(null as any);
+                store.resetRequest();
+              }}
+              className="btn-ghost"
+            >
+              <Plus size={16} className="rotate-45" />
+              Ny generering
+            </button>
+          </div>
         </div>
       </motion.div>
 
       {isSuccess && (
         <>
+          {selectedCompetencyGoals.length > 0 && (
+            <div className="card mb-6">
+              <h3 className="text-sm font-medium mb-2">Koblet til LK20-mål</h3>
+              <div className="flex flex-wrap gap-1.5">
+                {selectedCompetencyGoals.map((goal) => (
+                  <span key={goal} className="badge text-[10px] !py-0.5 bg-accent-blue/10 text-accent-blue">
+                    {goal}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Stats row */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
             <StatCard
@@ -165,6 +235,29 @@ export function ResultView() {
               color="purple"
             />
           </div>
+
+          {hasMathIssues && (
+            <div className="card mb-6 !border-accent-orange/30 bg-accent-orange/5">
+              <h3 className="text-sm font-semibold mb-2">Matte-sjekk krever gjennomgang</h3>
+              <p className="text-xs text-text-secondary mb-3">
+                Noen påstander kunne ikke verifiseres automatisk. Sjekk disse før deling.
+              </p>
+              <div className="space-y-2 max-h-56 overflow-y-auto">
+                {result.mathVerification.incorrectClaims.map((c) => (
+                  <div key={c.claimId} className="rounded-lg border border-accent-red/20 bg-accent-red/5 p-2">
+                    <div className="text-[11px] font-mono text-accent-red mb-1">{c.latexExpression || c.claimId}</div>
+                    <div className="text-xs text-text-secondary">{c.errorMessage || "Feil i påstand"}</div>
+                  </div>
+                ))}
+                {result.mathVerification.unparseableClaims.map((c) => (
+                  <div key={c.claimId} className="rounded-lg border border-accent-orange/20 bg-accent-orange/5 p-2">
+                    <div className="text-[11px] font-mono text-accent-orange mb-1">{c.latexExpression || c.claimId}</div>
+                    <div className="text-xs text-text-secondary">Kunne ikke parses automatisk</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Tabs */}
           <div className="flex items-center gap-1 border-b border-border mb-6">
@@ -265,7 +358,7 @@ export function ResultView() {
                           {step.error && (
                             <span className="text-accent-red">{step.error}</span>
                           )}
-                          <span>{step.duration_seconds?.toFixed(1)}s</span>
+                          <span>{step.durationSeconds?.toFixed(1)}s</span>
                         </div>
                       </div>
                     ))}
@@ -395,6 +488,17 @@ export function ResultView() {
                       exit={{ opacity: 0, y: 8 }}
                       className="absolute bottom-full left-0 mb-2 w-48 bg-surface border border-border rounded-xl shadow-soft-lg overflow-hidden"
                     >
+                      <div className="px-3 py-2 border-b border-border">
+                        <label className="text-xs text-text-secondary flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={includeSolutionsExport}
+                            onChange={(e) => setIncludeSolutionsExport(e.target.checked)}
+                            className="rounded border-border"
+                          />
+                          Inkluder løsningsforslag (lærerkopi)
+                        </label>
+                      </div>
                       {[
                         { id: "pdf", label: "PDF", icon: <FileText size={14} /> },
                         { id: "pdf-print", label: "PDF (print)", icon: <Printer size={14} /> },
@@ -425,7 +529,10 @@ export function ResultView() {
               </button>
 
               <button
-                onClick={handleDifferentiate}
+                onClick={() => {
+                  setApprovalChecks({ reviewed: false, language: false, classFit: false });
+                  handleDifferentiate();
+                }}
                 disabled={diffLoading}
                 className="btn-secondary"
               >
@@ -433,7 +540,7 @@ export function ResultView() {
                 Differensiér
               </button>
 
-              <button className="btn-secondary">
+              <button className="btn-secondary" disabled={!canShare} title={!canShare ? "Kryss av sjekklisten først" : undefined}>
                 <Share2 size={14} />
                 Del
               </button>
@@ -451,7 +558,7 @@ export function ResultView() {
               </button>
 
               <button
-                onClick={() => setIsFavorite(!isFavorite)}
+                onClick={toggleFavorite}
                 className="btn-ghost !p-2"
                 aria-label="Merk som favoritt"
               >
@@ -464,6 +571,40 @@ export function ResultView() {
                   }
                 />
               </button>
+            </div>
+            <div className="max-w-content mx-auto px-6 pb-3 -mt-2">
+              <div className="rounded-lg border border-border bg-surface-elevated/40 p-3">
+                <p className="text-xs font-medium mb-2 flex items-center gap-1.5">
+                  <CheckSquare size={14} />
+                  Kvalitetssjekk før deling
+                </p>
+                <div className="flex flex-wrap gap-4 text-xs text-text-secondary">
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      checked={approvalChecks.reviewed}
+                      onChange={(e) => setApprovalChecks((s) => ({ ...s, reviewed: e.target.checked }))}
+                    />
+                    Jeg har lest gjennom innholdet
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      checked={approvalChecks.language}
+                      onChange={(e) => setApprovalChecks((s) => ({ ...s, language: e.target.checked }))}
+                    />
+                    Språket passer elevgruppen
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      checked={approvalChecks.classFit}
+                      onChange={(e) => setApprovalChecks((s) => ({ ...s, classFit: e.target.checked }))}
+                    />
+                    Oppgavene passer klassen min
+                  </label>
+                </div>
+              </div>
             </div>
           </div>
         </>

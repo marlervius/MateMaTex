@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, Sparkles, LayoutTemplate } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { startGeneration, streamProgress, getResult } from "@/lib/api";
+import { mapApiResultToGenerationResult } from "@/lib/map-api-result";
+import { appendHistory } from "@/lib/generation-history";
+import { searchGoals, type CompetencyGoal } from "@/data/lk20-goals";
 
 /* -----------------------------------------------------------------------
    Data
@@ -48,23 +51,66 @@ const LANGUAGE_LEVELS = [
   { value: "b1", label: "Enklere (B1)" },
 ];
 
-/* -----------------------------------------------------------------------
-   Slide animation variants
-   ----------------------------------------------------------------------- */
 const slideVariants = {
   enter: (direction: number) => ({
     x: direction > 0 ? 80 : -80,
     opacity: 0,
   }),
-  center: {
-    x: 0,
-    opacity: 1,
-  },
+  center: { x: 0, opacity: 1 },
   exit: (direction: number) => ({
     x: direction > 0 ? -80 : 80,
     opacity: 0,
   }),
 };
+
+function MaterialPreviewMock({ active }: { active: string }) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-6" aria-hidden="true">
+      {MATERIAL_TYPES.map((t) => (
+        <div
+          key={t.value}
+          className={`rounded-xl border p-3 text-left transition-all ${
+            active === t.value
+              ? "border-accent-blue bg-accent-blue/5 ring-1 ring-accent-blue/30"
+              : "border-border bg-surface-elevated/50 opacity-70"
+          }`}
+        >
+          <div className="text-xs font-medium mb-2 flex items-center gap-1">
+            <span>{t.icon}</span> {t.label}
+          </div>
+          <div className="space-y-1">
+            <div className="h-1.5 bg-border rounded w-4/5" />
+            <div className="h-1.5 bg-border rounded w-full" />
+            <div className="h-1.5 bg-border rounded w-3/5" />
+            {t.value === "kapittel" && (
+              <>
+                <div className="h-8 bg-accent-blue/10 rounded mt-2" />
+                <div className="h-1.5 bg-border rounded w-full mt-1" />
+              </>
+            )}
+            {(t.value === "arbeidsark" || t.value === "differensiert") && (
+              <div className="grid grid-cols-2 gap-1 mt-2">
+                <div className="h-6 bg-accent-green/10 rounded" />
+                <div className="h-6 bg-accent-green/10 rounded" />
+              </div>
+            )}
+            {t.value === "prøve" && (
+              <div className="h-10 bg-accent-orange/10 rounded mt-2 flex items-end p-1 gap-0.5">
+                <div className="flex-1 h-3 bg-border/80 rounded-sm" />
+                <div className="flex-1 h-4 bg-border rounded-sm" />
+                <div className="flex-1 h-2 bg-border/60 rounded-sm" />
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function toggleGoal(list: string[], code: string): string[] {
+  return list.includes(code) ? list.filter((c) => c !== code) : [...list, code];
+}
 
 /* -----------------------------------------------------------------------
    Component
@@ -75,8 +121,14 @@ export function GenerationWizard() {
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(0);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [goalSearch, setGoalSearch] = useState("");
 
   const totalSteps = 3;
+
+  const filteredGoals: CompetencyGoal[] = useMemo(
+    () => searchGoals(request.grade, goalSearch),
+    [request.grade, goalSearch]
+  );
 
   const goNext = () => {
     if (step < totalSteps - 1) {
@@ -91,7 +143,6 @@ export function GenerationWizard() {
     }
   };
 
-  // Keyboard nav
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowRight" || e.key === "ArrowDown") {
       e.preventDefault();
@@ -108,6 +159,7 @@ export function GenerationWizard() {
     if (!canGenerate) return;
 
     store.startGeneration();
+    const snapshot = { ...useAppStore.getState().request };
 
     try {
       const { job_id } = await startGeneration({
@@ -129,41 +181,71 @@ export function GenerationWizard() {
       store.setJobId(job_id);
 
       streamProgress(job_id, {
-        onStep: (s) => store.addStep(s),
+        onStep: (s) =>
+          store.addStep({
+            agent: s.agent,
+            startedAt: s.started_at,
+            completedAt: s.completed_at,
+            durationSeconds: s.duration_seconds,
+            outputSummary: s.output_summary,
+            error: s.error,
+            retries: s.retries,
+          }),
         onCurrentAgent: (a) => store.setCurrentAgent(a),
-        onComplete: async (data) => {
-          const result = await getResult(job_id);
-          store.setResult({
-            jobId: job_id,
-            status: data.status,
-            fullDocument: result.full_document,
-            pdfUrl: result.pdf_path,
-            steps: result.steps,
-            mathVerification: {
-              claimsChecked: data.math_checks,
-              claimsCorrect: data.math_correct,
-              claimsIncorrect: data.math_checks - data.math_correct,
-              allCorrect: data.math_checks === data.math_correct,
-            },
-            latexCompiled: data.latex_compiled,
-            totalDuration: data.total_duration,
-            error: data.error || "",
-          });
+        onComplete: async () => {
+          try {
+            const raw = await getResult(job_id);
+            const mapped = mapApiResultToGenerationResult(raw, snapshot);
+            store.setResult(mapped);
+            if (mapped.status === "completed") {
+              appendHistory({
+                jobId: job_id,
+                createdAt: new Date().toISOString(),
+                topic: snapshot.topic,
+                grade: snapshot.grade,
+                materialType: snapshot.materialType,
+                favorite: false,
+                request: { ...snapshot },
+              });
+            }
+          } catch (e: any) {
+            store.setError(
+              e?.message || "Kunne ikke hente resultat",
+              useAppStore.getState().request
+            );
+          }
         },
-        onError: (err) => store.setError(err),
+        onError: (err) =>
+          store.setError(err, useAppStore.getState().request),
       });
     } catch (err: any) {
-      store.setError(err.message || "Noe gikk galt");
+      store.setError(
+        err?.message || "Noe gikk galt",
+        useAppStore.getState().request
+      );
     }
   };
 
   return (
-    <div className="max-w-reading mx-auto" onKeyDown={handleKeyDown} tabIndex={-1}>
-      {/* Step indicator */}
-      <div className="flex items-center justify-center gap-2 mb-8">
+    <div
+      className="max-w-reading mx-auto outline-none focus-visible:ring-2 focus-visible:ring-accent-blue/40 rounded-xl"
+      onKeyDown={handleKeyDown}
+      tabIndex={0}
+      role="region"
+      aria-label="Genereringsveiviser"
+    >
+      <div
+        className="flex items-center justify-center gap-2 mb-8"
+        role="tablist"
+        aria-label="Trinn i veiviseren"
+      >
         {["Trinn", "Emne", "Innstillinger"].map((label, i) => (
-          <div key={i} className="flex items-center gap-2">
+          <div key={label} className="flex items-center gap-2">
             <button
+              type="button"
+              role="tab"
+              aria-selected={i === step}
+              aria-current={i === step ? "step" : undefined}
               onClick={() => {
                 setDirection(i > step ? 1 : -1);
                 setStep(i);
@@ -189,14 +271,11 @@ export function GenerationWizard() {
               </span>
               <span className="hidden sm:inline">{label}</span>
             </button>
-            {i < totalSteps - 1 && (
-              <div className="w-8 h-px bg-border" />
-            )}
+            {i < totalSteps - 1 && <div className="w-8 h-px bg-border" />}
           </div>
         ))}
       </div>
 
-      {/* Step content */}
       <div className="overflow-hidden relative min-h-[320px]">
         <AnimatePresence initial={false} custom={direction} mode="wait">
           {step === 0 && (
@@ -219,6 +298,7 @@ export function GenerationWizard() {
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 {GRADES.map((g, i) => (
                   <motion.button
+                    type="button"
                     key={g.value}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -265,13 +345,31 @@ export function GenerationWizard() {
                 Hvilket emne?
               </h2>
               <p className="text-text-secondary text-sm text-center mb-6">
-                Velg et foreslått emne eller skriv ditt eget
+                Skriv presist tema — eller velg et forslag under
               </p>
 
-              {/* Topic chips */}
-              <div className="flex flex-wrap justify-center gap-2 mb-6">
+              <div className="max-w-lg mx-auto mb-6">
+                <label className="text-xs text-text-muted block mb-1.5 text-center">
+                  Tema (anbefalt)
+                </label>
+                <input
+                  type="text"
+                  value={request.topic}
+                  onChange={(e) => setRequest({ topic: e.target.value })}
+                  placeholder="F.eks. «Proporsjonalitet i hverdagsøkonomi» eller «Pytagoras i bygg»"
+                  className="input text-center w-full"
+                  autoFocus
+                  aria-label="Skriv matematisk tema"
+                />
+              </div>
+
+              <p className="text-center text-xs text-text-muted mb-3">
+                Vanlige emner for {request.grade}
+              </p>
+              <div className="flex flex-wrap justify-center gap-2 mb-4">
                 {(TOPICS[request.grade] || []).map((topic, i) => (
                   <motion.button
+                    type="button"
                     key={topic}
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -288,17 +386,15 @@ export function GenerationWizard() {
                 ))}
               </div>
 
-              {/* Custom topic input */}
-              <div className="max-w-md mx-auto">
-                <input
-                  type="text"
-                  value={request.topic}
-                  onChange={(e) => setRequest({ topic: e.target.value })}
-                  placeholder="Eller skriv et emne... f.eks. 'Pytagoras setning'"
-                  className="input text-center"
-                  autoFocus
-                />
-              </div>
+              <p className="text-center text-xs">
+                <a
+                  href="/templates"
+                  className="text-accent-blue hover:underline inline-flex items-center gap-1 justify-center"
+                >
+                  <LayoutTemplate size={12} />
+                  Se eksempel på utforming (maler)
+                </a>
+              </p>
             </motion.div>
           )}
 
@@ -315,14 +411,19 @@ export function GenerationWizard() {
               <h2 className="font-display text-2xl mb-2 text-center">
                 Type og innstillinger
               </h2>
-              <p className="text-text-secondary text-sm text-center mb-6">
-                Tilpass materialet etter behov
+              <p className="text-text-secondary text-sm text-center mb-4">
+                Forhåndsvisning av struktur — ferdig PDF får profesjonell typografi
               </p>
 
-              {/* Material type */}
+              <MaterialPreviewMock active={request.materialType} />
+
+              <p className="text-xs text-text-muted text-center mb-2">
+                Velg materialetype
+              </p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
                 {MATERIAL_TYPES.map((type) => (
                   <button
+                    type="button"
                     key={type.value}
                     onClick={() => setRequest({ materialType: type.value })}
                     className={`card-interactive !p-4 text-center relative ${
@@ -340,8 +441,74 @@ export function GenerationWizard() {
                 ))}
               </div>
 
-              {/* Advanced settings (expandable) */}
+              <div className="card mb-6">
+                <h3 className="text-sm font-medium mb-1">
+                  LK20 — kompetansemål (valgfritt)
+                </h3>
+                <p className="text-xs text-text-muted mb-3">
+                  Utvalgte mål for {request.grade}. Søk i feltet under og klikk for å legge til.
+                </p>
+                <input
+                  type="search"
+                  value={goalSearch}
+                  onChange={(e) => setGoalSearch(e.target.value)}
+                  placeholder="Søk etter kode eller nøkkelord..."
+                  className="input mb-3"
+                  aria-label="Søk kompetansemål"
+                />
+                <div className="max-h-36 overflow-y-auto space-y-1 mb-3 border border-border rounded-lg p-2">
+                  {filteredGoals.map((g) => {
+                    const on = request.competencyGoals.includes(g.code);
+                    return (
+                      <button
+                        type="button"
+                        key={g.code}
+                        onClick={() =>
+                          setRequest({
+                            competencyGoals: toggleGoal(
+                              request.competencyGoals,
+                              g.code
+                            ),
+                          })
+                        }
+                        className={`w-full text-left text-xs rounded-md px-2 py-1.5 transition-colors ${
+                          on
+                            ? "bg-accent-blue/15 text-accent-blue"
+                            : "hover:bg-surface-elevated text-text-secondary"
+                        }`}
+                      >
+                        <span className="font-mono text-[10px] opacity-80">
+                          {g.code}
+                        </span>{" "}
+                        {g.text}
+                      </button>
+                    );
+                  })}
+                </div>
+                {request.competencyGoals.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {request.competencyGoals.map((code) => (
+                      <button
+                        type="button"
+                        key={code}
+                        onClick={() =>
+                          setRequest({
+                            competencyGoals: request.competencyGoals.filter(
+                              (c) => c !== code
+                            ),
+                          })
+                        }
+                        className="badge text-[10px] !py-0.5 bg-accent-blue/10 text-accent-blue"
+                      >
+                        {code} ×
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <button
+                type="button"
                 onClick={() => setShowAdvanced(!showAdvanced)}
                 className="text-xs text-text-muted hover:text-text-secondary flex items-center gap-1 mx-auto mb-3 transition-colors"
               >
@@ -362,7 +529,6 @@ export function GenerationWizard() {
                     exit={{ opacity: 0, height: 0 }}
                     className="space-y-4 overflow-hidden"
                   >
-                    {/* Content toggles */}
                     <div className="card">
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                         {[
@@ -390,7 +556,6 @@ export function GenerationWizard() {
                       </div>
                     </div>
 
-                    {/* Sliders and selects */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div className="card !p-3">
                         <label className="text-xs text-text-muted mb-1 block">
@@ -445,7 +610,6 @@ export function GenerationWizard() {
                       </div>
                     </div>
 
-                    {/* Extra instructions */}
                     <div className="card !p-3">
                       <label className="text-xs text-text-muted mb-1 block">
                         Spesielle instruksjoner (valgfritt)
@@ -468,9 +632,9 @@ export function GenerationWizard() {
         </AnimatePresence>
       </div>
 
-      {/* Navigation buttons */}
       <div className="flex items-center justify-between mt-8">
         <button
+          type="button"
           onClick={goPrev}
           disabled={step === 0}
           className="btn-ghost disabled:opacity-30"
@@ -480,12 +644,13 @@ export function GenerationWizard() {
         </button>
 
         {step < totalSteps - 1 ? (
-          <button onClick={goNext} className="btn-primary">
+          <button type="button" onClick={goNext} className="btn-primary">
             Neste
             <ChevronRight size={16} />
           </button>
         ) : (
           <button
+            type="button"
             onClick={handleGenerate}
             disabled={!canGenerate}
             className="btn-primary !px-8 shadow-lg shadow-accent-blue/20 disabled:opacity-40 disabled:shadow-none"

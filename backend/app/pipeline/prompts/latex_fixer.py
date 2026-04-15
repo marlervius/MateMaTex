@@ -14,7 +14,7 @@ REGLER:
    - Ubalanserte klammer { }
    - Ukjente kommandoer (fjern eller erstatt med standard)
    - Manglende $ for matematikkmodus
-   - Feil i TikZ/PGFPlots-syntaks
+   - Feil i TikZ/PGFPlots-syntaks (f.eks. avbrutt \\addplot — fullfør kommandoen)
 3. ALDRI legg til preamble — den er allerede der
 4. ALDRI endre det matematiske innholdet
 5. Returner HELE det korrigerte dokumentet
@@ -23,6 +23,12 @@ ALDRI:
 - Slett innhold for å "fikse" feil
 - Legg til \\documentclass eller \\usepackage
 - Endre oppgavetekster eller svar
+
+OUTPUTFORMAT (KRITISK):
+- Returner KUN rå LaTeX-kode — ingen forklaringer, ingen prosa, ingen introduksjonstekst
+- Første tegn i svaret skal være \\ (fra \\documentclass)
+- Siste linje skal være \\end{document}
+- IKKE bruk markdown-kodeblokker (```latex ... ```)
 """
 
 
@@ -42,4 +48,7 @@ DOKUMENT:
 
 OPPGAVE: Rett kompileringsfeilene og returner HELE det korrigerte dokumentet.
 Ikke endre innholdet — bare rett syntaksfeil.
+
+VIKTIG: Svar med KUN LaTeX-koden. Ingen norsk tekst, ingen forklaringer, ingen kodeblokker.
+Dokumentet skal starte med \\documentclass og slutte med \\end{{document}}.
 """

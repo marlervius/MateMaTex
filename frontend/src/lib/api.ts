@@ -95,6 +95,11 @@ export async function startGeneration(
         "Ingen tilgang (401). Sjekk at backend MATE_API_KEY matcher NEXT_PUBLIC_MATE_API_KEY, eller at nøkkel ikke er påkrevd."
       );
     }
+    if (res.status === 429) {
+      throw new Error(
+        "Du har sendt mange forespørsler på kort tid (rate limit). Vent et minutt og prøv igjen. Ved skoleutrulling: be administrator om høyere grense eller felles nøkkel bak proxy."
+      );
+    }
     throw new Error(msg || `Generation failed: ${res.statusText}`);
   }
   return res.json();
@@ -120,7 +125,8 @@ export function streamProgress(
     callbacks.onCurrentAgent?.(p.agent);
   });
   eventSource.addEventListener("complete", (e: MessageEvent) => {
-    callbacks.onComplete?.(JSON.parse(e.data) as StreamCompletePayload);
+    const data = JSON.parse(e.data) as StreamCompletePayload;
+    callbacks.onComplete?.(data);
     eventSource.close();
   });
   eventSource.addEventListener("error", (e: Event) => {

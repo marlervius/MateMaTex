@@ -36,12 +36,12 @@ export async function GET(
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "fetch failed";
-    return new NextResponse(`Upstream unreachable: ${msg}`, { status: 502 });
+    return new Response(`Upstream unreachable: ${msg}`, { status: 502 });
   }
 
   if (!upstream.ok || !upstream.body) {
     const text = await upstream.text().catch(() => "");
-    return new NextResponse(text || `Upstream ${upstream.status}`, {
+    return new Response(text || `Upstream ${upstream.status}`, {
       status: upstream.status === 401 ? 401 : 502,
     });
   }

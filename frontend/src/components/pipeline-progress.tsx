@@ -99,7 +99,7 @@ export function PipelineProgress() {
     if (!currentJobId) return;
     try {
       await abortGeneration(currentJobId);
-      setError("Genereringen ble avbrutt av bruker.");
+      setError("Genereringen ble avbrutt av bruker.", null);
     } catch (err: any) {
       console.error("Failed to abort:", err);
     }
@@ -123,18 +123,47 @@ export function PipelineProgress() {
         steps.length
       : 5;
   const remaining = Math.max(0, (totalAgents - completedCount) * avgDuration);
+  const currentInfo = currentAgent
+    ? AGENT_INFO[currentAgent]
+    : null;
+  const liveStatus = currentInfo
+    ? `${currentInfo.name} jobber: ${currentInfo.description}`
+    : completedCount === 0
+    ? "Starter generering. Vanligvis 1–3 minutter."
+    : remaining > 0
+    ? `Omtrent ${Math.round(remaining)} sekunder igjen.`
+    : "Fullfører siste steg.";
 
   return (
     <div className="max-w-reading mx-auto">
+      <div
+        className="sr-only"
+        aria-live="polite"
+        aria-atomic="true"
+        role="status"
+      >
+        {liveStatus}
+      </div>
       {/* Header */}
       <div className="text-center mb-8">
         <h2 className="font-display text-2xl mb-2">
           AI-teamet jobber
         </h2>
         <p className="text-sm text-text-secondary">
+          Vanligvis 1–3 minutter — tida varierer med lengde og kompleksitet.
+        </p>
+        <p className="text-sm text-text-secondary mt-1">
           {remaining > 0
-            ? `~${Math.round(remaining)} sekunder igjen`
+            ? `~${Math.round(remaining)} sekunder igjen (estimat)`
             : "Snart ferdig..."}
+        </p>
+        <p className="text-xs text-text-muted mt-4 max-w-md mx-auto leading-relaxed">
+          Mens du venter: sjekk at trinn og tema stemmer, forbered mappe for PDF,
+          eller les om{" "}
+          <a href="/exercises" className="text-accent-blue hover:underline">
+            oppgavebanken
+          </a>
+          .
         </p>
       </div>
 

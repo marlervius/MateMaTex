@@ -9,32 +9,14 @@ arithmetic errors, incorrect solutions, and invalid equations.
 from __future__ import annotations
 
 import re
-import signal
 import structlog
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-from sympy import (
-    Eq,
-    Float,
-    Rational,
-    S,
-    Symbol,
-    simplify,
-    solve,
-    sqrt,
-    sympify,
-    oo,
-)
-from sympy.parsing.latex import parse_latex
-
+from sympy import Eq, Symbol, simplify, solve, sqrt, sympify
 from app.models.state import MathClaim, VerificationResult
 
 logger = structlog.get_logger()
 
-# Timeout per individual claim verification (seconds)
-_CLAIM_TIMEOUT = 5
 # Timeout for the entire verification pass (seconds)
-_TOTAL_TIMEOUT = 60
-_executor = ThreadPoolExecutor(max_workers=2)
+_TOTAL_TIMEOUT = 90
 
 
 class MathChecker:
@@ -80,14 +62,16 @@ class MathChecker:
         Run full mathematical verification on the LaTeX content.
 
         Returns a VerificationResult with details on every claim checked.
-        Each claim has a per-claim timeout to prevent SymPy from hanging
-        on complex expressions.
+        The whole pass is bounded by ``_TOTAL_TIMEOUT``; claims run in-process
+        (SymPy is already loaded in this interpreter — a thread pool caused
+        spurious timeouts on Windows when workers first touched SymPy).
         """
         claims = self._extract_claims(latex_content)
         result = VerificationResult()
         result.claims_checked = len(claims)
 
         import time
+
         start_time = time.monotonic()
 
         for claim in claims:
@@ -96,14 +80,8 @@ class MathChecker:
                 logger.warning("math_verification_total_timeout", checked_so_far=result.claims_correct + result.claims_incorrect + result.claims_unparseable)
                 break
 
-            # Run each claim with a timeout to prevent SymPy hangs
             try:
-                future = _executor.submit(self._verify_claim, claim)
-                future.result(timeout=_CLAIM_TIMEOUT)
-            except FuturesTimeoutError:
-                claim.is_correct = None
-                claim.error_message = f"Verification timed out ({_CLAIM_TIMEOUT}s)"
-                logger.debug("claim_timeout", claim=claim.latex_expression[:60])
+                self._verify_claim(claim)
             except Exception as e:
                 claim.is_correct = None
                 claim.error_message = f"Verification error: {e}"
@@ -115,6 +93,7 @@ class MathChecker:
                 result.errors.append(claim)
             else:
                 result.claims_unparseable += 1
+                result.unparseable_claims.append(claim)
 
         result.all_correct = result.claims_incorrect == 0
         result.summary = (
@@ -269,26 +248,37 @@ class MathChecker:
             claim.error_message = "Could not parse one or both sides"
             return
 
-        # Check symbolic equality
+        # Check symbolic equality (avoid `complex(sympy)` — unreliable for Rationals)
         try:
             diff = simplify(lhs - rhs)
             claim.expected_result = str(rhs)
             claim.actual_result = str(simplify(lhs))
 
-            if diff == 0:
+            if diff == 0 or diff.is_zero is True:
                 claim.is_correct = True
-            elif abs(complex(diff)) < 1e-10:
-                claim.is_correct = True  # Numerically equal
             else:
-                claim.is_correct = False
-                claim.error_message = (
-                    f"LHS ({simplify(lhs)}) ≠ RHS ({simplify(rhs)}), "
-                    f"difference = {diff}"
-                )
+                try:
+                    d = complex(diff.evalf())
+                    if abs(d) < 1e-9:
+                        claim.is_correct = True
+                    else:
+                        claim.is_correct = False
+                        claim.error_message = (
+                            f"LHS ({simplify(lhs)}) ≠ RHS ({simplify(rhs)}), "
+                            f"difference = {diff}"
+                        )
+                except (TypeError, ValueError):
+                    claim.is_correct = False
+                    claim.error_message = (
+                        f"LHS ({simplify(lhs)}) ≠ RHS ({simplify(rhs)}), "
+                        f"difference = {diff}"
+                    )
         except (TypeError, ValueError):
-            # Can't evaluate numerically — try symbolic
             try:
-                claim.is_correct = bool(Eq(lhs, rhs))
+                ev = Eq(lhs, rhs)
+                claim.is_correct = bool(ev) if ev in (True, False) else False
+                if not claim.is_correct:
+                    claim.error_message = f"Could not prove equality: {ev}"
             except Exception:
                 claim.is_correct = None
                 claim.error_message = "Could not determine equality"
@@ -371,8 +361,7 @@ class MathChecker:
     # ------------------------------------------------------------------
     def _parse_latex_expr(self, latex_expr: str):
         """
-        Parse a LaTeX math expression into a SymPy expression.
-        Uses sympy.parsing.latex.parse_latex with fallback to manual parsing.
+        Parse a LaTeX math expression into a SymPy expression (manual rules only).
         """
         # Clean the expression
         expr = latex_expr.strip()
@@ -381,14 +370,9 @@ class MathChecker:
         expr = expr.replace('\\!', '')
         expr = expr.replace('\\text{', '').rstrip('}')
 
-        # Try sympy's LaTeX parser first
-        try:
-            return parse_latex(expr)
-        except Exception:
-            pass
-
-        # Fallback: manual conversion for common patterns
-        return self._manual_parse(expr)
+        # Manual parse only for reliability: parse_latex can hang without full antlr.
+        manual = self._manual_parse(expr)
+        return manual
 
     def _manual_parse(self, expr: str):
         """Manual fallback parser for common LaTeX math patterns."""
@@ -453,6 +437,14 @@ def format_errors_for_agent(result: VerificationResult) -> str:
         lines.append(f"  Detalj: {err.error_message}")
         lines.append(f"  Kontekst: ...{err.context}...")
         lines.append("")
+
+    if result.unparseable_claims:
+        lines.append(f"=== KUNNE IKKE VERIFISERE ({len(result.unparseable_claims)}) ===\n")
+        for i, c in enumerate(result.unparseable_claims, 1):
+            lines.append(f"UVISS {i}: {c.latex_expression}")
+            if c.error_message:
+                lines.append(f"  Merknad: {c.error_message}")
+            lines.append("")
 
     lines.append("RETT ALLE FEILENE OVER og returner hele dokumentet med korreksjoner.")
     return "\n".join(lines)

@@ -1,19 +1,55 @@
 "use client";
 
-import { LayoutTemplate, Plus } from "lucide-react";
+import { LayoutTemplate, CheckCircle2 } from "lucide-react";
+
+const TEMPLATES = [
+  {
+    id: "worksheet",
+    title: "Oppgaveark",
+    description: "Kort teori + mange oppgaver + løsningsdel",
+  },
+  {
+    id: "chapter",
+    title: "Kapittel",
+    description: "Teori, eksempler, progresjon og refleksjonsoppgaver",
+  },
+  {
+    id: "exam",
+    title: "Prøve",
+    description: "Poengfordeling, nivådeling og vurderingsgrunnlag",
+  },
+];
 
 export default function TemplatesPage() {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-      <LayoutTemplate size={48} className="text-text-muted opacity-20 mb-4" />
-      <h2 className="font-display text-2xl mb-2">Ingen maler ennå</h2>
-      <p className="text-text-secondary text-sm mb-6 max-w-sm">
-        Lagre dine favorittinnstillinger som maler for raskere generering.
-      </p>
-      <button className="btn-primary" disabled>
-        <Plus size={14} />
-        Ny mal (kommer snart)
-      </button>
+    <div className="max-w-content mx-auto">
+      <div className="mb-6">
+        <h1 className="font-display text-3xl mb-1">Maler</h1>
+        <p className="text-text-secondary text-sm">
+          Forhåndsvis standardstrukturer før du genererer nytt materiale.
+        </p>
+      </div>
+      <div className="grid md:grid-cols-3 gap-4">
+        {TEMPLATES.map((t) => (
+          <div key={t.id} className="card">
+            <div className="flex items-center gap-2 mb-2">
+              <LayoutTemplate size={16} className="text-accent-blue" />
+              <h2 className="text-sm font-semibold">{t.title}</h2>
+            </div>
+            <p className="text-xs text-text-secondary mb-3">{t.description}</p>
+            <div className="space-y-1 text-xs text-text-secondary">
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 size={12} className="text-accent-green" />
+                Typografi optimalisert for utskrift
+              </div>
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 size={12} className="text-accent-green" />
+                Struktur tilpasset valgt materialetype
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

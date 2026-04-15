@@ -53,6 +53,14 @@ def run_latex_fixer(state: PipelineState) -> PipelineState:
         fixed_doc = _re.sub(r'\n?```\s*$', '', fixed_doc)
         fixed_doc = fixed_doc.strip()
 
+        # Strip any prose the LLM prepended before the actual LaTeX document
+        for latex_start_marker in (r'\documentclass', r'\begin{document}'):
+            idx = fixed_doc.find(latex_start_marker)
+            if idx > 0:
+                logger.debug("latex_fixer_stripped_prose", chars_removed=idx)
+                fixed_doc = fixed_doc[idx:].strip()
+                break
+
         # Validate that the fixed document still contains \begin{document}
         if r'\begin{document}' not in fixed_doc:
             logger.warning("latex_fixer_missing_begin_document", doc_start=fixed_doc[:100])

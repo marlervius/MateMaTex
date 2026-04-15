@@ -81,6 +81,7 @@ class VerificationResult(BaseModel):
     claims_incorrect: int = 0
     claims_unparseable: int = 0
     errors: list[MathClaim] = Field(default_factory=list)
+    unparseable_claims: list[MathClaim] = Field(default_factory=list)
     all_correct: bool = False
     summary: str = ""
 

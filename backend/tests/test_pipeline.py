@@ -92,7 +92,7 @@ class TestLatexRetryRouting:
         assert should_retry_latex(state) == "finalize"
 
     def test_proceed_after_max_retries(self):
-        """Should finalize after max retries even with errors."""
+        """Should use latex_fallback after max fixer retries when still failing."""
         state = PipelineState(
             request=GenerationRequest(grade="8. trinn", topic="Algebra"),
             latex_compilation=LatexCompilationResult(
@@ -101,7 +101,7 @@ class TestLatexRetryRouting:
             ),
             latex_fix_attempts=3,
         )
-        assert should_retry_latex(state) == "finalize"
+        assert should_retry_latex(state) == "latex_fallback"
 
 
 class TestGraphStructure:
@@ -118,9 +118,17 @@ class TestGraphStructure:
         graph = create_pipeline()
         # LangGraph stores nodes internally
         expected_nodes = {
-            "pedagogue", "author", "math_verifier",
-            "editor", "latex_validator", "latex_fixer", "finalize",
+            "pedagogue",
+            "author",
+            "math_verifier",
+            "editor",
+            "tikz_validator",
+            "table_validator",
+            "latex_validator",
+            "latex_fixer",
+            "latex_fallback",
+            "finalize",
         }
-        # Verify nodes exist by compiling (will fail if nodes are missing)
+        assert set(graph.nodes.keys()) == expected_nodes
         compiled = graph.compile()
         assert compiled is not None
