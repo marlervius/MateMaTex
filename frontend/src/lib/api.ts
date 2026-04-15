@@ -130,6 +130,7 @@ export function streamProgress(
     eventSource.close();
   });
   eventSource.addEventListener("error", (e: Event) => {
+    // Definitive server error with a JSON payload
     if ("data" in e && (e as MessageEvent).data) {
       try {
         const j = JSON.parse((e as MessageEvent).data) as { message?: string };
@@ -137,8 +138,13 @@ export function streamProgress(
         eventSource.close();
         return;
       } catch {
-        /* connection error */
+        /* fall through */
       }
+    }
+    // readyState === CONNECTING means the browser is already attempting to
+    // reconnect — let it; only report a permanent failure when CLOSED.
+    if (eventSource.readyState === EventSource.CONNECTING) {
+      return;
     }
     callbacks.onError?.(
       "Mistet kontakt under generering. Sjekk nettverk og at backend kjører. " +

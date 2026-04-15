@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 300; // 5 min — generation can take 3-4 min on Render free tier
 
 /**
  * Proxies SSE from the FastAPI backend so the browser never needs MATE_API_KEY.

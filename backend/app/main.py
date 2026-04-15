@@ -205,7 +205,10 @@ async def stream_progress(
     """Stream agent progress via Server-Sent Events."""
 
     async def event_generator() -> AsyncGenerator[str, None]:
+        import time as _time
         last_step_count = 0
+        last_heartbeat = _time.monotonic()
+        _HEARTBEAT_INTERVAL = 15  # seconds
 
         while True:
             state = resolve_job(job_id, _jobs)
@@ -225,11 +228,13 @@ async def stream_progress(
                     "retries": step.retries,
                 })
                 last_step_count += 1
+                last_heartbeat = _time.monotonic()
 
             if state.current_agent:
                 yield _sse_event("current_agent", {
                     "agent": state.current_agent.value,
                 })
+                last_heartbeat = _time.monotonic()
 
             if state.status in (PipelineStatus.COMPLETED, PipelineStatus.FAILED):
                 yield _sse_event("complete", {
@@ -242,6 +247,12 @@ async def stream_progress(
                     "error": state.error_message,
                 })
                 break
+
+            # Send SSE comment heartbeat to prevent proxy/Vercel from closing idle connections
+            now = _time.monotonic()
+            if now - last_heartbeat >= _HEARTBEAT_INTERVAL:
+                yield ": heartbeat\n\n"
+                last_heartbeat = now
 
             await asyncio.sleep(0.5)
 
