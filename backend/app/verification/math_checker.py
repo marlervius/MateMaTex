@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 import structlog
-from sympy import Eq, Symbol, simplify, solve, sqrt, sympify
+from sympy import Eq, Symbol, simplify, solve, sqrt, sympify, expand, cancel
 from app.models.state import MathClaim, VerificationResult
 
 logger = structlog.get_logger()
@@ -248,31 +248,109 @@ class MathChecker:
             claim.error_message = "Could not parse one or both sides"
             return
 
+        # Support vector/coordinate list/tuple comparison
+        if isinstance(lhs, (list, tuple)) and isinstance(rhs, (list, tuple)):
+            if len(lhs) != len(rhs):
+                claim.is_correct = False
+                claim.error_message = f"Vector length mismatch: {len(lhs)} ≠ {len(rhs)}"
+                return
+            for i, (l, r) in enumerate(zip(lhs, rhs)):
+                try:
+                    diff_raw = l - r
+                    if diff_raw == 0 or getattr(diff_raw, "is_zero", False) is True:
+                        continue
+                    
+                    # Try cheap checks before heavy simplify
+                    resolved = False
+                    for simplifier in (expand, cancel):
+                        try:
+                            diff_simple = simplifier(diff_raw)
+                            if diff_simple == 0 or getattr(diff_simple, "is_zero", False) is True:
+                                resolved = True
+                                break
+                        except Exception:
+                            pass
+                    if resolved:
+                        continue
+
+                    diff = simplify(diff_raw)
+                    if diff == 0 or getattr(diff, "is_zero", False) is True:
+                        continue
+                    
+                    try:
+                        d = complex(diff.evalf())
+                        if abs(d) < 1e-9:
+                            continue
+                    except (TypeError, ValueError):
+                        pass
+
+                    claim.is_correct = False
+                    claim.error_message = f"Mismatch at element {i+1}: {l} ≠ {r}"
+                    return
+                except Exception as e:
+                    claim.is_correct = None
+                    claim.error_message = f"Could not verify element {i+1}: {e}"
+                    return
+            claim.is_correct = True
+            claim.expected_result = str(rhs)
+            claim.actual_result = str(lhs)
+            return
+
         # Check symbolic equality (avoid `complex(sympy)` — unreliable for Rationals)
         try:
-            diff = simplify(lhs - rhs)
-            claim.expected_result = str(rhs)
-            claim.actual_result = str(simplify(lhs))
-
-            if diff == 0 or diff.is_zero is True:
+            # First check direct physical equality of parsed objects
+            if lhs == rhs:
                 claim.is_correct = True
-            else:
+                claim.expected_result = str(rhs)
+                claim.actual_result = str(lhs)
+                return
+
+            lhs_diff = lhs - rhs
+            if lhs_diff == 0 or getattr(lhs_diff, "is_zero", False) is True:
+                claim.is_correct = True
+                claim.expected_result = str(rhs)
+                claim.actual_result = str(lhs)
+                return
+
+            # Try cheap checks before heavy simplify
+            for simplifier in (expand, cancel):
                 try:
-                    d = complex(diff.evalf())
-                    if abs(d) < 1e-9:
+                    diff_simple = simplifier(lhs_diff)
+                    if diff_simple == 0 or getattr(diff_simple, "is_zero", False) is True:
                         claim.is_correct = True
-                    else:
-                        claim.is_correct = False
-                        claim.error_message = (
-                            f"LHS ({simplify(lhs)}) ≠ RHS ({simplify(rhs)}), "
-                            f"difference = {diff}"
-                        )
-                except (TypeError, ValueError):
-                    claim.is_correct = False
-                    claim.error_message = (
-                        f"LHS ({simplify(lhs)}) ≠ RHS ({simplify(rhs)}), "
-                        f"difference = {diff}"
-                    )
+                        claim.expected_result = str(rhs)
+                        claim.actual_result = str(lhs)
+                        return
+                except Exception:
+                    pass
+
+            diff = simplify(lhs_diff)
+            if diff == 0 or getattr(diff, "is_zero", False) is True:
+                claim.is_correct = True
+                claim.expected_result = str(rhs)
+                claim.actual_result = str(lhs)
+                return
+
+            try:
+                d = complex(diff.evalf())
+                if abs(d) < 1e-9:
+                    claim.is_correct = True
+                    claim.expected_result = str(rhs)
+                    claim.actual_result = str(lhs)
+                    return
+            except (TypeError, ValueError):
+                pass
+
+            # Only call simplify on LHS/RHS if it fails (for the error message only!)
+            simplified_lhs = simplify(lhs)
+            simplified_rhs = simplify(rhs)
+            claim.expected_result = str(simplified_rhs)
+            claim.actual_result = str(simplified_lhs)
+            claim.is_correct = False
+            claim.error_message = (
+                f"LHS ({simplified_lhs}) ≠ RHS ({simplified_rhs}), "
+                f"difference = {diff}"
+            )
         except (TypeError, ValueError):
             try:
                 ev = Eq(lhs, rhs)
@@ -332,25 +410,93 @@ class MathChecker:
 
             # Substitute the claimed solution
             try:
-                diff = simplify((lhs - rhs).subs(var, value))
-                if diff == 0:
+                # Support element-by-element substitution for lists
+                if isinstance(lhs, (list, tuple)) or isinstance(rhs, (list, tuple)):
+                    if isinstance(lhs, (list, tuple)) and isinstance(rhs, (list, tuple)) and len(lhs) == len(rhs):
+                        all_match = True
+                        for l, r in zip(lhs, rhs):
+                            diff_raw = (l - r).subs(var, value)
+                            if diff_raw == 0 or getattr(diff_raw, "is_zero", False) is True:
+                                continue
+                            resolved = False
+                            for simplifier in (expand, cancel):
+                                try:
+                                    diff_simple = simplifier(diff_raw)
+                                    if diff_simple == 0 or getattr(diff_simple, "is_zero", False) is True:
+                                        resolved = True
+                                        break
+                                except Exception:
+                                    pass
+                            if resolved:
+                                continue
+                            diff = simplify(diff_raw)
+                            if diff == 0 or getattr(diff, "is_zero", False) is True:
+                                continue
+                            try:
+                                if abs(complex(diff)) < 1e-10:
+                                    continue
+                            except (TypeError, ValueError):
+                                pass
+                            all_match = False
+                            break
+                        if all_match:
+                            claim.is_correct = True
+                            claim.expected_result = str(value)
+                            claim.actual_result = str(value)
+                            return
+                    continue
+
+                diff_raw = (lhs - rhs).subs(var, value)
+                if diff_raw == 0 or getattr(diff_raw, "is_zero", False) is True:
                     claim.is_correct = True
-                    return
-                elif abs(complex(diff)) < 1e-10:
-                    claim.is_correct = True
-                    return
-                else:
-                    # Compute actual solution for error message
-                    actual = solve(Eq(lhs, rhs), var)
-                    claim.is_correct = False
-                    claim.expected_result = str(actual)
+                    claim.expected_result = str(value)
                     claim.actual_result = str(value)
-                    claim.error_message = (
-                        f"Substituting {var_name}={value} gives difference={diff}. "
-                        f"Actual solution(s): {actual}"
-                    )
                     return
-            except Exception:
+
+                # Try cheap simplifications
+                resolved = False
+                for simplifier in (expand, cancel):
+                    try:
+                        diff_simple = simplifier(diff_raw)
+                        if diff_simple == 0 or getattr(diff_simple, "is_zero", False) is True:
+                            resolved = True
+                            break
+                    except Exception:
+                        pass
+                if resolved:
+                    claim.is_correct = True
+                    claim.expected_result = str(value)
+                    claim.actual_result = str(value)
+                    return
+
+                diff = simplify(diff_raw)
+                if diff == 0 or getattr(diff, "is_zero", False) is True:
+                    claim.is_correct = True
+                    claim.expected_result = str(value)
+                    claim.actual_result = str(value)
+                    return
+                
+                try:
+                    val_complex = complex(diff)
+                    if abs(val_complex) < 1e-10:
+                        claim.is_correct = True
+                        claim.expected_result = str(value)
+                        claim.actual_result = str(value)
+                        return
+                except (TypeError, ValueError):
+                    pass
+
+                # If we get here, it is genuinely incorrect.
+                # Avoid calling `solve` since it can hang, just report the difference.
+                claim.is_correct = False
+                claim.expected_result = "Value satisfying the equation"
+                claim.actual_result = str(value)
+                claim.error_message = (
+                    f"Substituting {var_name}={value} gives non-zero difference: {diff}"
+                )
+                return
+            except Exception as e:
+                logger.debug("solution_substitution_error", error=str(e))
                 continue
 
         claim.is_correct = None

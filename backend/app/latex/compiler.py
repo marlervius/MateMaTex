@@ -33,8 +33,14 @@ def compile_to_pdf(
         tex_path = Path(tmpdir) / "document.tex"
         tex_path.write_text(latex_content, encoding="utf-8")
 
-        # Run pdflatex twice (for references)
-        for pass_num in range(2):
+        # Run pdflatex (run twice only if references/table of contents are present)
+        needs_double_pass = any(
+            ref in latex_content 
+            for ref in ["\\ref{", "\\pageref{", "\\tableofcontents", "\\listoffigures", "\\listoftables", "\\cite{", "\\printindex"]
+        )
+        passes = 2 if needs_double_pass else 1
+
+        for pass_num in range(passes):
             try:
                 proc = subprocess.run(
                     [
