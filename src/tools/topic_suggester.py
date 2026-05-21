@@ -146,7 +146,7 @@ def _get_ai_suggestions(grade: str, current_topic: str, num_suggestions: int) ->
             return []
         
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash')
+        model = genai.GenerativeModel(os.getenv("PRIMARY_MODEL", "gemini-2.0-flash"))
         
         prompt = f"""
 Du er en norsk matematikklærer. Foreslå {num_suggestions} relevante matematikkemner 

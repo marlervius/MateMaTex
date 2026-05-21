@@ -221,7 +221,7 @@ def main():
     initialize_session_state()
 
     api_configured = bool(os.getenv("GOOGLE_API_KEY"))
-    model_name = os.getenv("GOOGLE_MODEL", "gemini-2.0-flash")
+    model_name = os.getenv("PRIMARY_MODEL", "gemini-2.0-flash")
 
     # ------------------------------------------------------------------
     # HEADER

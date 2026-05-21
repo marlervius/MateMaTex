@@ -24,7 +24,7 @@ from typing import AsyncGenerator, Optional
 import structlog
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -99,13 +99,24 @@ async def startup():
         except Exception as e:
             err_msg = str(e)
             logger.error("startup_database_failed", error=err_msg)
-            if "tenant" in err_msg.lower() or "user not found" in err_msg.lower():
+            raw = settings.database_url or ""
+            if "pooler.supabase.com" in raw and ":6543" in raw:
+                logger.error(
+                    "database_supabase_transaction_pooler",
+                    msg=(
+                        "DATABASE_URL bruker Supabase transaction pooler (:6543). "
+                        "Det feiler ofte fra Render. Valg: (1) Slett DATABASE_URL i "
+                        "Render hvis du ikke trenger DB, eller (2) Bytt til Direct URI "
+                        "fra Supabase: postgresql://postgres:PASS@db.<ref>.supabase.co:5432/postgres"
+                    ),
+                )
+            elif "tenant" in err_msg.lower() or "user not found" in err_msg.lower() or "enotfound" in err_msg.lower():
                 logger.warning(
                     "database_pooler_hint",
                     msg=(
-                        "Database avviste bruker/tenant — sjekk DATABASE_URL "
-                        "(vert, port, brukernavn, passord). Ved connection pooler, "
-                        "bekreft format fra leverandørens dashboard."
+                        "Database-tilkobling feilet — sjekk DATABASE_URL. "
+                        "For Supabase: bruk Direct connection (db.*.supabase.co:5432, bruker postgres), "
+                        "eller fjern variabelen helt."
                     ),
                 )
             logger.warning("startup_continuing_without_db", msg="App will start but DB features are unavailable")
@@ -171,6 +182,23 @@ class CompileResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+@app.get("/", tags=["meta"])
+async def root():
+    """Root — avoids 404 when someone opens the service URL in a browser."""
+    return {
+        "service": "MateMaTeX API",
+        "version": "2.0.0",
+        "health": "/health",
+        "hint": "Frontend kaller POST /generate m.m. Se /health for driftstatus.",
+    }
+
+
+@app.head("/")
+async def root_head():
+    """So HEAD / succeeds (some uptime checks use HEAD)."""
+    return Response(status_code=200)
+
+
 @app.post("/generate", response_model=GenerateResponse)
 @limiter.limit("30/minute")
 async def start_generation(

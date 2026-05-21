@@ -65,7 +65,7 @@ class MathBookAgents:
     """
 
     def __init__(self, language_level: str = "standard"):
-        model = os.getenv("GOOGLE_MODEL", "gemini-2.0-flash")
+        model = os.getenv("PRIMARY_MODEL", "gemini-2.0-flash")
         api_key = os.getenv("GOOGLE_API_KEY")
 
         # Temperature 0.3 for mathematical accuracy (was 0.7)
