@@ -147,3 +147,30 @@ class TestEdgeCases:
         result = checker.verify(latex)
         # Definitions should be ignored
         assert result.claims_incorrect == 0
+
+    def test_nested_frac_and_sqrt(self, checker: MathChecker):
+        """Test nested \frac and \sqrt expressions do not hang and parse correctly."""
+        latex = r"Vi har $\frac{\sqrt{16}}{2} = 2$."
+        result = checker.verify(latex)
+        assert result.claims_incorrect == 0
+
+    def test_malformed_frac_no_hang(self, checker: MathChecker):
+        """Test malformed fraction syntax does not cause an infinite loop/hang."""
+        latex = r"Dette er malformert: $\frac{1 = 2$ og $\frac$."
+        result = checker.verify(latex)
+        # Should complete immediately and handle gracefully without hanging
+        assert result.claims_checked == 0
+
+    def test_formatting_macros(self, checker: MathChecker):
+        """Test LaTeX formatting macros like \mathrm, \text, \mathbf are correctly parsed/stripped."""
+        latex = r"Vi regner ut $\mathbf{a} + \mathrm{b} = c$ og $\text{f}(x) = 2$."
+        # Note: \text{f}(x) = 2 is treated as definition because of "f(x) = ", which gets skipped
+        result = checker.verify(latex)
+        assert result.claims_incorrect == 0
+
+    def test_exponents_and_subscripts(self, checker: MathChecker):
+        """Test subscripts and exponents with curly braces."""
+        latex = r"$\gamma_{1} = 2^{3}$ og $\delta_{ij} = 8$."
+        # This will extract two claims: \gamma_{1} = 2^{3} and \delta_{ij} = 8
+        result = checker.verify(latex)
+        assert result.claims_incorrect == 0

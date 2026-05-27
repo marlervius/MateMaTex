@@ -524,26 +524,75 @@ class MathChecker:
         """Manual fallback parser for common LaTeX math patterns."""
         s = expr
 
-        # \frac{a}{b} → (a)/(b)
-        while '\\frac' in s:
-            s = re.sub(
-                r'\\frac\{([^{}]+)\}\{([^{}]+)\}',
-                r'((\1)/(\2))',
-                s,
+        # Convert caret superscript to ** early to simplify other replacements
+        s = s.replace('^', '**')
+
+        # Robust loop to handle nested structures, \frac, \sqrt, formatting macros, etc.
+        while True:
+            s_new = s
+
+            # 1. Strip styling/formatting wrappers: \text{...}, \mathrm{...}, \mathbf{...}, etc.
+            s_new = re.sub(
+                r'\\(text|mathrm|mathbf|mathit|mathsf|mathtt|operatorname)\{([^{}]+)\}',
+                r'\2',
+                s_new,
             )
 
-        # \sqrt{x} → sqrt(x)
-        s = re.sub(r'\\sqrt\{([^{}]+)\}', r'sqrt(\1)', s)
+            # 2. Convert \frac{a}{b} -> ((a)/(b))
+            s_new = re.sub(
+                r'\\frac\{([^{}]+)\}\{([^{}]+)\}',
+                r'((\1)/(\2))',
+                s_new,
+            )
+
+            # 3. Convert \binom{n}{k} -> binomial(n, k)
+            s_new = re.sub(
+                r'\\binom\{([^{}]+)\}\{([^{}]+)\}',
+                r'binomial(\1,\2)',
+                s_new,
+            )
+
+            # 4. Convert \sqrt{x} -> sqrt(x)
+            s_new = re.sub(
+                r'\\sqrt\{([^{}]+)\}',
+                r'sqrt(\1)',
+                s_new,
+            )
+
+            # 5. Handle curly braces in exponents: **{x} -> **(x)
+            s_new = re.sub(
+                r'\*\*\{([^{}]+)\}',
+                r'**(\1)',
+                s_new,
+            )
+
+            # 6. Handle alphanumeric curly braces in subscripts: _{1} -> _1, _{ij} -> _ij
+            s_new = re.sub(
+                r'_\{([a-zA-Z0-9]+)\}',
+                r'_\1',
+                s_new,
+            )
+
+            # 7. Handle remaining complex curly braces in subscripts: _{expr} -> _(expr)
+            s_new = re.sub(
+                r'_\{([^{}]+)\}',
+                r'_(\1)',
+                s_new,
+            )
+
+            # If no replacements were made in this iteration, we break to avoid any infinite loop
+            if s_new == s:
+                break
+            s = s_new
 
         # \cdot → *
         s = s.replace('\\cdot', '*')
         s = s.replace('\\times', '*')
         s = s.replace('\\div', '/')
 
-        # Clean remaining LaTeX
+        # Clean remaining LaTeX controls and symbols
         s = s.replace('\\left', '').replace('\\right', '')
         s = s.replace('\\', '')
-        s = s.replace('^', '**')
 
         try:
             return sympify(s)
