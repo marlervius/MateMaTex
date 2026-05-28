@@ -54,6 +54,26 @@ async function readErrorMessage(res: Response): Promise<string> {
   return res.statusText || `HTTP ${res.status}`;
 }
 
+async function fetchJson<T>(
+  url: string,
+  init?: RequestInit
+): Promise<T> {
+  const res = await fetch(url, init);
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
+  return res.json() as Promise<T>;
+}
+
+function parseStreamData<T>(data: string, label: string): T | null {
+  try {
+    return JSON.parse(data) as T;
+  } catch {
+    console.warn(`Invalid SSE ${label} payload`);
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Generation
 // ---------------------------------------------------------------------------
@@ -118,16 +138,19 @@ export function streamProgress(
   const eventSource = new EventSource(url);
 
   eventSource.addEventListener("step", (e: MessageEvent) => {
-    callbacks.onStep?.(JSON.parse(e.data) as StreamStepPayload);
+    const step = parseStreamData<StreamStepPayload>(e.data, "step");
+    if (step) callbacks.onStep?.(step);
   });
   eventSource.addEventListener("current_agent", (e: MessageEvent) => {
-    const p = JSON.parse(e.data) as StreamCurrentAgentPayload;
-    callbacks.onCurrentAgent?.(p.agent);
+    const p = parseStreamData<StreamCurrentAgentPayload>(e.data, "current_agent");
+    if (p) callbacks.onCurrentAgent?.(p.agent);
   });
   eventSource.addEventListener("complete", (e: MessageEvent) => {
-    const data = JSON.parse(e.data) as StreamCompletePayload;
-    callbacks.onComplete?.(data);
-    eventSource.close();
+    const data = parseStreamData<StreamCompletePayload>(e.data, "complete");
+    if (data) {
+      callbacks.onComplete?.(data);
+      eventSource.close();
+    }
   });
   eventSource.addEventListener("error", (e: Event) => {
     // Definitive server error with a JSON payload
@@ -169,18 +192,22 @@ export async function abortGeneration(jobId: string): Promise<any> {
 export async function getResult(jobId: string): Promise<any> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE}/generate/${jobId}/result`, { headers });
-  if (!res.ok) throw new Error(`Failed to get result: ${res.statusText}`);
+  if (res.status === 202) {
+    throw new Error("Job still running");
+  }
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res));
+  }
   return res.json();
 }
 
 export async function estimateCost(request: GenerateRequest): Promise<any> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/estimate`, {
+  return fetchJson(`${API_BASE}/estimate`, {
     method: "POST",
     headers,
     body: JSON.stringify(request),
   });
-  return res.json();
 }
 
 // ---------------------------------------------------------------------------
@@ -197,12 +224,11 @@ export async function compileLatex(
   cached: boolean;
 }> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/editor/compile`, {
+  return fetchJson(`${API_BASE}/editor/compile`, {
     method: "POST",
     headers,
     body: JSON.stringify({ latex_body: latexBody, filename }),
   });
-  return res.json();
 }
 
 export async function editorAction(
@@ -217,7 +243,7 @@ export async function editorAction(
   error: string;
 }> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/editor/${action}`, {
+  return fetchJson(`${API_BASE}/editor/${action}`, {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -226,7 +252,6 @@ export async function editorAction(
       extra_instructions: extra,
     }),
   });
-  return res.json();
 }
 
 // ---------------------------------------------------------------------------
@@ -274,10 +299,7 @@ export async function listExercises(params?: {
   if (params?.page) sp.set("page", String(params.page));
   if (params?.page_size) sp.set("page_size", String(params.page_size));
 
-  const res = await fetch(`${API_BASE}/exercises?${sp.toString()}`, {
-    headers,
-  });
-  return res.json();
+  return fetchJson(`${API_BASE}/exercises?${sp.toString()}`, { headers });
 }
 
 export async function searchExercises(
@@ -285,11 +307,10 @@ export async function searchExercises(
   limit: number = 20
 ): Promise<{ exercises: Exercise[]; total: number }> {
   const headers = await getAuthHeaders();
-  const res = await fetch(
+  return fetchJson(
     `${API_BASE}/exercises/search?q=${encodeURIComponent(query)}&limit=${limit}`,
     { headers }
   );
-  return res.json();
 }
 
 export async function ingestExercises(
@@ -299,7 +320,7 @@ export async function ingestExercises(
   generationId: string = ""
 ): Promise<{ ingested: number; exercise_ids: string[] }> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/exercises/ingest`, {
+  return fetchJson(`${API_BASE}/exercises/ingest`, {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -309,7 +330,6 @@ export async function ingestExercises(
       generation_id: generationId,
     }),
   });
-  return res.json();
 }
 
 export async function findSimilarExercises(
@@ -317,11 +337,10 @@ export async function findSimilarExercises(
   limit: number = 5
 ): Promise<Exercise[]> {
   const headers = await getAuthHeaders();
-  const res = await fetch(
+  return fetchJson(
     `${API_BASE}/exercises/${exerciseId}/similar?limit=${limit}`,
     { headers }
   );
-  return res.json();
 }
 
 export async function generateVariant(
@@ -329,12 +348,11 @@ export async function generateVariant(
   instructions: string = ""
 ): Promise<Exercise> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/exercises/${exerciseId}/variant`, {
+  return fetchJson(`${API_BASE}/exercises/${exerciseId}/variant`, {
     method: "POST",
     headers,
     body: JSON.stringify({ instructions }),
   });
-  return res.json();
 }
 
 export async function exportExercises(
@@ -349,7 +367,7 @@ export async function exportExercises(
   errors: string[];
 }> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/exercises/export`, {
+  return fetchJson(`${API_BASE}/exercises/export`, {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -359,7 +377,6 @@ export async function exportExercises(
       title,
     }),
   });
-  return res.json();
 }
 
 // ---------------------------------------------------------------------------
@@ -380,7 +397,7 @@ export async function differentiate(
   errors: string[];
 }> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/differentiation/generate`, {
+  return fetchJson(`${API_BASE}/differentiation/generate`, {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -389,7 +406,6 @@ export async function differentiate(
       grade,
     }),
   });
-  return res.json();
 }
 
 export async function generateHints(
@@ -402,7 +418,7 @@ export async function generateHints(
   error: string;
 }> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/exercises/${exerciseId}/hints`, {
+  return fetchJson(`${API_BASE}/exercises/${exerciseId}/hints`, {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -410,7 +426,6 @@ export async function generateHints(
       solution,
     }),
   });
-  return res.json();
 }
 
 // ---------------------------------------------------------------------------
@@ -433,12 +448,11 @@ export async function exportPdf(params: {
   errors: string[];
 }> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/export/pdf`, {
+  return fetchJson(`${API_BASE}/export/pdf`, {
     method: "POST",
     headers,
     body: JSON.stringify(params),
   });
-  return res.json();
 }
 
 export async function exportDocx(
@@ -453,7 +467,7 @@ export async function exportDocx(
   errors: string[];
 }> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/export/docx`, {
+  return fetchJson(`${API_BASE}/export/docx`, {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -462,7 +476,6 @@ export async function exportDocx(
       include_solutions: includeSolutions,
     }),
   });
-  return res.json();
 }
 
 export async function exportPptx(
@@ -477,7 +490,7 @@ export async function exportPptx(
   errors: string[];
 }> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/export/pptx`, {
+  return fetchJson(`${API_BASE}/export/pptx`, {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -486,7 +499,6 @@ export async function exportPptx(
       solutions_as: solutionsAs,
     }),
   });
-  return res.json();
 }
 
 // ---------------------------------------------------------------------------
@@ -505,12 +517,11 @@ export async function createShare(params: {
   expires_at: string | null;
 }> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/sharing`, {
+  return fetchJson(`${API_BASE}/sharing`, {
     method: "POST",
     headers,
     body: JSON.stringify(params),
   });
-  return res.json();
 }
 
 export async function getShared(
@@ -526,8 +537,7 @@ export async function getShared(
   const url = password
     ? `${API_BASE}/sharing/${token}?password=${encodeURIComponent(password)}`
     : `${API_BASE}/sharing/${token}`;
-  const res = await fetch(url);
-  return res.json();
+  return fetchJson(url);
 }
 
 // ---------------------------------------------------------------------------

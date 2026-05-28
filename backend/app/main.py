@@ -16,6 +16,7 @@ Exposes:
 
 import asyncio
 import json
+import re
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -67,20 +68,22 @@ allowed_origins = [settings.frontend_url]
 if settings.environment == "development":
     allowed_origins.append("http://localhost:3000")
 
-# Also allow Vercel preview deployments (they use random subdomains)
-# e.g. https://mate-ma-xyz123-username.vercel.app
-_frontend = settings.frontend_url or ""
+# Vercel preview URLs share the production project slug prefix only
+# e.g. https://mate-ma-tex-abc123-user.vercel.app when FRONTEND_URL is mate-ma-tex.vercel.app
+_vercel_origin_regex: str | None = None
+_frontend = (settings.frontend_url or "").rstrip("/")
 if ".vercel.app" in _frontend:
-    # Extract the project prefix before .vercel.app for preview URLs
-    # Also allow the bare vercel.app domain pattern
-    allowed_origins.append("https://*.vercel.app")
+    _slug_match = re.match(r"https://([a-zA-Z0-9-]+)", _frontend)
+    if _slug_match:
+        _slug = re.escape(_slug_match.group(1))
+        _vercel_origin_regex = rf"https://{_slug}.*\.vercel\.app"
 
-logger.info("cors_origins", origins=allowed_origins)
+logger.info("cors_origins", origins=allowed_origins, vercel_regex=_vercel_origin_regex)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origin_regex=_vercel_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -123,6 +126,12 @@ async def startup():
     else:
         logger.warning("startup_no_database", msg="DATABASE_URL not set — running without DB")
 
+    if settings.environment == "production" and not settings.mate_api_key:
+        logger.error(
+            "production_missing_mate_api_key",
+            msg="Set MATE_API_KEY in production — protected routes return 503 until configured",
+        )
+
 
 @app.on_event("shutdown")
 async def shutdown():
@@ -157,6 +166,8 @@ app.include_router(collab_router)
 # In-memory job store (replace with Redis/DB in production)
 _jobs: dict[str, PipelineState] = {}
 _executor = ThreadPoolExecutor(max_workers=4)
+_ABORT_MESSAGE = "Avbrutt av bruker"
+_MAX_STREAM_SECONDS = 3600  # 1 hour — prevent infinite SSE if job stalls
 
 
 # ---------------------------------------------------------------------------
@@ -236,9 +247,14 @@ async def stream_progress(
         import time as _time
         last_step_count = 0
         last_heartbeat = _time.monotonic()
+        stream_started = _time.monotonic()
         _HEARTBEAT_INTERVAL = 15  # seconds
 
         while True:
+            if _time.monotonic() - stream_started > _MAX_STREAM_SECONDS:
+                yield _sse_event("error", {"message": "Stream timeout — job may still be running"})
+                break
+
             state = resolve_job(job_id, _jobs)
             if state is None:
                 yield _sse_event("error", {"message": "Job not found"})
@@ -294,13 +310,14 @@ async def stream_progress(
 @app.delete("/generate/{job_id}")
 async def abort_generation(job_id: str, user_id: str = Depends(get_current_user)):
     """Cancel a running generation job."""
-    state = _jobs.get(job_id)
+    state = resolve_job(job_id, _jobs)
     if state is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
     if state.status == PipelineStatus.RUNNING or state.status == PipelineStatus.PENDING:
         state.status = PipelineStatus.FAILED
-        state.error_message = "Avbrutt av bruker"
+        state.error_message = _ABORT_MESSAGE
+        _jobs[job_id] = state
         persist_terminal_job(state)
         logger.info("generation_aborted", job_id=job_id, user_id=user_id)
         return {"success": True, "message": "Job cancelled"}
@@ -315,7 +332,7 @@ async def get_result(job_id: str, user_id: str = Depends(get_current_user)):
     if state is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    if state.status == PipelineStatus.RUNNING:
+    if state.status in (PipelineStatus.RUNNING, PipelineStatus.PENDING):
         raise HTTPException(status_code=202, detail="Job still running")
 
     return {
@@ -343,9 +360,10 @@ async def compile_latex(request: CompileRequest, user_id: str = Depends(get_curr
         content = wrap_with_preamble(content)
 
     config = get_config()
+    safe_name = _safe_filename(request.filename)
     pdf_path = compile_to_pdf(
         latex_content=content,
-        output_path=f"{config.output_dir}/{request.filename}.pdf",
+        output_path=f"{config.output_dir}/{safe_name}.pdf",
         pdflatex_path=config.pdflatex_path,
     )
 
@@ -379,7 +397,9 @@ async def cache_stats(user_id: str = Depends(get_current_user)):
 
 @app.delete("/cache")
 async def clear_cache(user_id: str = Depends(get_current_user)):
-    """Clear the semantic cache."""
+    """Clear the semantic cache (development only)."""
+    if settings.environment == "production":
+        raise HTTPException(status_code=403, detail="Cache clear disabled in production")
     from app.cache import get_cache
     count = get_cache().clear()
     return {"cleared": count}
@@ -406,6 +426,14 @@ def _run_job(job_id: str, request: GenerationRequest) -> None:
     try:
         _jobs[job_id].status = PipelineStatus.RUNNING
         result = run_pipeline(request)
+        existing = _jobs.get(job_id)
+        if (
+            existing
+            and existing.status == PipelineStatus.FAILED
+            and existing.error_message == _ABORT_MESSAGE
+        ):
+            logger.info("job_aborted_skipping_overwrite", job_id=job_id)
+            return
         _jobs[job_id] = result
         persist_terminal_job(result)
     except Exception as e:
@@ -415,6 +443,12 @@ def _run_job(job_id: str, request: GenerationRequest) -> None:
             state.error_message = str(e)
             persist_terminal_job(state)
         logger.error("job_failed", job_id=job_id, error=str(e))
+
+
+def _safe_filename(name: str) -> str:
+    """Sanitize user-provided filename for filesystem paths."""
+    safe = re.sub(r"[^\w\-]", "_", name.strip())[:64]
+    return safe or "document"
 
 
 def _sse_event(event_type: str, data: dict) -> str:

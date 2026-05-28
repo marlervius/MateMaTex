@@ -30,14 +30,19 @@ export async function GET(
 
   const url = `${backend}/generate/${encodeURIComponent(jobId)}/stream`;
   let upstream: Response;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 300_000);
   try {
     upstream = await fetch(url, {
       headers,
       cache: "no-store",
+      signal: controller.signal,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "fetch failed";
     return new Response(`Upstream unreachable: ${msg}`, { status: 502 });
+  } finally {
+    clearTimeout(timeout);
   }
 
   if (!upstream.ok || !upstream.body) {

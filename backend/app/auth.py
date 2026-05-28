@@ -34,6 +34,11 @@ async def get_current_user(
     """
     settings = get_settings()
     if not settings.mate_api_key:
+        if settings.environment == "production":
+            raise HTTPException(
+                status_code=503,
+                detail="API key not configured (set MATE_API_KEY in production)",
+            )
         return "anonymous"
 
     token = (x_api_key or "").strip() or _extract_bearer(authorization)
@@ -77,6 +82,11 @@ async def require_stream_access(
     """
     settings = get_settings()
     if not settings.mate_api_key:
+        if settings.environment == "production":
+            raise HTTPException(
+                status_code=503,
+                detail="API key not configured (set MATE_API_KEY in production)",
+            )
         return "anonymous"
 
     token = (

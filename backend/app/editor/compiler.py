@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import os
+import re
 import subprocess
 import tempfile
 from collections import OrderedDict
@@ -211,7 +212,8 @@ async def compile_editor_latex(req: EditorCompileRequest, user_id: str = Depends
         )
 
     # Compile
-    pdf_base64, errors, warnings = _compile_latex(content, req.filename)
+    safe_name = re.sub(r"[^\w\-]", "_", req.filename.strip())[:64] or "preview"
+    pdf_base64, errors, warnings = _compile_latex(content, safe_name)
 
     # Cache result
     _compile_cache[content_hash] = (pdf_base64, errors)

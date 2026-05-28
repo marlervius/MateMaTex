@@ -17,6 +17,8 @@ logger = structlog.get_logger()
 
 # Timeout for the entire verification pass (seconds)
 _TOTAL_TIMEOUT = 90
+# Max time per individual claim (seconds) — avoids SymPy simplify hangs
+_CLAIM_TIMEOUT = 8
 
 
 class MathChecker:
@@ -80,8 +82,17 @@ class MathChecker:
                 logger.warning("math_verification_total_timeout", checked_so_far=result.claims_correct + result.claims_incorrect + result.claims_unparseable)
                 break
 
+            claim_start = time.monotonic()
             try:
                 self._verify_claim(claim)
+                if time.monotonic() - claim_start > _CLAIM_TIMEOUT:
+                    claim.is_correct = None
+                    claim.error_message = "Claim verification timed out"
+                    logger.warning(
+                        "claim_verification_timeout",
+                        claim=claim.latex_expression[:80],
+                        seconds=round(time.monotonic() - claim_start, 1),
+                    )
             except Exception as e:
                 claim.is_correct = None
                 claim.error_message = f"Verification error: {e}"
