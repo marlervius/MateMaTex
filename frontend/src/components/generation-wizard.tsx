@@ -8,6 +8,10 @@ import { startGeneration, streamProgress, getResult, closeActiveStream } from "@
 import { mapApiResultToGenerationResult } from "@/lib/map-api-result";
 import { appendHistory } from "@/lib/generation-history";
 import { searchGoals, type CompetencyGoal } from "@/data/lk20-goals";
+import {
+  loadPreferences,
+  materialTypeFromTemplate,
+} from "@/lib/user-preferences";
 
 /* -----------------------------------------------------------------------
    Data
@@ -131,6 +135,20 @@ export function GenerationWizard() {
   const [goalSearch, setGoalSearch] = useState("");
   const activeJobRef = useRef<string | null>(null);
   const streamCloseRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    const prefs = loadPreferences();
+    const params = new URLSearchParams(window.location.search);
+    const template = params.get("template");
+    const materialTypeParam = params.get("materialType");
+    setRequest({
+      grade: prefs.grade,
+      languageLevel: prefs.languageLevel,
+      materialType: template
+        ? materialTypeFromTemplate(template)
+        : materialTypeParam || prefs.materialType,
+    });
+  }, [setRequest]);
 
   useEffect(() => {
     return () => {

@@ -73,6 +73,16 @@ class Settings(BaseSettings):
         description="Verify TLS certificates for DATABASE_URL (disable only in local dev)",
     )
 
+    # ---- Supabase auth (optional) ----
+    supabase_jwt_secret: str = Field(
+        default="",
+        description="Supabase JWT secret for verifying Bearer tokens (HS256)",
+    )
+    dev_user_uuid: str = Field(
+        default="",
+        description="Fallback UUID for DB writes when auth returns anonymous/api-user",
+    )
+
     # ---- CORS ----
     frontend_url: str = Field(
         default="http://localhost:3000",

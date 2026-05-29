@@ -149,6 +149,9 @@ class MathChecker:
                 lhs_raw = match.group(1).strip()
                 rhs_raw = match.group(2).strip()
 
+                if not self._is_valid_math_fragment(lhs_raw) or not self._is_valid_math_fragment(rhs_raw):
+                    continue
+
                 # Skip trivial definitions (x = ...) with no computation
                 if self._is_definition(lhs_raw, rhs_raw):
                     continue
@@ -352,6 +355,11 @@ class MathChecker:
             except (TypeError, ValueError):
                 pass
 
+            if getattr(diff, "free_symbols", None):
+                claim.is_correct = None
+                claim.error_message = "Contains unknown symbols; cannot verify numerically"
+                return
+
             # Only call simplify on LHS/RHS if it fails (for the error message only!)
             simplified_lhs = simplify(lhs)
             simplified_rhs = simplify(rhs)
@@ -525,7 +533,6 @@ class MathChecker:
         expr = expr.replace('\\,', '')
         expr = expr.replace('\\;', '')
         expr = expr.replace('\\!', '')
-        expr = expr.replace('\\text{', '').rstrip('}')
 
         # Manual parse only for reliability: parse_latex can hang without full antlr.
         manual = self._manual_parse(expr)
@@ -613,6 +620,25 @@ class MathChecker:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+    @staticmethod
+    def _is_valid_math_fragment(expr: str) -> bool:
+        """Reject malformed LaTeX fragments (unbalanced braces, incomplete macros)."""
+        depth = 0
+        for ch in expr:
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth < 0:
+                    return False
+        if depth != 0:
+            return False
+        if re.search(r"\\frac(?!\{)", expr):
+            return False
+        if re.search(r"\\(sqrt|binom|text|mathrm)\{[^}]*$", expr):
+            return False
+        return True
+
     @staticmethod
     def _is_definition(lhs: str, rhs: str) -> bool:
         """Check if this is a variable definition rather than a verifiable claim."""

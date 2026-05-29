@@ -1,9 +1,7 @@
 """
 Authentication for FastAPI.
 
-No external auth provider: by default all requests are accepted and a stable
-anonymous user id is returned. Optionally set MATE_API_KEY to require
-``X-API-Key: <key>`` or ``Authorization: Bearer <key>`` on protected routes.
+Supports optional MATE_API_KEY and Supabase JWT (Bearer) for user identity.
 """
 
 from __future__ import annotations
@@ -22,6 +20,43 @@ def _extract_bearer(authorization: str) -> str:
     return ""
 
 
+def _looks_like_jwt(token: str) -> bool:
+    return token.count(".") == 2 and not token.startswith("mate_")
+
+
+def _verify_supabase_jwt(token: str) -> str | None:
+    settings = get_settings()
+    if not settings.supabase_jwt_secret:
+        return None
+    try:
+        import jwt
+
+        payload = jwt.decode(
+            token,
+            settings.supabase_jwt_secret,
+            algorithms=["HS256"],
+            audience="authenticated",
+        )
+        sub = payload.get("sub")
+        if sub:
+            return str(sub)
+    except Exception as e:
+        logger.warning("auth_jwt_rejected", error=str(e))
+    return None
+
+
+def _resolve_user_from_token(token: str) -> str | None:
+    """Return user id from JWT or API key match."""
+    if not token:
+        return None
+    if _looks_like_jwt(token):
+        return _verify_supabase_jwt(token)
+    settings = get_settings()
+    if settings.mate_api_key and token == settings.mate_api_key:
+        return "api-user"
+    return None
+
+
 async def get_current_user(
     x_api_key: str | None = Header(default=None, alias="X-API-Key"),
     authorization: str = Header(default=""),
@@ -29,10 +64,15 @@ async def get_current_user(
     """
     Return user id for the request.
 
-    - If MATE_API_KEY is not set: always ``anonymous`` (no headers required).
-    - If MATE_API_KEY is set: require matching X-API-Key or Bearer token.
+    Priority: X-API-Key / Bearer JWT / Bearer API key.
     """
     settings = get_settings()
+    token = (x_api_key or "").strip() or _extract_bearer(authorization)
+
+    user_id = _resolve_user_from_token(token)
+    if user_id:
+        return user_id
+
     if not settings.mate_api_key:
         if settings.environment == "production":
             raise HTTPException(
@@ -41,31 +81,20 @@ async def get_current_user(
             )
         return "anonymous"
 
-    token = (x_api_key or "").strip() or _extract_bearer(authorization)
-    if not token or token != settings.mate_api_key:
-        logger.warning("auth_api_key_rejected", has_header=bool(token))
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or missing API key (use X-API-Key or Authorization: Bearer)",
-        )
-    return "api-user"
+    logger.warning("auth_api_key_rejected", has_header=bool(token))
+    raise HTTPException(
+        status_code=401,
+        detail="Invalid or missing API key (use X-API-Key or Authorization: Bearer)",
+    )
 
 
 async def get_optional_user(
     x_api_key: str | None = Header(default=None, alias="X-API-Key"),
     authorization: str = Header(default=""),
 ) -> str | None:
-    """
-    Like get_current_user but returns None when no valid key is provided
-    (only meaningful when MATE_API_KEY is set).
-    """
-    settings = get_settings()
-    if not settings.mate_api_key:
-        return None
+    """Like get_current_user but returns None when no valid credentials."""
     token = (x_api_key or "").strip() or _extract_bearer(authorization)
-    if token and token == settings.mate_api_key:
-        return "api-user"
-    return None
+    return _resolve_user_from_token(token)
 
 
 async def require_stream_access(
@@ -81,6 +110,16 @@ async def require_stream_access(
     for EventSource-only clients. Prefer server-side proxy with X-API-Key.
     """
     settings = get_settings()
+    token = (
+        (x_api_key or "").strip()
+        or _extract_bearer(authorization)
+        or (api_key or "").strip()
+    )
+
+    user_id = _resolve_user_from_token(token)
+    if user_id:
+        return user_id
+
     if not settings.mate_api_key:
         if settings.environment == "production":
             raise HTTPException(
@@ -89,15 +128,8 @@ async def require_stream_access(
             )
         return "anonymous"
 
-    token = (
-        (x_api_key or "").strip()
-        or _extract_bearer(authorization)
-        or (api_key or "").strip()
+    logger.warning("stream_auth_rejected", has_token=bool(token))
+    raise HTTPException(
+        status_code=401,
+        detail="Invalid or missing API key for stream (X-API-Key, Bearer, or api_key query)",
     )
-    if not token or token != settings.mate_api_key:
-        logger.warning("stream_auth_rejected", has_token=bool(token))
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or missing API key for stream (X-API-Key, Bearer, or api_key query)",
-        )
-    return "api-user"

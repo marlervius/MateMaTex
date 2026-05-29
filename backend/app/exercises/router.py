@@ -175,7 +175,7 @@ async def ingest_exercises(
             generation_id=req.generation_id,
         )
         d["owner_id"] = user_id
-        store.save(d)
+        await store.save(d, user_id=user_id)
         ids.append(d["id"])
 
     logger.info("exercises_ingested", count=len(ids), topic=req.topic)
@@ -202,7 +202,7 @@ async def list_exercises(
     user_id: str = Depends(get_current_user),
 ) -> ExerciseListResponse:
     """List exercises with optional filtering and pagination."""
-    results = store.list_active(user_id=user_id)
+    results = await store.list_active(user_id=user_id)
 
     # Apply filters
     if topic:
@@ -249,7 +249,7 @@ async def search_exercises(
     q_lower = q.lower()
     scored: list[tuple[float, dict]] = []
 
-    for d in store.list_active(user_id=user_id):
+    for d in await store.list_active(user_id=user_id):
 
         score = 0.0
         # Title match
@@ -284,7 +284,7 @@ async def search_exercises(
     summary="Get a single exercise",
 )
 async def get_exercise(exercise_id: str, user_id: str = Depends(get_current_user)) -> ExerciseOut:
-    d = store.get(exercise_id)
+    d = await store.get(exercise_id)
     if not d or d.get("deleted"):
         raise HTTPException(404, "Exercise not found")
     return _dict_to_out(d)
@@ -296,13 +296,13 @@ async def get_exercise(exercise_id: str, user_id: str = Depends(get_current_user
     summary="Update exercise metadata",
 )
 async def update_exercise(exercise_id: str, update: ExerciseUpdate, user_id: str = Depends(get_current_user)) -> ExerciseOut:
-    d = store.get(exercise_id)
+    d = await store.get(exercise_id)
     if not d or d.get("deleted"):
         raise HTTPException(404, "Exercise not found")
 
     for field, value in update.model_dump(exclude_unset=True).items():
         d[field] = value
-    store.save(d)
+    await store.save(d, user_id=user_id)
     return _dict_to_out(d)
 
 
@@ -311,7 +311,7 @@ async def update_exercise(exercise_id: str, update: ExerciseUpdate, user_id: str
     summary="Soft-delete an exercise",
 )
 async def delete_exercise(exercise_id: str, user_id: str = Depends(get_current_user)):
-    if not store.soft_delete(exercise_id):
+    if not await store.soft_delete(exercise_id):
         raise HTTPException(404, "Exercise not found")
     return {"deleted": True}
 
@@ -328,14 +328,14 @@ async def find_similar(exercise_id: str, limit: int = Query(5, ge=1, le=20), use
     In production, uses pgvector cosine similarity on embeddings.
     Placeholder: keyword overlap scoring.
     """
-    target = store.get(exercise_id)
+    target = await store.get(exercise_id)
     if not target:
         raise HTTPException(404, "Exercise not found")
 
     target_kw = set(target.get("keywords", []))
 
     scored: list[tuple[float, dict]] = []
-    for d in store.list_active(user_id=user_id):
+    for d in await store.list_active(user_id=user_id):
         if d["id"] == exercise_id:
             continue
         overlap = len(target_kw & set(d.get("keywords", [])))
@@ -355,7 +355,7 @@ async def generate_variant(
     user_id: str = Depends(get_current_user),
 ) -> ExerciseOut:
     """Generate a new variant of an existing exercise using AI."""
-    target = store.get(exercise_id)
+    target = await store.get(exercise_id)
     if not target:
         raise HTTPException(404, "Exercise not found")
 
@@ -389,7 +389,7 @@ async def generate_variant(
         "source_generation_id": target.get("source_generation_id", ""),
         "owner_id": user_id,
     }
-    store.save(variant)
+    await store.save(variant, user_id=user_id)
 
     logger.info("variant_generated", original_id=exercise_id, variant_id=variant_id)
     return _dict_to_out(variant)
@@ -407,7 +407,7 @@ async def export_exercises(
 
     exercises = []
     for eid in req.exercise_ids:
-        d = store.get(eid)
+        d = await store.get(eid)
         if d:
             exercises.append(
                 ParsedExercise(

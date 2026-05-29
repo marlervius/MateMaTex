@@ -1,4 +1,4 @@
-"""Persistent exercise store — memory cache with disk JSON backing."""
+"""Persistent exercise store — memory cache with disk JSON backing and optional PostgreSQL."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def _persist_one(exercise: dict) -> None:
     path.write_text(json.dumps(exercise, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def save(exercise: dict) -> dict:
+def _save_file(exercise: dict) -> dict:
     _ensure_loaded()
     _memory[exercise["id"]] = exercise
     try:
@@ -50,7 +50,32 @@ def save(exercise: dict) -> dict:
     return exercise
 
 
-def get(exercise_id: str) -> dict | None:
+async def save(exercise: dict, *, user_id: str = "anonymous") -> dict:
+    _save_file(exercise)
+    try:
+        from app.repositories import exercise_db
+
+        await exercise_db.save(exercise, user_id=user_id)
+    except Exception as e:
+        logger.debug("exercise_db_mirror_failed", id=exercise.get("id"), error=str(e))
+    return exercise
+
+
+def save_sync(exercise: dict) -> dict:
+    """Sync save without DB mirror (legacy callers)."""
+    return _save_file(exercise)
+
+
+async def get(exercise_id: str) -> dict | None:
+    try:
+        from app.repositories import exercise_db
+
+        db_row = await exercise_db.get(exercise_id)
+        if db_row:
+            return db_row
+    except Exception as e:
+        logger.debug("exercise_db_get_failed", id=exercise_id, error=str(e))
+
     _ensure_loaded()
     d = _memory.get(exercise_id)
     if d and not d.get("deleted"):
@@ -58,22 +83,46 @@ def get(exercise_id: str) -> dict | None:
     return None
 
 
-def list_active(*, user_id: str | None = None) -> list[dict]:
+async def list_active(*, user_id: str | None = None) -> list[dict]:
     _ensure_loaded()
-    items = [d for d in _memory.values() if not d.get("deleted")]
+    file_items = [d for d in _memory.values() if not d.get("deleted")]
     if user_id and user_id not in ("anonymous", "api-user"):
-        items = [d for d in items if d.get("owner_id", user_id) == user_id or not d.get("owner_id")]
-    return items
+        file_items = [
+            d for d in file_items
+            if d.get("owner_id", user_id) == user_id or not d.get("owner_id")
+        ]
+
+    try:
+        from app.repositories import exercise_db
+
+        db_items = await exercise_db.list_active(user_id=user_id)
+        if db_items:
+            by_id = {d["id"]: d for d in file_items}
+            for row in db_items:
+                by_id[row["id"]] = row
+            return list(by_id.values())
+    except Exception as e:
+        logger.debug("exercise_db_list_failed", error=str(e))
+
+    return file_items
 
 
-def soft_delete(exercise_id: str) -> bool:
+async def soft_delete(exercise_id: str) -> bool:
+    deleted = False
+    try:
+        from app.repositories import exercise_db
+
+        deleted = await exercise_db.soft_delete(exercise_id)
+    except Exception as e:
+        logger.debug("exercise_db_delete_failed", id=exercise_id, error=str(e))
+
     _ensure_loaded()
     d = _memory.get(exercise_id)
-    if not d:
-        return False
-    d["deleted"] = True
-    try:
-        _persist_one(d)
-    except OSError:
-        pass
-    return True
+    if d:
+        d["deleted"] = True
+        try:
+            _persist_one(d)
+        except OSError:
+            pass
+        deleted = True
+    return deleted

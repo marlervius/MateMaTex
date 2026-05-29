@@ -45,3 +45,6 @@ pytest-asyncio>=0.24.0
 
 # Password hashing (share links)
 bcrypt>=4.2.0
+
+# JWT (Supabase auth)
+PyJWT>=2.8.0

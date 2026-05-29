@@ -1,6 +1,8 @@
 "use client";
 
-import { LayoutTemplate, CheckCircle2 } from "lucide-react";
+import Link from "next/link";
+import { LayoutTemplate, CheckCircle2, ArrowRight } from "lucide-react";
+import { materialTypeFromTemplate } from "@/lib/user-preferences";
 
 const TEMPLATES = [
   {
@@ -31,13 +33,13 @@ export default function TemplatesPage() {
       </div>
       <div className="grid md:grid-cols-3 gap-4">
         {TEMPLATES.map((t) => (
-          <div key={t.id} className="card">
+          <div key={t.id} className="card flex flex-col">
             <div className="flex items-center gap-2 mb-2">
               <LayoutTemplate size={16} className="text-accent-blue" />
               <h2 className="text-sm font-semibold">{t.title}</h2>
             </div>
             <p className="text-xs text-text-secondary mb-3">{t.description}</p>
-            <div className="space-y-1 text-xs text-text-secondary">
+            <div className="space-y-1 text-xs text-text-secondary mb-4 flex-1">
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 size={12} className="text-accent-green" />
                 Typografi optimalisert for utskrift
@@ -47,6 +49,13 @@ export default function TemplatesPage() {
                 Struktur tilpasset valgt materialetype
               </div>
             </div>
+            <Link
+              href={`/?template=${t.id}&materialType=${materialTypeFromTemplate(t.id)}`}
+              className="btn-primary !py-2 text-xs inline-flex items-center justify-center gap-1.5"
+            >
+              Bruk mal
+              <ArrowRight size={12} />
+            </Link>
           </div>
         ))}
       </div>

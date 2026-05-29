@@ -21,6 +21,10 @@ async function proxyRequest(req: NextRequest, pathSegments: string[]) {
   if (key) {
     headers.set("X-API-Key", key);
   }
+  const auth = req.headers.get("authorization");
+  if (auth) {
+    headers.set("Authorization", auth);
+  }
   const contentType = req.headers.get("content-type");
   if (contentType) {
     headers.set("Content-Type", contentType);
