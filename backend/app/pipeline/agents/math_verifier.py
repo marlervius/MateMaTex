@@ -11,6 +11,7 @@ from datetime import datetime
 
 import structlog
 
+from app.config import get_settings
 from app.models.state import AgentRole, AgentStep, PipelineState
 from app.verification.math_checker import MathChecker
 
@@ -60,10 +61,12 @@ def run_math_verifier(state: PipelineState) -> PipelineState:
 
     except Exception as e:
         step.error = str(e)
-        # On error, assume it passed (don't block pipeline for parser issues)
-        state.verified_latex_body = state.raw_latex_body
         state.math_verification_attempts += 1
-        logger.error("math_verifier_error", job_id=state.job_id, error=str(e))
+        if get_settings().verification_fail_open:
+            state.verified_latex_body = state.raw_latex_body
+            logger.warning("math_verifier_error_fail_open", job_id=state.job_id, error=str(e))
+        else:
+            logger.error("math_verifier_error_fail_closed", job_id=state.job_id, error=str(e))
 
     finally:
         step.completed_at = datetime.now()

@@ -30,6 +30,8 @@ import {
   downloadBase64,
   ingestExercises,
   differentiate,
+  createShare,
+  fetchJobPdfObjectUrl,
 } from "@/lib/api";
 import {
   isJobFavorite,
@@ -40,8 +42,14 @@ import { errorCategoryLabel } from "@/lib/map-api-result";
 type Tab = "document" | "editor" | "differentiation";
 
 export function ResultView() {
-  const { result, request, setRequest, lastFailedRequest, clearLastFailedRequest } = useAppStore();
-  const store = useAppStore();
+  const result = useAppStore((s) => s.result);
+  const request = useAppStore((s) => s.request);
+  const setRequest = useAppStore((s) => s.setRequest);
+  const lastFailedRequest = useAppStore((s) => s.lastFailedRequest);
+  const clearLastFailedRequest = useAppStore((s) => s.clearLastFailedRequest);
+  const toggleLatexEditor = useAppStore((s) => s.toggleLatexEditor);
+  const setResult = useAppStore((s) => s.setResult);
+  const resetRequest = useAppStore((s) => s.resetRequest);
   const [activeTab, setActiveTab] = useState<Tab>("document");
   const [showLatex, setShowLatex] = useState(false);
   const [showDownloads, setShowDownloads] = useState(false);
@@ -60,14 +68,16 @@ export function ResultView() {
 
   // Export
   const [exportLoading, setExportLoading] = useState("");
+  const [exportError, setExportError] = useState("");
   const [ingestStatus, setIngestStatus] = useState("");
 
-  if (!result) return null;
-  const isSuccess = result.status === "completed";
-  const canShare = approvalChecks.reviewed && approvalChecks.language && approvalChecks.classFit;
-  const hasMathIssues =
-    result.mathVerification.claimsIncorrect > 0 ||
-    result.mathVerification.claimsUnparseable > 0;
+  // Live PDF preview
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [pdfPreviewError, setPdfPreviewError] = useState<string>("");
+  const [pdfPreviewLoading, setPdfPreviewLoading] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareError, setShareError] = useState("");
 
   useEffect(() => {
     if (!result?.jobId) return;
@@ -75,28 +85,84 @@ export function ResultView() {
   }, [result?.jobId]);
 
   const selectedCompetencyGoals = useMemo(
-    () => result.generationMeta?.competencyGoals || [],
-    [result.generationMeta]
+    () => result?.generationMeta?.competencyGoals || [],
+    [result?.generationMeta]
   );
+
+  useEffect(() => {
+    let revoke: string | null = null;
+    setPdfPreviewError("");
+    setPdfPreviewUrl(null);
+
+    if (!result?.jobId || result.status !== "completed" || !result.latexCompiled) {
+      return;
+    }
+
+    setPdfPreviewLoading(true);
+    fetchJobPdfObjectUrl(result.jobId)
+      .then((url) => {
+        revoke = url;
+        setPdfPreviewUrl(url);
+      })
+      .catch((err: Error) => {
+        setPdfPreviewError(err.message || "Kunne ikke laste PDF for forhåndsvisning");
+      })
+      .finally(() => setPdfPreviewLoading(false));
+
+    return () => {
+      if (revoke) URL.revokeObjectURL(revoke);
+    };
+  }, [result?.jobId, result?.status, result?.latexCompiled]);
+
+  if (!result) return null;
+
+  const isSuccess = result.status === "completed";
+  const canShare = approvalChecks.reviewed && approvalChecks.language && approvalChecks.classFit;
+  const hasMathIssues =
+    result.mathVerification.claimsIncorrect > 0 ||
+    result.mathVerification.claimsUnparseable > 0;
 
   /* ---- Export handlers ---- */
   const handleExport = async (format: string) => {
     setExportLoading(format);
+    setExportError("");
     try {
+      let res: { success: boolean; content_base64: string; filename: string; mime_type?: string; errors?: string[] } | null = null;
+
       if (format === "pdf" || format === "pdf-print") {
-        const res = await exportPdf({
+        res = await exportPdf({
           latex_content: result.fullDocument,
           print_optimized: format === "pdf-print",
           include_solutions: includeSolutionsExport,
         });
-        if (res.success) downloadBase64(res.content_base64, res.filename, res.mime_type);
       } else if (format === "docx") {
-        const res = await exportDocx(result.fullDocument, "Oppgaveark", includeSolutionsExport);
-        if (res.success) downloadBase64(res.content_base64, res.filename, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+        res = await exportDocx(result.fullDocument, "Oppgaveark", includeSolutionsExport);
       } else if (format === "pptx") {
-        const res = await exportPptx(result.fullDocument);
-        if (res.success) downloadBase64(res.content_base64, res.filename, "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+        res = await exportPptx(result.fullDocument);
       }
+
+      if (!res) return;
+      if (res.success) {
+        const mime =
+          res.mime_type ||
+          (format === "docx"
+            ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            : format === "pptx"
+            ? "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            : "application/pdf");
+        downloadBase64(res.content_base64, res.filename, mime);
+      } else {
+        const detail = (res.errors || []).join("\n").trim();
+        setExportError(
+          detail ||
+            "Eksport feilet. Prøv «Last ned» igjen, eller åpne editor for å se etter feil i LaTeX-en."
+        );
+      }
+    } catch (err: any) {
+      setExportError(
+        err?.message ||
+          "Nettverksfeil under eksport. Sjekk forbindelsen og at backend er tilgjengelig."
+      );
     } finally {
       setExportLoading("");
       setShowDownloads(false);
@@ -127,8 +193,28 @@ export function ResultView() {
   const goToWizardWithSameSettings = () => {
     const base = lastFailedRequest || result.generationMeta || request;
     setRequest({ ...base });
-    store.setResult(null as any);
+    setResult(null);
     clearLastFailedRequest();
+  };
+
+  const handleShare = async () => {
+    if (!canShare || !result.jobId) return;
+    setShareLoading(true);
+    setShareError("");
+    try {
+      const res = await createShare({
+        resource_type: "generation",
+        resource_id: result.jobId,
+        expires_hours: 168,
+      });
+      const fullUrl = `${window.location.origin}${res.share_url}`;
+      setShareUrl(fullUrl);
+      await navigator.clipboard.writeText(fullUrl);
+    } catch (e: unknown) {
+      setShareError(e instanceof Error ? e.message : "Kunne ikke opprette delingslenke");
+    } finally {
+      setShareLoading(false);
+    }
   };
 
   const toggleFavorite = () => {
@@ -181,8 +267,8 @@ export function ResultView() {
             )}
             <button
               onClick={() => {
-                store.setResult(null as any);
-                store.resetRequest();
+                setResult(null);
+                resetRequest();
               }}
               className="btn-ghost"
             >
@@ -304,16 +390,36 @@ export function ResultView() {
               >
                 {/* PDF Preview */}
                 <div className="card !p-0 overflow-hidden">
-                  <div className="bg-surface-elevated p-8 text-center min-h-[400px] flex items-center justify-center">
-                    <div className="text-text-muted">
-                      <FileText size={48} className="mx-auto mb-3 opacity-30" />
-                      <p className="text-sm">
-                        {result.latexCompiled
-                          ? "PDF-forhåndsvisning"
-                          : "PDF kunne ikke genereres"}
-                      </p>
+                  {pdfPreviewUrl ? (
+                    <iframe
+                      src={pdfPreviewUrl}
+                      title="PDF-forhåndsvisning"
+                      className="w-full"
+                      style={{ height: "75vh", border: 0 }}
+                    />
+                  ) : (
+                    <div className="bg-surface-elevated p-8 text-center min-h-[400px] flex items-center justify-center">
+                      <div className="text-text-muted">
+                        <FileText size={48} className="mx-auto mb-3 opacity-30" />
+                        {pdfPreviewLoading ? (
+                          <p className="text-sm">Laster PDF-forhåndsvisning…</p>
+                        ) : pdfPreviewError ? (
+                          <div className="space-y-2">
+                            <p className="text-sm text-accent-red">
+                              Kunne ikke hente PDF
+                            </p>
+                            <p className="text-xs text-text-muted max-w-md mx-auto">
+                              {pdfPreviewError}
+                            </p>
+                          </div>
+                        ) : result.latexCompiled ? (
+                          <p className="text-sm">PDF er klar — bruk «Last ned»</p>
+                        ) : (
+                          <p className="text-sm">PDF kunne ikke genereres</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* LaTeX source (collapsible) */}
@@ -380,7 +486,7 @@ export function ResultView() {
                     Åpne fullskjerm-editoren for å redigere LaTeX med live forhåndsvisning
                   </p>
                   <button
-                    onClick={() => store.toggleLatexEditor()}
+                    onClick={() => toggleLatexEditor()}
                     className="btn-primary"
                   >
                     <Pencil size={14} />
@@ -467,6 +573,29 @@ export function ResultView() {
             )}
           </AnimatePresence>
 
+          {exportError && (
+            <div className="card mb-6 !border-accent-red/30 bg-accent-red/5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-accent-red mb-1 flex items-center gap-2">
+                    <AlertTriangle size={16} />
+                    Eksport feilet
+                  </h3>
+                  <pre className="text-[11px] text-text-secondary whitespace-pre-wrap max-h-40 overflow-y-auto font-mono">
+                    {exportError}
+                  </pre>
+                </div>
+                <button
+                  onClick={() => setExportError("")}
+                  className="btn-ghost text-xs"
+                  aria-label="Lukk feilmelding"
+                >
+                  Lukk
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Sticky action bar */}
           <div className="fixed bottom-0 left-0 md:left-sidebar-collapsed lg:left-sidebar right-0 z-30 bg-surface/90 backdrop-blur-md border-t border-border">
             <div className="max-w-content mx-auto px-6 py-3 flex items-center gap-2">
@@ -521,7 +650,7 @@ export function ResultView() {
               </div>
 
               <button
-                onClick={() => store.toggleLatexEditor()}
+                onClick={() => toggleLatexEditor()}
                 className="btn-secondary"
               >
                 <Pencil size={14} />
@@ -540,9 +669,14 @@ export function ResultView() {
                 Differensiér
               </button>
 
-              <button className="btn-secondary" disabled={!canShare} title={!canShare ? "Kryss av sjekklisten først" : undefined}>
+              <button
+                onClick={handleShare}
+                className="btn-secondary"
+                disabled={!canShare || shareLoading}
+                title={!canShare ? "Kryss av sjekklisten først" : undefined}
+              >
                 <Share2 size={14} />
-                Del
+                {shareLoading ? "Oppretter..." : shareUrl ? "Lenke kopiert" : "Del"}
               </button>
 
               <div className="flex-1" />

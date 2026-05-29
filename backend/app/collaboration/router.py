@@ -21,12 +21,7 @@ logger = structlog.get_logger()
 router = APIRouter(tags=["collaboration"])
 
 
-# ---------------------------------------------------------------------------
-# In-memory stores (replace with PostgreSQL in production)
-# ---------------------------------------------------------------------------
-_school_exercises: dict[str, dict] = {}  # exercise_id → exercise data
-_comments: dict[str, list[dict]] = {}     # generation_id → [comments]
-_versions: dict[str, list[dict]] = {}     # generation_id → [versions]
+from app.stores import collaboration_store as collab
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +54,6 @@ class SchoolListResponse(BaseModel):
 class CommentCreate(BaseModel):
     content: str = Field(..., min_length=1, max_length=2000)
     parent_id: str | None = None
-    user_name: str = "Anonym"
 
 
 class CommentOut(BaseModel):
@@ -115,7 +109,7 @@ async def list_school_exercises(
     user_id: str = Depends(get_current_user),
 ) -> SchoolListResponse:
     """List all exercises published to the school's shared bank."""
-    results = list(_school_exercises.values())
+    results = list(collab.school_exercises().values())
 
     if topic:
         results = [r for r in results if topic.lower() in r.get("topic", "").lower()]
@@ -156,7 +150,8 @@ async def publish_to_school(exercise_id: str, req: PublishRequest, user_id: str 
         "published_by": req.school or user_id,
         "published_at": datetime.now().isoformat(),
     }
-    _school_exercises[exercise_id] = school_entry
+    collab.school_exercises()[exercise_id] = school_entry
+    collab.save_school_exercises()
 
     logger.info("exercise_published_to_school", exercise_id=exercise_id, user=user_id)
     return {"published": True, "exercise_id": exercise_id}
@@ -176,7 +171,7 @@ comments_router = APIRouter(prefix="/generations", tags=["collaboration"])
 )
 async def list_comments(generation_id: str, user_id: str = Depends(get_current_user)) -> CommentListResponse:
     """Get all comments for a generation, threaded by parent_id."""
-    all_comments = _comments.get(generation_id, [])
+    all_comments = collab.all_comments(generation_id)
 
     # Build threaded structure
     top_level = [c for c in all_comments if c.get("parent_id") is None]
@@ -209,17 +204,16 @@ async def list_comments(generation_id: str, user_id: str = Depends(get_current_u
 )
 async def add_comment(generation_id: str, req: CommentCreate, user_id: str = Depends(get_current_user)) -> CommentOut:
     """Add a comment (optionally threaded) to a generation."""
+    display_name = "Lærer" if user_id in ("anonymous", "api-user") else f"Bruker {user_id[:8]}"
     comment = {
         "id": uuid.uuid4().hex[:12],
         "content": req.content,
-        "user_name": req.user_name,
+        "user_name": display_name,
         "parent_id": req.parent_id,
         "created_at": datetime.now().isoformat(),
     }
 
-    if generation_id not in _comments:
-        _comments[generation_id] = []
-    _comments[generation_id].append(comment)
+    collab.add_comment(generation_id, comment)
 
     logger.info("comment_added", generation_id=generation_id, comment_id=comment["id"])
 
@@ -240,7 +234,7 @@ versions_router = APIRouter(prefix="/generations", tags=["collaboration"])
 )
 async def list_versions(generation_id: str, user_id: str = Depends(get_current_user)) -> VersionListResponse:
     """Get the version history of a generation."""
-    versions = _versions.get(generation_id, [])
+    versions = collab.all_versions(generation_id)
     return VersionListResponse(
         versions=[VersionOut(**v) for v in versions],
         total=len(versions),
@@ -258,10 +252,7 @@ async def create_version(
     user_id: str = Depends(get_current_user),
 ) -> VersionOut:
     """Save a new version of the generation's LaTeX content."""
-    if generation_id not in _versions:
-        _versions[generation_id] = []
-
-    version_number = len(_versions[generation_id]) + 1
+    version_number = len(collab.all_versions(generation_id)) + 1
 
     version = {
         "id": uuid.uuid4().hex[:12],
@@ -270,7 +261,7 @@ async def create_version(
         "change_summary": req.change_summary,
         "created_at": datetime.now().isoformat(),
     }
-    _versions[generation_id].append(version)
+    collab.add_version(generation_id, version)
 
     logger.info(
         "version_created",
@@ -287,7 +278,7 @@ async def create_version(
 )
 async def restore_version(generation_id: str, version_id: str, user_id: str = Depends(get_current_user)):
     """Restore a previous version, creating a new version entry."""
-    versions = _versions.get(generation_id, [])
+    versions = collab.all_versions(generation_id)
     target = next((v for v in versions if v["id"] == version_id), None)
 
     if not target:
@@ -301,7 +292,7 @@ async def restore_version(generation_id: str, version_id: str, user_id: str = De
         "change_summary": f"Gjenopprettet fra versjon {target['version_number']}",
         "created_at": datetime.now().isoformat(),
     }
-    _versions[generation_id].append(new_version)
+    collab.add_version(generation_id, new_version)
 
     logger.info(
         "version_restored",

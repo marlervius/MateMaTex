@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, Sparkles, LayoutTemplate } from "lucide-react";
 import { useAppStore } from "@/lib/store";
-import { startGeneration, streamProgress, getResult } from "@/lib/api";
+import { startGeneration, streamProgress, getResult, closeActiveStream } from "@/lib/api";
 import { mapApiResultToGenerationResult } from "@/lib/map-api-result";
 import { appendHistory } from "@/lib/generation-history";
 import { searchGoals, type CompetencyGoal } from "@/data/lk20-goals";
@@ -116,12 +116,28 @@ function toggleGoal(list: string[], code: string): string[] {
    Component
    ----------------------------------------------------------------------- */
 export function GenerationWizard() {
-  const { request, setRequest } = useAppStore();
-  const store = useAppStore();
+  const request = useAppStore((s) => s.request);
+  const setRequest = useAppStore((s) => s.setRequest);
+  const startGen = useAppStore((s) => s.startGeneration);
+  const setJobId = useAppStore((s) => s.setJobId);
+  const addStep = useAppStore((s) => s.addStep);
+  const setCurrentAgent = useAppStore((s) => s.setCurrentAgent);
+  const setResult = useAppStore((s) => s.setResult);
+  const setError = useAppStore((s) => s.setError);
+
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(0);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [goalSearch, setGoalSearch] = useState("");
+  const activeJobRef = useRef<string | null>(null);
+  const streamCloseRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      streamCloseRef.current?.();
+      closeActiveStream();
+    };
+  }, []);
 
   const totalSteps = 3;
 
@@ -158,7 +174,9 @@ export function GenerationWizard() {
   const handleGenerate = async () => {
     if (!canGenerate) return;
 
-    store.startGeneration();
+    streamCloseRef.current?.();
+    closeActiveStream();
+    startGen();
     const snapshot = { ...useAppStore.getState().request };
 
     try {
@@ -178,11 +196,12 @@ export function GenerationWizard() {
         extra_instructions: request.extraInstructions,
       });
 
-      store.setJobId(job_id);
+      activeJobRef.current = job_id;
+      setJobId(job_id);
 
-      streamProgress(job_id, {
+      streamCloseRef.current = streamProgress(job_id, {
         onStep: (s) =>
-          store.addStep({
+          addStep({
             agent: s.agent,
             startedAt: s.started_at,
             completedAt: s.completed_at,
@@ -191,12 +210,14 @@ export function GenerationWizard() {
             error: s.error,
             retries: s.retries,
           }),
-        onCurrentAgent: (a) => store.setCurrentAgent(a),
+        onCurrentAgent: (a) => setCurrentAgent(a),
         onComplete: async () => {
+          if (activeJobRef.current !== job_id) return;
           try {
             const raw = await getResult(job_id);
+            if (activeJobRef.current !== job_id) return;
             const mapped = mapApiResultToGenerationResult(raw, snapshot);
-            store.setResult(mapped);
+            setResult(mapped);
             if (mapped.status === "completed") {
               appendHistory({
                 jobId: job_id,
@@ -208,21 +229,20 @@ export function GenerationWizard() {
                 request: { ...snapshot },
               });
             }
-          } catch (e: any) {
-            store.setError(
-              e?.message || "Kunne ikke hente resultat",
-              useAppStore.getState().request
-            );
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : "Kunne ikke hente resultat";
+            setError(msg, useAppStore.getState().request);
           }
         },
-        onError: (err) =>
-          store.setError(err, useAppStore.getState().request),
+        onError: (err) => {
+          if (activeJobRef.current === job_id) {
+            setError(err, useAppStore.getState().request);
+          }
+        },
       });
-    } catch (err: any) {
-      store.setError(
-        err?.message || "Noe gikk galt",
-        useAppStore.getState().request
-      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Noe gikk galt";
+      setError(msg, useAppStore.getState().request);
     }
   };
 

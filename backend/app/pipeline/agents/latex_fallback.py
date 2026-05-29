@@ -9,7 +9,10 @@ from datetime import datetime
 
 import structlog
 
+from app.config import get_config
+from app.latex.preamble import wrap_with_preamble
 from app.models.state import AgentRole, AgentStep, PipelineState
+from app.verification.latex_checker import LatexChecker
 
 logger = structlog.get_logger()
 
@@ -31,32 +34,56 @@ def run_latex_fallback(state: PipelineState) -> PipelineState:
     )
 
     try:
-        # Get the latest body
         body = state.edited_latex_body or state.raw_latex_body
-        
-        # 1. Remove all tikzpicture environments
-        body = re.sub(r'\\begin\{tikzpicture\}.*?\\end\{tikzpicture\}', '% [Figur fjernet pga. kompileringsfeil]', body, flags=re.DOTALL)
-        
-        # 2. Remove all axis/pgfplots environments just in case
-        body = re.sub(r'\\begin\{axis\}.*?\\end\{axis\}', '% [Graf fjernet pga. kompileringsfeil]', body, flags=re.DOTALL)
-        
-        # 3. Strip basic text formatting that might be broken
-        body = re.sub(r'\\textcolor\{.*?\}.*?\}', '% [Farge fjernet]', body)
-        
-        # Add a warning at the top of the document
+
+        body = re.sub(
+            r"\\begin\{tikzpicture\}.*?\\end\{tikzpicture\}",
+            "% [Figur fjernet pga. kompileringsfeil]",
+            body,
+            flags=re.DOTALL,
+        )
+        body = re.sub(
+            r"\\begin\{axis\}.*?\\end\{axis\}",
+            "% [Graf fjernet pga. kompileringsfeil]",
+            body,
+            flags=re.DOTALL,
+        )
+        body = re.sub(r"\\textcolor\{.*?\}.*?\}", "% [Farge fjernet]", body)
+
         fallback_warning = r"""
 \begin{tcolorbox}[colback=red!5!white,colframe=red!75!black,title=Kompileringsadvarsel]
-Dette dokumentet inneholdt avansert grafikk (f.eks. TikZ-figurer) som feilet under generering. 
+Dette dokumentet inneholdt avansert grafikk (f.eks. TikZ-figurer) som feilet under generering.
 For å sikre at du likevel får oppgavene og teksten, har systemet fjernet problematiske figurer.
 \end{tcolorbox}
 """
         body = fallback_warning + "\n" + body
-        
+
         state.final_latex_body = body
-        state.latex_compilation.success = True # Force success to allow proceeding
-        
-        step.output_summary = "Laget forenklet fallback-dokument"
-        logger.info("latex_fallback_complete", job_id=state.job_id)
+        state.edited_latex_body = body
+        state.full_document = ""
+
+        full_doc = wrap_with_preamble(body)
+        config = get_config()
+        checker = LatexChecker(pdflatex_path=config.pdflatex_path)
+        result = checker.check(full_doc)
+
+        state.latex_compilation = result
+        if result.success:
+            state.full_document = full_doc
+            from app.pipeline.agents.latex_validator import _persist_pdf
+
+            if result.pdf_bytes:
+                try:
+                    state.pdf_path = _persist_pdf(state.job_id, result.pdf_bytes)
+                except OSError as persist_err:
+                    state.pdf_path = ""
+                    logger.warning("latex_fallback_pdf_persist_failed", error=str(persist_err))
+            step.output_summary = "Laget forenklet fallback-dokument (verifisert)"
+            logger.info("latex_fallback_complete", job_id=state.job_id)
+        else:
+            state.latex_compilation.success = False
+            step.error = f"Fallback compilation failed: {result.errors[:2]}"
+            logger.warning("latex_fallback_still_failed", job_id=state.job_id, errors=result.errors[:3])
 
     except Exception as e:
         step.error = str(e)

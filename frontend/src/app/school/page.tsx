@@ -1,16 +1,44 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { School, Search, BookOpen } from "lucide-react";
+import { School, Search, BookOpen, AlertTriangle } from "lucide-react";
+import { listSchoolExercises, type SchoolExercise } from "@/lib/api";
 
 export default function SchoolBankPage() {
-  const [exercises, setExercises] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [exercises, setExercises] = useState<SchoolExercise[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Placeholder — will fetch from /school/exercises in production
-  const isEmpty = exercises.length === 0;
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await listSchoolExercises({
+        topic: searchQuery.trim() || undefined,
+      });
+      setExercises(res.exercises);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Kunne ikke laste skolebank");
+      setExercises([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const t = setTimeout(load, searchQuery ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [load, searchQuery]);
+
+  const filtered = searchQuery.trim()
+    ? exercises.filter(
+        (ex) =>
+          ex.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          ex.topic.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : exercises;
 
   return (
     <div className="max-w-content mx-auto">
@@ -23,7 +51,6 @@ export default function SchoolBankPage() {
         </div>
       </div>
 
-      {/* Search */}
       <div className="relative mb-6">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
         <input
@@ -35,8 +62,20 @@ export default function SchoolBankPage() {
         />
       </div>
 
-      {/* Empty state */}
-      {isEmpty && !loading && (
+      {error && (
+        <div className="card mb-6 border-accent-red/30 bg-accent-red/5 flex items-center gap-2 text-sm">
+          <AlertTriangle size={16} className="text-accent-red shrink-0" />
+          {error}
+        </div>
+      )}
+
+      {loading && (
+        <div className="flex justify-center py-20">
+          <div className="w-8 h-8 border-2 border-accent-blue border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+
+      {!loading && !error && filtered.length === 0 && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -46,22 +85,26 @@ export default function SchoolBankPage() {
           <h2 className="font-display text-2xl mb-2">Ingen oppgaver ennå</h2>
           <p className="text-text-secondary text-sm mb-6 max-w-sm">
             Når du eller kollegaer publiserer oppgaver til skolens bank, dukker de
-            opp her. Gå til oppgavebanken og klikk «Publiser til skolen» for å dele.
+            opp her. Gå til oppgavebanken og klikk «Publiser til skolen».
           </p>
-          <a href="/exercises" className="btn bg-[hsl(var(--accent-blue))] text-white hover:opacity-90 inline-flex items-center gap-2">
+          <a href="/exercises" className="btn-primary inline-flex items-center gap-2">
             <BookOpen size={14} />
             Gå til min oppgavebank
           </a>
         </motion.div>
       )}
 
-      {/* Exercise list — populated when data exists */}
-      {!isEmpty && (
+      {!loading && filtered.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {exercises.map((ex) => (
+          {filtered.map((ex) => (
             <div key={ex.id} className="card-interactive p-4">
               <h3 className="font-medium text-sm mb-1">{ex.title}</h3>
-              <p className="text-xs text-text-muted">{ex.topic} · {ex.grade_level}</p>
+              <p className="text-xs text-text-muted mb-2">
+                {ex.topic} · {ex.grade_level} · {ex.difficulty}
+              </p>
+              <p className="text-[10px] text-text-muted">
+                Publisert {new Date(ex.published_at).toLocaleDateString("nb-NO")}
+              </p>
             </div>
           ))}
         </div>

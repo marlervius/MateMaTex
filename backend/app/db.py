@@ -140,8 +140,9 @@ async def get_pool() -> asyncpg.Pool:
 
         # Create an SSL context for Supabase (requires SSL)
         ssl_ctx = _ssl.create_default_context()
-        ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = _ssl.CERT_NONE
+        if not get_settings().database_ssl_verify:
+            ssl_ctx.check_hostname = False
+            ssl_ctx.verify_mode = _ssl.CERT_NONE
 
         # PgBouncer / transaction poolers often break asyncpg prepared statements.
         # Disable statement cache when using a typical pooled host (port 6543 or hostname).

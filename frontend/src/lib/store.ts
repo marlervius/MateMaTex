@@ -93,7 +93,7 @@ interface AppStore {
   cancelGeneration: () => void;
   addStep: (step: AgentStep) => void;
   setCurrentAgent: (agent: string | null) => void;
-  setResult: (result: GenerationResult) => void;
+  setResult: (result: GenerationResult | null) => void;
   /**
    * failedRequest: oppgi skjema for «Prøv igjen». null = tøm. undefined = ikke endre lagret.
    */

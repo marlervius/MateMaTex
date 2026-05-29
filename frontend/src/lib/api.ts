@@ -1,9 +1,8 @@
 /**
- * API client for the MateMaTeX 2.0 backend.
+ * API client for MateMaTeX 2.0.
  *
- * Covers: generation, exercises, editor, differentiation, export, sharing.
- * - POST/DELETE/GET result: optional NEXT_PUBLIC_MATE_API_KEY (exposed in browser).
- * - SSE: default same-origin proxy `/api/generate/.../stream` uses server-only MATE_API_KEY.
+ * Browser requests go through same-origin `/api/backend/*` proxy (server adds MATE_API_KEY).
+ * SSE uses `/api/generate/[jobId]/stream`. PDF preview uses `/api/generate/[jobId]/pdf`.
  */
 
 import type {
@@ -12,33 +11,27 @@ import type {
   StreamStepPayload,
 } from "@/types/generation";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-/** SSE URL: Next.js proxy (recommended) or direct backend with ?api_key= (discouraged). */
-function getGenerationStreamUrl(jobId: string): string {
-  if (typeof window === "undefined") return "";
-  if (process.env.NEXT_PUBLIC_STREAM_PROXY === "false") {
-    const u = new URL(`${API_BASE}/generate/${encodeURIComponent(jobId)}/stream`);
-    const k = process.env.NEXT_PUBLIC_MATE_API_KEY;
-    if (k) u.searchParams.set("api_key", k);
-    return u.toString();
+function getApiBase(): string {
+  if (typeof window !== "undefined") {
+    return "/api/backend";
   }
-  return `/api/generate/${encodeURIComponent(jobId)}/stream`;
+  return (
+    process.env.BACKEND_INTERNAL_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    "http://localhost:8000"
+  ).replace(/\/$/, "");
 }
 
-// ---------------------------------------------------------------------------
-// Auth helper (optional shared API key — must match backend MATE_API_KEY)
-// ---------------------------------------------------------------------------
-async function getAuthHeaders(): Promise<Record<string, string>> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  const key =
-    typeof window !== "undefined"
-      ? process.env.NEXT_PUBLIC_MATE_API_KEY
-      : undefined;
-  if (key) {
-    headers["X-API-Key"] = key;
-  }
-  return headers;
+function apiUrl(path: string): string {
+  const clean = path.replace(/^\//, "");
+  return `${getApiBase()}/${clean}`;
+}
+
+let activeStreamClose: (() => void) | null = null;
+
+export function closeActiveStream(): void {
+  activeStreamClose?.();
+  activeStreamClose = null;
 }
 
 async function readErrorMessage(res: Response): Promise<string> {
@@ -54,11 +47,14 @@ async function readErrorMessage(res: Response): Promise<string> {
   return res.statusText || `HTTP ${res.status}`;
 }
 
-async function fetchJson<T>(
-  url: string,
-  init?: RequestInit
-): Promise<T> {
-  const res = await fetch(url, init);
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = {
+    ...(init?.headers as Record<string, string>),
+  };
+  if (init?.body && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
+  const res = await fetch(url, { ...init, headers });
   if (!res.ok) {
     throw new Error(await readErrorMessage(res));
   }
@@ -99,26 +95,35 @@ export interface GenerateResponse {
   message: string;
 }
 
+export interface GenerationResultApi {
+  job_id: string;
+  status: string;
+  full_document: string;
+  pdf_path?: string;
+  pdf_available?: boolean;
+  math_verification: Record<string, unknown>;
+  latex_compilation: Record<string, unknown>;
+  steps: Array<Record<string, unknown>>;
+  total_duration_seconds: number;
+  total_tokens: number;
+  error: string;
+}
+
 export async function startGeneration(
   request: GenerateRequest
 ): Promise<GenerateResponse> {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/generate`, {
+  const res = await fetch(apiUrl("generate"), {
     method: "POST",
-    headers,
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
   });
   if (!res.ok) {
     const msg = await readErrorMessage(res);
     if (res.status === 401) {
-      throw new Error(
-        "Ingen tilgang (401). Sjekk at backend MATE_API_KEY matcher NEXT_PUBLIC_MATE_API_KEY, eller at nøkkel ikke er påkrevd."
-      );
+      throw new Error("Ingen tilgang (401). Sjekk at MATE_API_KEY er satt på serveren.");
     }
     if (res.status === 429) {
-      throw new Error(
-        "Du har sendt mange forespørsler på kort tid (rate limit). Vent et minutt og prøv igjen. Ved skoleutrulling: be administrator om høyere grense eller felles nøkkel bak proxy."
-      );
+      throw new Error("For mange forespørsler. Vent et minutt og prøv igjen.");
     }
     throw new Error(msg || `Generation failed: ${res.statusText}`);
   }
@@ -134,7 +139,13 @@ export function streamProgress(
     onError?: (error: string) => void;
   }
 ): () => void {
-  const url = getGenerationStreamUrl(jobId);
+  closeActiveStream();
+
+  const url =
+    typeof window !== "undefined"
+      ? `/api/generate/${encodeURIComponent(jobId)}/stream`
+      : apiUrl(`generate/${encodeURIComponent(jobId)}/stream`);
+
   const eventSource = new EventSource(url);
 
   eventSource.addEventListener("step", (e: MessageEvent) => {
@@ -149,69 +160,84 @@ export function streamProgress(
     const data = parseStreamData<StreamCompletePayload>(e.data, "complete");
     if (data) {
       callbacks.onComplete?.(data);
-      eventSource.close();
+      closeActiveStream();
     }
   });
   eventSource.addEventListener("error", (e: Event) => {
-    // Definitive server error with a JSON payload
     if ("data" in e && (e as MessageEvent).data) {
       try {
         const j = JSON.parse((e as MessageEvent).data) as { message?: string };
         callbacks.onError?.(j.message || "Feil fra strømmen");
-        eventSource.close();
+        closeActiveStream();
         return;
       } catch {
         /* fall through */
       }
     }
-    // readyState === CONNECTING means the browser is already attempting to
-    // reconnect — let it; only report a permanent failure when CLOSED.
     if (eventSource.readyState === EventSource.CONNECTING) {
       return;
     }
     callbacks.onError?.(
-      "Mistet kontakt under generering. Sjekk nettverk og at backend kjører. " +
-        "Med API-nøkkel: sett MATE_API_KEY på Vercel (server) for SSE-proxy, eller NEXT_PUBLIC_STREAM_PROXY=false og NEXT_PUBLIC_MATE_API_KEY for direkte strøm."
+      "Mistet kontakt under generering. Sjekk nettverk og at backend kjører."
     );
+    closeActiveStream();
+  });
+
+  const close = () => {
     eventSource.close();
-  });
-
-  return () => eventSource.close();
+    if (activeStreamClose === close) {
+      activeStreamClose = null;
+    }
+  };
+  activeStreamClose = close;
+  return close;
 }
 
-export async function abortGeneration(jobId: string): Promise<any> {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/generate/${jobId}`, {
-    method: "DELETE",
-    headers,
-  });
-  if (!res.ok) throw new Error(`Failed to abort: ${res.statusText}`);
-  return res.json();
+export async function abortGeneration(jobId: string): Promise<{ success: boolean; message: string }> {
+  closeActiveStream();
+  return fetchJson(apiUrl(`generate/${jobId}`), { method: "DELETE" });
 }
 
-export async function getResult(jobId: string): Promise<any> {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE}/generate/${jobId}/result`, { headers });
-  if (res.status === 202) {
-    throw new Error("Job still running");
+export async function getResult(
+  jobId: string,
+  maxAttempts = 15
+): Promise<GenerationResultApi> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const res = await fetch(apiUrl(`generate/${jobId}/result`));
+    if (res.status === 202) {
+      await new Promise((r) => setTimeout(r, Math.min(400 * (attempt + 1), 3000)));
+      continue;
+    }
+    if (!res.ok) {
+      throw new Error(await readErrorMessage(res));
+    }
+    return res.json() as Promise<GenerationResultApi>;
   }
+  throw new Error("Resultat ikke klart ennå — prøv igjen om litt");
+}
+
+export async function fetchJobPdfObjectUrl(jobId: string): Promise<string> {
+  const url =
+    typeof window !== "undefined"
+      ? `/api/generate/${encodeURIComponent(jobId)}/pdf`
+      : apiUrl(`generate/${encodeURIComponent(jobId)}/pdf`);
+  const res = await fetch(url);
   if (!res.ok) {
     throw new Error(await readErrorMessage(res));
   }
-  return res.json();
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
 }
 
-export async function estimateCost(request: GenerateRequest): Promise<any> {
-  const headers = await getAuthHeaders();
-  return fetchJson(`${API_BASE}/estimate`, {
+export async function estimateCost(request: GenerateRequest): Promise<Record<string, unknown>> {
+  return fetchJson(apiUrl("estimate"), {
     method: "POST",
-    headers,
     body: JSON.stringify(request),
   });
 }
 
 // ---------------------------------------------------------------------------
-// Editor — compile & AI actions
+// Editor
 // ---------------------------------------------------------------------------
 export async function compileLatex(
   latexBody: string,
@@ -223,10 +249,8 @@ export async function compileLatex(
   warnings: Array<{ line: number; message: string; severity: string }>;
   cached: boolean;
 }> {
-  const headers = await getAuthHeaders();
-  return fetchJson(`${API_BASE}/editor/compile`, {
+  return fetchJson(apiUrl("editor/compile"), {
     method: "POST",
-    headers,
     body: JSON.stringify({ latex_body: latexBody, filename }),
   });
 }
@@ -242,10 +266,8 @@ export async function editorAction(
   explanation: string;
   error: string;
 }> {
-  const headers = await getAuthHeaders();
-  return fetchJson(`${API_BASE}/editor/${action}`, {
+  return fetchJson(apiUrl(`editor/${action}`), {
     method: "POST",
-    headers,
     body: JSON.stringify({
       latex_selection: selection,
       full_context: fullContext,
@@ -284,13 +306,7 @@ export async function listExercises(params?: {
   difficulty?: string;
   page?: number;
   page_size?: number;
-}): Promise<{
-  exercises: Exercise[];
-  total: number;
-  page: number;
-  page_size: number;
-}> {
-  const headers = await getAuthHeaders();
+}): Promise<{ exercises: Exercise[]; total: number; page: number; page_size: number }> {
   const sp = new URLSearchParams();
   if (params?.topic) sp.set("topic", params.topic);
   if (params?.grade_level) sp.set("grade_level", params.grade_level);
@@ -298,19 +314,14 @@ export async function listExercises(params?: {
   if (params?.difficulty) sp.set("difficulty", params.difficulty);
   if (params?.page) sp.set("page", String(params.page));
   if (params?.page_size) sp.set("page_size", String(params.page_size));
-
-  return fetchJson(`${API_BASE}/exercises?${sp.toString()}`, { headers });
+  return fetchJson(`${apiUrl("exercises")}?${sp.toString()}`);
 }
 
 export async function searchExercises(
   query: string,
   limit: number = 20
 ): Promise<{ exercises: Exercise[]; total: number }> {
-  const headers = await getAuthHeaders();
-  return fetchJson(
-    `${API_BASE}/exercises/search?q=${encodeURIComponent(query)}&limit=${limit}`,
-    { headers }
-  );
+  return fetchJson(`${apiUrl("exercises/search")}?q=${encodeURIComponent(query)}&limit=${limit}`);
 }
 
 export async function ingestExercises(
@@ -319,10 +330,8 @@ export async function ingestExercises(
   gradeLevel: string = "",
   generationId: string = ""
 ): Promise<{ ingested: number; exercise_ids: string[] }> {
-  const headers = await getAuthHeaders();
-  return fetchJson(`${API_BASE}/exercises/ingest`, {
+  return fetchJson(apiUrl("exercises/ingest"), {
     method: "POST",
-    headers,
     body: JSON.stringify({
       latex_content: latexContent,
       topic,
@@ -332,25 +341,13 @@ export async function ingestExercises(
   });
 }
 
-export async function findSimilarExercises(
-  exerciseId: string,
-  limit: number = 5
-): Promise<Exercise[]> {
-  const headers = await getAuthHeaders();
-  return fetchJson(
-    `${API_BASE}/exercises/${exerciseId}/similar?limit=${limit}`,
-    { headers }
-  );
+export async function findSimilarExercises(exerciseId: string, limit: number = 5): Promise<Exercise[]> {
+  return fetchJson(`${apiUrl(`exercises/${exerciseId}/similar`)}?limit=${limit}`);
 }
 
-export async function generateVariant(
-  exerciseId: string,
-  instructions: string = ""
-): Promise<Exercise> {
-  const headers = await getAuthHeaders();
-  return fetchJson(`${API_BASE}/exercises/${exerciseId}/variant`, {
+export async function generateVariant(exerciseId: string, instructions: string = ""): Promise<Exercise> {
+  return fetchJson(apiUrl(`exercises/${exerciseId}/variant`), {
     method: "POST",
-    headers,
     body: JSON.stringify({ instructions }),
   });
 }
@@ -360,16 +357,9 @@ export async function exportExercises(
   format: "pdf" | "docx" = "pdf",
   includeSolutions: boolean = true,
   title: string = "Oppgaveark"
-): Promise<{
-  success: boolean;
-  content_base64: string;
-  filename: string;
-  errors: string[];
-}> {
-  const headers = await getAuthHeaders();
-  return fetchJson(`${API_BASE}/exercises/export`, {
+): Promise<{ success: boolean; content_base64: string; filename: string; errors: string[] }> {
+  return fetchJson(apiUrl("exercises/export"), {
     method: "POST",
-    headers,
     body: JSON.stringify({
       exercise_ids: exerciseIds,
       format,
@@ -396,15 +386,9 @@ export async function differentiate(
   advanced_exercise_count: number;
   errors: string[];
 }> {
-  const headers = await getAuthHeaders();
-  return fetchJson(`${API_BASE}/differentiation/generate`, {
+  return fetchJson(apiUrl("differentiation/generate"), {
     method: "POST",
-    headers,
-    body: JSON.stringify({
-      latex_content: latexContent,
-      topic,
-      grade,
-    }),
+    body: JSON.stringify({ latex_content: latexContent, topic, grade }),
   });
 }
 
@@ -412,19 +396,10 @@ export async function generateHints(
   exerciseId: string,
   exerciseLatex: string,
   solution: string = ""
-): Promise<{
-  success: boolean;
-  hints: { nudge: string; step: string; near_solution: string };
-  error: string;
-}> {
-  const headers = await getAuthHeaders();
-  return fetchJson(`${API_BASE}/exercises/${exerciseId}/hints`, {
+): Promise<{ success: boolean; hints: { nudge: string; step: string; near_solution: string }; error: string }> {
+  return fetchJson(apiUrl(`exercises/${exerciseId}/hints`), {
     method: "POST",
-    headers,
-    body: JSON.stringify({
-      exercise_latex: exerciseLatex,
-      solution,
-    }),
+    body: JSON.stringify({ exercise_latex: exerciseLatex, solution }),
   });
 }
 
@@ -440,41 +415,18 @@ export async function exportPdf(params: {
   cover_subject?: string;
   cover_topic?: string;
   print_optimized?: boolean;
-}): Promise<{
-  success: boolean;
-  content_base64: string;
-  filename: string;
-  mime_type: string;
-  errors: string[];
-}> {
-  const headers = await getAuthHeaders();
-  return fetchJson(`${API_BASE}/export/pdf`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(params),
-  });
+}): Promise<{ success: boolean; content_base64: string; filename: string; mime_type: string; errors: string[] }> {
+  return fetchJson(apiUrl("export/pdf"), { method: "POST", body: JSON.stringify(params) });
 }
 
 export async function exportDocx(
   latexContent: string,
   title: string = "Oppgaveark",
   includeSolutions: boolean = true
-): Promise<{
-  success: boolean;
-  content_base64: string;
-  filename: string;
-  mime_type: string;
-  errors: string[];
-}> {
-  const headers = await getAuthHeaders();
-  return fetchJson(`${API_BASE}/export/docx`, {
+): Promise<{ success: boolean; content_base64: string; filename: string; mime_type: string; errors: string[] }> {
+  return fetchJson(apiUrl("export/docx"), {
     method: "POST",
-    headers,
-    body: JSON.stringify({
-      latex_content: latexContent,
-      title,
-      include_solutions: includeSolutions,
-    }),
+    body: JSON.stringify({ latex_content: latexContent, title, include_solutions: includeSolutions }),
   });
 }
 
@@ -482,22 +434,10 @@ export async function exportPptx(
   latexContent: string,
   title: string = "Matematikk",
   solutionsAs: "speaker_notes" | "hidden_slides" = "speaker_notes"
-): Promise<{
-  success: boolean;
-  content_base64: string;
-  filename: string;
-  mime_type: string;
-  errors: string[];
-}> {
-  const headers = await getAuthHeaders();
-  return fetchJson(`${API_BASE}/export/pptx`, {
+): Promise<{ success: boolean; content_base64: string; filename: string; mime_type: string; errors: string[] }> {
+  return fetchJson(apiUrl("export/pptx"), {
     method: "POST",
-    headers,
-    body: JSON.stringify({
-      latex_content: latexContent,
-      title,
-      solutions_as: solutionsAs,
-    }),
+    body: JSON.stringify({ latex_content: latexContent, title, solutions_as: solutionsAs }),
   });
 }
 
@@ -510,18 +450,8 @@ export async function createShare(params: {
   password?: string;
   expires_hours?: number;
   max_views?: number;
-}): Promise<{
-  success: boolean;
-  token: string;
-  share_url: string;
-  expires_at: string | null;
-}> {
-  const headers = await getAuthHeaders();
-  return fetchJson(`${API_BASE}/sharing`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(params),
-  });
+}): Promise<{ success: boolean; token: string; share_url: string; expires_at: string | null }> {
+  return fetchJson(apiUrl("sharing"), { method: "POST", body: JSON.stringify(params) });
 }
 
 export async function getShared(
@@ -530,14 +460,55 @@ export async function getShared(
 ): Promise<{
   success: boolean;
   resource_type: string;
-  content: any;
+  content: Record<string, unknown>;
   allow_download: boolean;
   allow_clone: boolean;
 }> {
-  const url = password
-    ? `${API_BASE}/sharing/${token}?password=${encodeURIComponent(password)}`
-    : `${API_BASE}/sharing/${token}`;
-  return fetchJson(url);
+  if (password) {
+    return fetchJson(apiUrl(`sharing/${token}/access`), {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    });
+  }
+  return fetchJson(apiUrl(`sharing/${token}`));
+}
+
+// ---------------------------------------------------------------------------
+// School bank
+// ---------------------------------------------------------------------------
+export interface SchoolExercise {
+  id: string;
+  title: string;
+  topic: string;
+  grade_level: string;
+  difficulty: string;
+  latex_content: string;
+  published_by: string;
+  published_at: string;
+}
+
+export async function listSchoolExercises(params?: {
+  topic?: string;
+  grade_level?: string;
+  page?: number;
+  page_size?: number;
+}): Promise<{ exercises: SchoolExercise[]; total: number }> {
+  const sp = new URLSearchParams();
+  if (params?.topic) sp.set("topic", params.topic);
+  if (params?.grade_level) sp.set("grade_level", params.grade_level);
+  if (params?.page) sp.set("page", String(params.page));
+  if (params?.page_size) sp.set("page_size", String(params.page_size));
+  return fetchJson(`${apiUrl("school/exercises")}?${sp.toString()}`);
+}
+
+export async function publishToSchool(
+  exerciseId: string,
+  school: string = ""
+): Promise<{ published: boolean; exercise_id: string }> {
+  return fetchJson(apiUrl(`school/exercises/${exerciseId}/publish`), {
+    method: "POST",
+    body: JSON.stringify({ exercise_id: exerciseId, school }),
+  });
 }
 
 // ---------------------------------------------------------------------------

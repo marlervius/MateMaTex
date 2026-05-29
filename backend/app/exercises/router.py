@@ -13,10 +13,11 @@ from enum import Enum
 from typing import Literal
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from app.auth import get_current_user
+from app.rate_limit import limiter
 
 from app.exercises.parser import (
     Difficulty,
@@ -32,10 +33,7 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/exercises", tags=["exercises"])
 
 
-# ---------------------------------------------------------------------------
-# In-memory store (replace with PostgreSQL + pgvector in production)
-# ---------------------------------------------------------------------------
-_exercise_store: dict[str, dict] = {}
+from app.stores import exercise_store as store
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +79,7 @@ class ExerciseListResponse(BaseModel):
 
 class IngestRequest(BaseModel):
     """Request to ingest exercises from a generation's LaTeX output."""
-    latex_content: str
+    latex_content: str = Field(..., max_length=500_000)
     topic: str = ""
     grade_level: str = ""
     generation_id: str = ""
@@ -158,22 +156,13 @@ def _dict_to_out(d: dict) -> ExerciseOut:
 # ---------------------------------------------------------------------------
 
 
-@router.post(
-    "/ingest",
-    response_model=IngestResponse,
-    summary="Parse LaTeX and ingest exercises into the bank",
-    responses={
-        200: {
-            "description": "Exercises ingested successfully",
-            "content": {
-                "application/json": {
-                    "example": {"ingested": 5, "exercise_ids": ["a1b2c3", "d4e5f6"]}
-                }
-            },
-        }
-    },
-)
-async def ingest_exercises(req: IngestRequest, user_id: str = Depends(get_current_user)) -> IngestResponse:
+@router.post("/ingest", response_model=IngestResponse, summary="Parse LaTeX and ingest exercises into the bank")
+@limiter.limit("20/minute")
+async def ingest_exercises(
+    request: Request,
+    req: IngestRequest,
+    user_id: str = Depends(get_current_user),
+) -> IngestResponse:
     """Parse LaTeX content and store individual exercises in the bank."""
     parsed = parse_exercises(req.latex_content)
     ids = []
@@ -185,7 +174,8 @@ async def ingest_exercises(req: IngestRequest, user_id: str = Depends(get_curren
             grade_level=req.grade_level,
             generation_id=req.generation_id,
         )
-        _exercise_store[d["id"]] = d
+        d["owner_id"] = user_id
+        store.save(d)
         ids.append(d["id"])
 
     logger.info("exercises_ingested", count=len(ids), topic=req.topic)
@@ -212,10 +202,7 @@ async def list_exercises(
     user_id: str = Depends(get_current_user),
 ) -> ExerciseListResponse:
     """List exercises with optional filtering and pagination."""
-    results = [
-        d for d in _exercise_store.values()
-        if not d.get("deleted", False)
-    ]
+    results = store.list_active(user_id=user_id)
 
     # Apply filters
     if topic:
@@ -262,9 +249,7 @@ async def search_exercises(
     q_lower = q.lower()
     scored: list[tuple[float, dict]] = []
 
-    for d in _exercise_store.values():
-        if d.get("deleted"):
-            continue
+    for d in store.list_active(user_id=user_id):
 
         score = 0.0
         # Title match
@@ -299,7 +284,7 @@ async def search_exercises(
     summary="Get a single exercise",
 )
 async def get_exercise(exercise_id: str, user_id: str = Depends(get_current_user)) -> ExerciseOut:
-    d = _exercise_store.get(exercise_id)
+    d = store.get(exercise_id)
     if not d or d.get("deleted"):
         raise HTTPException(404, "Exercise not found")
     return _dict_to_out(d)
@@ -311,13 +296,13 @@ async def get_exercise(exercise_id: str, user_id: str = Depends(get_current_user
     summary="Update exercise metadata",
 )
 async def update_exercise(exercise_id: str, update: ExerciseUpdate, user_id: str = Depends(get_current_user)) -> ExerciseOut:
-    d = _exercise_store.get(exercise_id)
+    d = store.get(exercise_id)
     if not d or d.get("deleted"):
         raise HTTPException(404, "Exercise not found")
 
     for field, value in update.model_dump(exclude_unset=True).items():
         d[field] = value
-
+    store.save(d)
     return _dict_to_out(d)
 
 
@@ -326,10 +311,8 @@ async def update_exercise(exercise_id: str, update: ExerciseUpdate, user_id: str
     summary="Soft-delete an exercise",
 )
 async def delete_exercise(exercise_id: str, user_id: str = Depends(get_current_user)):
-    d = _exercise_store.get(exercise_id)
-    if not d:
+    if not store.soft_delete(exercise_id):
         raise HTTPException(404, "Exercise not found")
-    d["deleted"] = True
     return {"deleted": True}
 
 
@@ -345,15 +328,15 @@ async def find_similar(exercise_id: str, limit: int = Query(5, ge=1, le=20), use
     In production, uses pgvector cosine similarity on embeddings.
     Placeholder: keyword overlap scoring.
     """
-    target = _exercise_store.get(exercise_id)
-    if not target or target.get("deleted"):
+    target = store.get(exercise_id)
+    if not target:
         raise HTTPException(404, "Exercise not found")
 
     target_kw = set(target.get("keywords", []))
 
     scored: list[tuple[float, dict]] = []
-    for d in _exercise_store.values():
-        if d["id"] == exercise_id or d.get("deleted"):
+    for d in store.list_active(user_id=user_id):
+        if d["id"] == exercise_id:
             continue
         overlap = len(target_kw & set(d.get("keywords", [])))
         if overlap > 0:
@@ -363,15 +346,17 @@ async def find_similar(exercise_id: str, limit: int = Query(5, ge=1, le=20), use
     return [_dict_to_out(d) for _, d in scored[:limit]]
 
 
-@router.post(
-    "/{exercise_id}/variant",
-    response_model=ExerciseOut,
-    summary="Generate an AI variant of an exercise",
-)
-async def generate_variant(exercise_id: str, req: VariantRequest, user_id: str = Depends(get_current_user)) -> ExerciseOut:
+@router.post("/{exercise_id}/variant", response_model=ExerciseOut, summary="Generate an AI variant of an exercise")
+@limiter.limit("15/minute")
+async def generate_variant(
+    request: Request,
+    exercise_id: str,
+    req: VariantRequest,
+    user_id: str = Depends(get_current_user),
+) -> ExerciseOut:
     """Generate a new variant of an existing exercise using AI."""
-    target = _exercise_store.get(exercise_id)
-    if not target or target.get("deleted"):
+    target = store.get(exercise_id)
+    if not target:
         raise HTTPException(404, "Exercise not found")
 
     from app.models.llm import get_llm
@@ -402,26 +387,28 @@ async def generate_variant(exercise_id: str, req: VariantRequest, user_id: str =
         "times_used": 0,
         "user_rating": None,
         "source_generation_id": target.get("source_generation_id", ""),
+        "owner_id": user_id,
     }
-    _exercise_store[variant_id] = variant
+    store.save(variant)
 
     logger.info("variant_generated", original_id=exercise_id, variant_id=variant_id)
     return _dict_to_out(variant)
 
 
-@router.post(
-    "/export",
-    response_model=ExportResponse,
-    summary="Export selected exercises to PDF or Word",
-)
-async def export_exercises(req: ExportRequest, user_id: str = Depends(get_current_user)) -> ExportResponse:
+@router.post("/export", response_model=ExportResponse, summary="Export selected exercises to PDF or Word")
+@limiter.limit("15/minute")
+async def export_exercises(
+    request: Request,
+    req: ExportRequest,
+    user_id: str = Depends(get_current_user),
+) -> ExportResponse:
     """Export selected exercises as a compiled PDF or Word document."""
     import base64
 
     exercises = []
     for eid in req.exercise_ids:
-        d = _exercise_store.get(eid)
-        if d and not d.get("deleted"):
+        d = store.get(eid)
+        if d:
             exercises.append(
                 ParsedExercise(
                     id=d["id"],

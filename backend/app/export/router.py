@@ -7,21 +7,70 @@ All endpoints accept LaTeX content and return downloadable documents.
 from __future__ import annotations
 
 import base64
-import io
 import os
-import subprocess
+import re
 import tempfile
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
 from app.auth import get_current_user
-
-from app.latex.compiler import compile_to_pdf
+from app.latex.compiler import compile_to_pdf_with_log
+from app.rate_limit import limiter
 from app.latex.preamble import wrap_with_preamble
 
 logger = structlog.get_logger()
+
+
+# ---------------------------------------------------------------------------
+# LaTeX helpers
+# ---------------------------------------------------------------------------
+_LATEX_ESCAPES = {
+    "\\": r"\textbackslash{}",
+    "&": r"\&",
+    "%": r"\%",
+    "$": r"\$",
+    "#": r"\#",
+    "_": r"\_",
+    "{": r"\{",
+    "}": r"\}",
+    "~": r"\textasciitilde{}",
+    "^": r"\textasciicircum{}",
+}
+
+
+def _escape_latex(value: str) -> str:
+    """Escape LaTeX special characters so user input can't break compilation."""
+    if not value:
+        return ""
+    out = []
+    for ch in value:
+        out.append(_LATEX_ESCAPES.get(ch, ch))
+    return "".join(out)
+
+
+# Matches \begin{losning}...\end{losning} and Norwegian solution headers
+_SOLUTION_ENV_PATTERN = re.compile(
+    r"\\begin\{losning\}.*?\\end\{losning\}",
+    re.DOTALL,
+)
+_SOLUTION_SECTION_PATTERN = re.compile(
+    r"\\section\*?\{\s*L[øo]sning(?:sforslag)?\s*\}.*?(?=\\section|\\end\{document\}|\Z)",
+    re.DOTALL | re.IGNORECASE,
+)
+_SOLUTION_SUBSECTION_PATTERN = re.compile(
+    r"\\subsection\*?\{\s*L[øo]sning(?:sforslag)?\s*\}.*?(?=\\subsection|\\section|\\end\{document\}|\Z)",
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def _strip_solutions(latex: str) -> str:
+    """Remove solution boxes and solution sections (lærerkopi → elevkopi)."""
+    latex = _SOLUTION_ENV_PATTERN.sub("", latex)
+    latex = _SOLUTION_SECTION_PATTERN.sub("", latex)
+    latex = _SOLUTION_SUBSECTION_PATTERN.sub("", latex)
+    return latex
 
 router = APIRouter(prefix="/export", tags=["export"])
 
@@ -83,25 +132,30 @@ def _build_cover_page(
     subject: str,
     topic: str,
 ) -> str:
-    """Generate a LaTeX cover page."""
+    """Generate a LaTeX cover page. All user-supplied fields are LaTeX-escaped."""
+    safe_subject = _escape_latex(subject) or "Matematikk"
+    safe_topic = _escape_latex(topic)
+    safe_school = _escape_latex(school)
+    safe_teacher = _escape_latex(teacher)
+
     return rf"""
 \thispagestyle{{empty}}
 \begin{{center}}
 \vspace*{{3cm}}
 
-{{\Huge\bfseries\sffamily {subject}}}
+{{\Huge\bfseries\sffamily {safe_subject}}}
 
 \vspace{{1cm}}
 
-{{\LARGE\sffamily {topic}}}
+{{\LARGE\sffamily {safe_topic}}}
 
 \vspace{{2cm}}
 
-{{\large {school}}}
+{{\large {safe_school}}}
 
 \vspace{{0.5cm}}
 
-{{\large {teacher}}}
+{{\large {safe_teacher}}}
 
 \vspace{{1cm}}
 
@@ -116,20 +170,20 @@ def _build_cover_page(
 """
 
 
+_PRINT_COLOR_NAMES = ("Blue", "Green", "Orange", "Purple", "Teal", "Gray")
+
+
 def _make_print_optimized(latex: str) -> str:
-    """Convert to grayscale print-friendly version."""
-    replacements = {
-        r"colback=lightBlue": r"colback=white",
-        r"colback=lightGreen": r"colback=white",
-        r"colback=lightOrange": r"colback=white",
-        r"colback=lightPurple": r"colback=white",
-        r"colframe=mainBlue": r"colframe=black!60",
-        r"colframe=mainGreen": r"colframe=black!60",
-        r"colframe=mainOrange": r"colframe=black!60",
-        r"colframe=mainPurple": r"colframe=black!60",
-        r"colback=mainBlue": r"colback=black!10",
-        r"colback=mainGreen": r"colback=black!10",
-    }
+    """Convert to grayscale print-friendly version (no colored backgrounds/frames)."""
+    replacements: dict[str, str] = {}
+    for name in _PRINT_COLOR_NAMES:
+        replacements[f"colback=light{name}"] = "colback=white"
+        replacements[f"colback=main{name}"] = "colback=black!10"
+        replacements[f"colframe=main{name}"] = "colframe=black!60"
+        replacements[f"colframe=light{name}"] = "colframe=black!40"
+        # \color{...} usages in titleformat, headers etc.
+        replacements[f"\\color{{main{name}}}"] = "\\color{black}"
+        replacements[f"\\color{{light{name}}}"] = "\\color{black!70}"
     for old, new in replacements.items():
         latex = latex.replace(old, new)
     return latex
@@ -138,12 +192,13 @@ def _make_print_optimized(latex: str) -> str:
 # ---------------------------------------------------------------------------
 # PDF Export
 # ---------------------------------------------------------------------------
-@router.post(
-    "/pdf",
-    response_model=ExportFileResponse,
-    summary="Export to PDF with optional cover page and print optimization",
-)
-async def export_pdf(req: PdfExportRequest, user_id: str = Depends(get_current_user)) -> ExportFileResponse:
+@router.post("/pdf", response_model=ExportFileResponse, summary="Export to PDF with optional cover page and print optimization")
+@limiter.limit("15/minute")
+async def export_pdf(
+    request: Request,
+    req: PdfExportRequest,
+    user_id: str = Depends(get_current_user),
+) -> ExportFileResponse:
     """
     Export LaTeX content to PDF.
 
@@ -154,11 +209,17 @@ async def export_pdf(req: PdfExportRequest, user_id: str = Depends(get_current_u
     """
     content = req.latex_content
 
+    # Honour the "elevkopi" toggle by stripping solutions BEFORE wrapping.
+    # Only do this if the supplied content includes solution blocks/sections;
+    # otherwise we'd modify the document for no reason.
+    if not req.include_solutions:
+        content = _strip_solutions(content)
+
     if req.print_optimized:
         content = _make_print_optimized(content)
 
     # Build full document
-    body_parts = []
+    body_parts: list[str] = []
     if req.include_cover:
         body_parts.append(_build_cover_page(
             school=req.cover_school,
@@ -177,7 +238,7 @@ async def export_pdf(req: PdfExportRequest, user_id: str = Depends(get_current_u
 
     with tempfile.TemporaryDirectory() as tmpdir:
         out_path = os.path.join(tmpdir, "export.pdf")
-        pdf_path = compile_to_pdf(full_doc, out_path)
+        pdf_path, log_excerpt = compile_to_pdf_with_log(full_doc, out_path)
 
         if pdf_path and os.path.exists(pdf_path):
             with open(pdf_path, "rb") as f:
@@ -188,22 +249,26 @@ async def export_pdf(req: PdfExportRequest, user_id: str = Depends(get_current_u
                 filename="matematikk.pdf",
                 mime_type="application/pdf",
             )
-        else:
-            return ExportFileResponse(
-                success=False,
-                errors=["PDF compilation failed"],
-            )
+        # Surface enough log context so the user sees WHY the compile failed.
+        log_tail = (log_excerpt or "").strip().splitlines()[-25:]
+        errors = ["PDF-kompilering feilet."]
+        if log_tail:
+            errors.append("Siste linjer fra pdflatex-loggen:")
+            errors.extend(log_tail)
+        logger.warning("export_pdf_failed", log_tail="\n".join(log_tail))
+        return ExportFileResponse(success=False, errors=errors)
 
 
 # ---------------------------------------------------------------------------
 # DOCX Export
 # ---------------------------------------------------------------------------
-@router.post(
-    "/docx",
-    response_model=ExportFileResponse,
-    summary="Export to Word (DOCX)",
-)
-async def export_docx(req: DocxExportRequest, user_id: str = Depends(get_current_user)) -> ExportFileResponse:
+@router.post("/docx", response_model=ExportFileResponse, summary="Export to Word (DOCX)")
+@limiter.limit("15/minute")
+async def export_docx(
+    request: Request,
+    req: DocxExportRequest,
+    user_id: str = Depends(get_current_user),
+) -> ExportFileResponse:
     """
     Export LaTeX content to Word document.
 
@@ -236,12 +301,13 @@ async def export_docx(req: DocxExportRequest, user_id: str = Depends(get_current
 # ---------------------------------------------------------------------------
 # PPTX Export
 # ---------------------------------------------------------------------------
-@router.post(
-    "/pptx",
-    response_model=ExportFileResponse,
-    summary="Export to PowerPoint (PPTX)",
-)
-async def export_pptx(req: PptxExportRequest, user_id: str = Depends(get_current_user)) -> ExportFileResponse:
+@router.post("/pptx", response_model=ExportFileResponse, summary="Export to PowerPoint (PPTX)")
+@limiter.limit("15/minute")
+async def export_pptx(
+    request: Request,
+    req: PptxExportRequest,
+    user_id: str = Depends(get_current_user),
+) -> ExportFileResponse:
     """
     Export exercises as a PowerPoint presentation.
 

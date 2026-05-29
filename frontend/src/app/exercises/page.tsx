@@ -25,6 +25,7 @@ import {
   generateVariant,
   generateHints,
   downloadBase64,
+  publishToSchool,
   type Exercise,
 } from "@/lib/api";
 
@@ -82,6 +83,7 @@ export default function ExerciseBankPage() {
   // Hint state
   const [hints, setHints] = useState<any>(null);
   const [actionLoading, setActionLoading] = useState("");
+  const [fetchError, setFetchError] = useState("");
 
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -100,6 +102,7 @@ export default function ExerciseBankPage() {
 
   const fetchExercises = useCallback(async () => {
     setLoading(true);
+    setFetchError("");
     try {
       if (searchQuery.trim()) {
         const res = await searchExercises(searchQuery);
@@ -115,8 +118,9 @@ export default function ExerciseBankPage() {
         setExercises(res.exercises);
         setTotal(res.total);
       }
-    } catch {
+    } catch (e: unknown) {
       setExercises([]);
+      setFetchError(e instanceof Error ? e.message : "Kunne ikke laste oppgaver");
     } finally {
       setLoading(false);
     }
@@ -161,6 +165,15 @@ export default function ExerciseBankPage() {
     }
   };
 
+  const handlePublishToSchool = async (id: string) => {
+    setActionLoading("publish");
+    try {
+      await publishToSchool(id);
+    } finally {
+      setActionLoading("");
+    }
+  };
+
   const handleGenerateHints = async (ex: Exercise) => {
     setActionLoading("hints");
     try {
@@ -181,7 +194,19 @@ export default function ExerciseBankPage() {
   if (filterDifficulty) filterChips.push(`diff:${filterDifficulty}`);
   if (filterType) filterChips.push(`type:${filterType}`);
 
-  /* ---- Empty state ---- */
+  /* ---- Empty / error state ---- */
+  if (fetchError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <h2 className="font-display text-2xl mb-2">Kunne ikke laste oppgaver</h2>
+        <p className="text-text-secondary text-sm mb-6 max-w-sm">{fetchError}</p>
+        <button type="button" onClick={() => fetchExercises()} className="btn-primary">
+          Prøv igjen
+        </button>
+      </div>
+    );
+  }
+
   if (!loading && exercises.length === 0 && !searchQuery && !filterDifficulty && !filterType) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
@@ -343,6 +368,7 @@ export default function ExerciseBankPage() {
                   onSelect={() => toggleSelect(ex.id)}
                   onExpand={() => setExpandedId(expandedId === ex.id ? null : ex.id)}
                   onVariant={() => handleGenerateVariant(ex.id)}
+                  onPublish={() => handlePublishToSchool(ex.id)}
                   onHints={() => handleGenerateHints(ex)}
                   onAddToExam={() => {
                     if (!examExercises.find((e) => e.id === ex.id)) {
@@ -456,6 +482,7 @@ function ExerciseCard({
   onSelect,
   onExpand,
   onVariant,
+  onPublish,
   onHints,
   onAddToExam,
   hints,
@@ -468,6 +495,7 @@ function ExerciseCard({
   onSelect: () => void;
   onExpand: () => void;
   onVariant: () => void;
+  onPublish: () => void;
   onHints: () => void;
   onAddToExam: () => void;
   hints: any;
@@ -531,6 +559,7 @@ function ExerciseCard({
       <div className="flex gap-1.5">
         <SmallBtn label="Lignende" onClick={onExpand} />
         <SmallBtn label="Variant" onClick={onVariant} loading={actionLoading === "variant"} />
+        <SmallBtn label="Skole" onClick={onPublish} loading={actionLoading === "publish"} />
         <SmallBtn label="Hint" onClick={onHints} loading={actionLoading === "hints"} />
         {buildMode && (
           <SmallBtn label="+ Eksamen" onClick={onAddToExam} accent />

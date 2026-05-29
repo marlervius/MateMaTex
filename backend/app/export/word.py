@@ -16,7 +16,14 @@ import structlog
 logger = structlog.get_logger()
 
 
-def _strip_latex_commands(text: str) -> str:
+_DOCX_SOLUTION_ENV = re.compile(r'\\begin\{losning\}.*?\\end\{losning\}', re.DOTALL)
+_DOCX_SOLUTION_SECTION = re.compile(
+    r'\\section\*?\{\s*L[øo]sning(?:sforslag)?\s*\}.*?(?=\\section|\\end\{document\}|\Z)',
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def _strip_latex_commands(text: str, include_solutions: bool = True) -> str:
     """Convert LaTeX to readable plain text for Word export."""
     # Remove comments
     text = re.sub(r'%.*$', '', text, flags=re.MULTILINE)
@@ -28,6 +35,11 @@ def _strip_latex_commands(text: str) -> str:
     doc_end = text.find(r'\end{document}')
     if doc_end >= 0:
         text = text[:doc_end]
+
+    # Optionally strip solutions for "elevkopi" mode.
+    if not include_solutions:
+        text = _DOCX_SOLUTION_ENV.sub('', text)
+        text = _DOCX_SOLUTION_SECTION.sub('', text)
 
     # Remove environments (keep content)
     text = re.sub(r'\\begin\{[^}]*\}(?:\{[^}]*\})?', '', text)
@@ -120,7 +132,7 @@ def latex_to_docx(
     doc.add_paragraph()  # Spacer
 
     # Convert content
-    plain_text = _strip_latex_commands(latex_content)
+    plain_text = _strip_latex_commands(latex_content, include_solutions=include_solutions)
 
     # Split into sections
     sections = re.split(r'\n\n+', plain_text)

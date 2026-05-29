@@ -17,10 +17,11 @@ import re
 from dataclasses import dataclass, field
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.auth import get_current_user
+from app.rate_limit import limiter
 
 from app.models.llm import get_llm
 
@@ -185,17 +186,13 @@ async def differentiate_content(
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.post(
-    "/generate",
-    response_model=DifferentiateResponse,
-    summary="Generate three difficulty levels from standard content",
-    responses={
-        200: {
-            "description": "Three-level differentiated content",
-        }
-    },
-)
-async def differentiate(req: DifferentiateRequest, user_id: str = Depends(get_current_user)) -> DifferentiateResponse:
+@router.post("/generate", response_model=DifferentiateResponse, summary="Generate three difficulty levels from standard content")
+@limiter.limit("10/minute")
+async def differentiate(
+    request: Request,
+    req: DifferentiateRequest,
+    user_id: str = Depends(get_current_user),
+) -> DifferentiateResponse:
     """
     Generate basic, standard, and advanced versions of the given LaTeX content.
 

@@ -145,6 +145,17 @@ class LLMInterface:
 
         self._provider_name = primary_provider
         self._model_name = primary_model
+        self.last_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
+
+    def _extract_usage(self, response: Any) -> None:
+        usage = getattr(response, "usage_metadata", None) or getattr(response, "response_metadata", {}).get("token_usage")
+        if isinstance(usage, dict):
+            self.last_usage = {
+                "input_tokens": int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0),
+                "output_tokens": int(usage.get("output_tokens") or usage.get("completion_tokens") or 0),
+            }
+        else:
+            self.last_usage = {"input_tokens": 0, "output_tokens": 0}
 
     def _build(self, provider: str, model: str) -> BaseChatModel:
         factory = _PROVIDER_FACTORIES.get(provider)
@@ -175,6 +186,7 @@ class LLMInterface:
 
         try:
             response = self._primary.invoke(messages)
+            self._extract_usage(response)
             return _message_content_to_str(response.content)
         except Exception as primary_err:
             logger.warning(
@@ -188,6 +200,7 @@ class LLMInterface:
                 try:
                     logger.info("attempting_fallback_llm")
                     response = self._fallback.invoke(messages)
+                    self._extract_usage(response)
                     return _message_content_to_str(response.content)
                 except Exception as fallback_err:
                     logger.error(

@@ -74,24 +74,25 @@ def run_pedagogue(state: PipelineState) -> PipelineState:
             state.pedagogical_plan = cached_plan
             step.output_summary = "[CACHED] " + cached_plan[:200] + "..."
             logger.info("pedagogue_cache_hit", job_id=state.job_id)
-            return state
+        else:
+            # Call LLM
+            config = get_config()
+            llm = LLMInterface(temperature=config.llm.temperature)
+            response = llm.invoke(full_system, user_prompt)
 
-        # Call LLM
-        config = get_config()
-        llm = LLMInterface(temperature=config.llm.temperature)
-        response = llm.invoke(full_system, user_prompt)
+            state.pedagogical_plan = response.strip()
+            usage = getattr(llm, "last_usage", None)
+            if usage:
+                step.input_tokens = usage.get("input_tokens", 0)
+                step.output_tokens = usage.get("output_tokens", 0)
 
-        state.pedagogical_plan = response.strip()
-
-        # Cache the plan
-        cache.set_pedagogue_plan(state.request, state.pedagogical_plan)
-
-        step.output_summary = state.pedagogical_plan[:200] + "..."
-        logger.info(
-            "pedagogue_complete",
-            job_id=state.job_id,
-            plan_length=len(state.pedagogical_plan),
-        )
+            cache.set_pedagogue_plan(state.request, state.pedagogical_plan)
+            step.output_summary = state.pedagogical_plan[:200] + "..."
+            logger.info(
+                "pedagogue_complete",
+                job_id=state.job_id,
+                plan_length=len(state.pedagogical_plan),
+            )
 
     except Exception as e:
         step.error = str(e)

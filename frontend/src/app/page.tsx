@@ -8,8 +8,10 @@ import { ResultView } from "@/components/result-view";
 import { LatexEditor } from "@/components/latex-editor";
 
 export default function HomePage() {
-  const { isGenerating, result, showLatexEditor, toggleLatexEditor } =
-    useAppStore();
+  const isGenerating = useAppStore((s) => s.isGenerating);
+  const result = useAppStore((s) => s.result);
+  const showLatexEditor = useAppStore((s) => s.showLatexEditor);
+  const toggleLatexEditor = useAppStore((s) => s.toggleLatexEditor);
 
   // Full-screen LaTeX editor (opened from result view)
   if (showLatexEditor && result?.fullDocument) {

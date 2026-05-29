@@ -118,9 +118,13 @@ export default function SharedResourcePage({
 
       <div className="card">
         <h2 className="text-sm font-medium mb-3">Innhold</h2>
-        {resource.content?.latex_body ? (
+        {resource.content?.full_document ? (
           <pre className="bg-bg rounded-lg p-4 text-xs font-mono text-text-secondary overflow-x-auto max-h-[60vh] overflow-y-auto">
-            {resource.content.latex_body}
+            {String(resource.content.full_document)}
+          </pre>
+        ) : resource.content?.latex_body ? (
+          <pre className="bg-bg rounded-lg p-4 text-xs font-mono text-text-secondary overflow-x-auto max-h-[60vh] overflow-y-auto">
+            {String(resource.content.latex_body)}
           </pre>
         ) : (
           <div className="text-center py-8 text-text-muted text-sm">

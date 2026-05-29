@@ -1,3 +1,4 @@
+import type { GenerationResultApi } from "@/lib/api";
 import type { GenerationRequest, GenerationResult, MathClaimDetail } from "@/lib/store";
 
 function mapClaims(raw: unknown[]): MathClaimDetail[] {
@@ -18,14 +19,15 @@ function mapClaims(raw: unknown[]): MathClaimDetail[] {
  * Mapper backend GET /generate/{id}/result til frontend-modell.
  */
 export function mapApiResultToGenerationResult(
-  api: Record<string, unknown>,
+  api: GenerationResultApi | Record<string, unknown>,
   generationMeta?: GenerationRequest
 ): GenerationResult {
-  const mv = (api.math_verification ?? {}) as Record<string, unknown>;
+  const raw = api as Record<string, unknown>;
+  const mv = (raw.math_verification ?? {}) as Record<string, unknown>;
   const incorrect = mapClaims((mv.errors as unknown[]) ?? []);
   const unparseable = mapClaims((mv.unparseable_claims as unknown[]) ?? []);
 
-  const stepsRaw = (api.steps as unknown[]) ?? [];
+  const stepsRaw = (raw.steps as unknown[]) ?? [];
   const steps = stepsRaw.map((s: any) => ({
     agent: String(s.agent ?? ""),
     startedAt: s.started_at ?? s.startedAt ?? "",
@@ -36,13 +38,13 @@ export function mapApiResultToGenerationResult(
     retries: Number(s.retries ?? 0),
   }));
 
-  const latex = (api.latex_compilation ?? {}) as Record<string, unknown>;
+  const latex = (raw.latex_compilation ?? {}) as Record<string, unknown>;
 
   return {
-    jobId: String(api.job_id ?? ""),
-    status: api.status as GenerationResult["status"],
-    fullDocument: String(api.full_document ?? ""),
-    pdfUrl: String(api.pdf_path ?? ""),
+    jobId: String(raw.job_id ?? ""),
+    status: raw.status as GenerationResult["status"],
+    fullDocument: String(raw.full_document ?? ""),
+    pdfUrl: String(raw.pdf_path ?? ""),
     steps,
     mathVerification: {
       claimsChecked: Number(mv.claims_checked ?? 0),
@@ -55,13 +57,13 @@ export function mapApiResultToGenerationResult(
       unparseableClaims: unparseable,
     },
     latexCompiled: Boolean(latex.success),
-    totalDuration: Number(api.total_duration_seconds ?? 0),
-    error: String(api.error ?? ""),
+    totalDuration: Number(raw.total_duration_seconds ?? 0),
+    error: String(raw.error ?? ""),
     generationMeta,
     errorCategory: categorizeError(
-      String(api.error ?? ""),
+      String(raw.error ?? ""),
       Boolean(latex.success),
-      api.status === "failed"
+      raw.status === "failed"
     ),
   };
 }

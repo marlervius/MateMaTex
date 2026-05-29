@@ -46,7 +46,7 @@ class AgentRole(str, Enum):
 class GenerationRequest(BaseModel):
     """User's input to the pipeline."""
     grade: str = Field(description="Grade level, e.g. '10. trinn', 'VG2 R1'")
-    topic: str = Field(description="Math topic")
+    topic: str = Field(description="Math topic", max_length=500)
     material_type: str = Field(default="arbeidsark", description="arbeidsark|kapittel|prøve")
     language_level: str = Field(default="standard", description="standard|b2|b1")
     num_exercises: int = Field(default=10, ge=1, le=50)
@@ -57,7 +57,7 @@ class GenerationRequest(BaseModel):
     include_solutions: bool = True
     include_graphs: bool = True
     competency_goals: list[str] = Field(default_factory=list)
-    extra_instructions: str = ""
+    extra_instructions: str = Field(default="", max_length=10_000)
 
 
 class MathClaim(BaseModel):
@@ -90,6 +90,14 @@ class LatexCompilationResult(BaseModel):
     """Result of actual pdflatex compilation check."""
     success: bool = False
     pdf_path: str = ""
+    pdf_bytes: bytes | None = Field(
+        default=None,
+        exclude=True,
+        description=(
+            "Raw PDF bytes captured during compilation (not serialised). "
+            "Used so we don't depend on temp-file paths that may have been cleaned up."
+        ),
+    )
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     log_excerpt: str = ""

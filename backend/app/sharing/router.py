@@ -11,27 +11,22 @@ import secrets
 import uuid
 from datetime import datetime, timedelta
 
+import bcrypt
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.auth import get_current_user
+from app.job_store import get_resource_snapshot, store_shared_resource
+from app.rate_limit import limiter
 
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/sharing", tags=["sharing"])
 
-
-# ---------------------------------------------------------------------------
-# In-memory store (replace with PostgreSQL in production)
-# ---------------------------------------------------------------------------
 _shared_links: dict[str, dict] = {}
-_shared_resources: dict[str, dict] = {}  # resource_id → resource data
 
 
-# ---------------------------------------------------------------------------
-# Models
-# ---------------------------------------------------------------------------
 class ShareRequest(BaseModel):
     resource_type: str = Field(
         ...,
@@ -39,29 +34,10 @@ class ShareRequest(BaseModel):
     )
     resource_id: str = Field(..., description="ID of the resource to share")
     password: str | None = Field(None, description="Optional password protection")
-    expires_hours: int | None = Field(
-        None,
-        ge=1,
-        le=8760,
-        description="Hours until expiry (max 1 year)",
-    )
-    max_views: int | None = Field(
-        None,
-        ge=1,
-        description="Maximum number of views",
-    )
+    expires_hours: int | None = Field(None, ge=1, le=8760)
+    max_views: int | None = Field(None, ge=1)
     allow_download: bool = True
     allow_clone: bool = True
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "resource_type": "generation",
-                "resource_id": "abc123",
-                "password": "hemmelighet",
-                "expires_hours": 168,
-            }
-        }
 
 
 class ShareResponse(BaseModel):
@@ -92,42 +68,46 @@ class VerifyPasswordRequest(BaseModel):
     password: str
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 def _hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def _check_password(password: str, stored_hash: str) -> bool:
+    if stored_hash.startswith("$2"):
+        try:
+            return bcrypt.checkpw(password.encode(), stored_hash.encode())
+        except ValueError:
+            return False
+    legacy = hashlib.sha256(password.encode()).hexdigest()
+    return secrets.compare_digest(legacy, stored_hash)
 
 
 def _check_link_valid(link: dict) -> tuple[bool, str]:
-    """Check if a shared link is still valid. Returns (valid, error_message)."""
-    # Check expiry
     if link.get("expires_at"):
         expires = datetime.fromisoformat(link["expires_at"])
         if datetime.now() > expires:
             return False, "Link has expired"
-
-    # Check view limit
-    if link.get("max_views") is not None:
-        if link["view_count"] >= link["max_views"]:
-            return False, "Maximum views reached"
-
+    if link.get("max_views") is not None and link["view_count"] >= link["max_views"]:
+        return False, "Maximum views reached"
     return True, ""
 
 
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
+def _resolve_shared_content(link: dict) -> dict:
+    return get_resource_snapshot(link["resource_type"], link["resource_id"]) or {}
 
-@router.post(
-    "",
-    response_model=ShareResponse,
-    summary="Create a shareable link for a resource",
-)
-async def create_share(req: ShareRequest, user_id: str = Depends(get_current_user)) -> ShareResponse:
-    """
-    Create a shareable link with optional password, expiry, and view limits.
-    """
+
+@router.post("", response_model=ShareResponse, summary="Create a shareable link")
+@limiter.limit("30/minute")
+async def create_share(
+    request: Request,
+    req: ShareRequest,
+    user_id: str = Depends(get_current_user),
+) -> ShareResponse:
+    snapshot = get_resource_snapshot(req.resource_type, req.resource_id)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Resource not found")
+
+    store_shared_resource(req.resource_id, snapshot)
     token = secrets.token_urlsafe(24)
 
     link_data = {
@@ -147,17 +127,9 @@ async def create_share(req: ShareRequest, user_id: str = Depends(get_current_use
         "allow_clone": req.allow_clone,
         "created_at": datetime.now().isoformat(),
     }
-
     _shared_links[token] = link_data
 
-    logger.info(
-        "share_created",
-        token=token[:8] + "...",
-        resource_type=req.resource_type,
-        has_password=req.password is not None,
-        expires_hours=req.expires_hours,
-    )
-
+    logger.info("share_created", token=token[:8], resource_type=req.resource_type)
     return ShareResponse(
         success=True,
         token=token,
@@ -166,70 +138,65 @@ async def create_share(req: ShareRequest, user_id: str = Depends(get_current_use
     )
 
 
-@router.get(
-    "/{token}",
-    response_model=SharedResourceResponse,
-    summary="Access a shared resource by token",
-)
-async def get_shared(token: str, password: str | None = None) -> SharedResourceResponse:
-    """
-    Access a shared resource. Checks password and expiry.
-    """
+@router.get("/{token}", response_model=SharedResourceResponse)
+@limiter.limit("60/minute")
+async def get_shared(request: Request, token: str) -> SharedResourceResponse:
     link = _shared_links.get(token)
     if not link:
         raise HTTPException(404, "Shared link not found")
-
-    # Validate
     valid, error = _check_link_valid(link)
     if not valid:
         raise HTTPException(410, error)
-
-    # Check password
     if link["password_hash"]:
-        if not password:
-            raise HTTPException(401, "Password required")
-        if _hash_password(password) != link["password_hash"]:
-            raise HTTPException(403, "Incorrect password")
-
-    # Increment view count
+        raise HTTPException(401, "Password required — use POST /sharing/{token}/access")
     link["view_count"] += 1
-
-    # Get resource (in production, fetch from database)
-    resource = _shared_resources.get(link["resource_id"], {})
-
     return SharedResourceResponse(
         success=True,
         resource_type=link["resource_type"],
         resource_id=link["resource_id"],
-        content=resource,
+        content=_resolve_shared_content(link),
         allow_download=link["allow_download"],
         allow_clone=link["allow_clone"],
     )
 
 
-@router.post(
-    "/{token}/clone",
-    response_model=CloneResponse,
-    summary="Clone a shared resource to own account",
-)
-async def clone_shared(token: str, user_id: str = Depends(get_current_user)) -> CloneResponse:
-    """Clone a shared resource to the authenticated user's account."""
+@router.post("/{token}/access", response_model=SharedResourceResponse)
+@limiter.limit("30/minute")
+async def access_shared(
+    request: Request,
+    token: str,
+    req: VerifyPasswordRequest,
+) -> SharedResourceResponse:
     link = _shared_links.get(token)
     if not link:
         raise HTTPException(404, "Shared link not found")
-
-    if not link.get("allow_clone", True):
-        raise HTTPException(403, "Cloning not allowed for this shared resource")
-
     valid, error = _check_link_valid(link)
     if not valid:
         raise HTTPException(410, error)
+    if link["password_hash"] and not _check_password(req.password, link["password_hash"]):
+        raise HTTPException(403, "Incorrect password")
+    link["view_count"] += 1
+    return SharedResourceResponse(
+        success=True,
+        resource_type=link["resource_type"],
+        resource_id=link["resource_id"],
+        content=_resolve_shared_content(link),
+        allow_download=link["allow_download"],
+        allow_clone=link["allow_clone"],
+    )
 
-    # In production: deep-copy the resource and assign to current user
+
+@router.post("/{token}/clone", response_model=CloneResponse)
+async def clone_shared(token: str, user_id: str = Depends(get_current_user)) -> CloneResponse:
+    link = _shared_links.get(token)
+    if not link:
+        raise HTTPException(404, "Shared link not found")
+    if not link.get("allow_clone", True):
+        raise HTTPException(403, "Cloning not allowed")
+    valid, error = _check_link_valid(link)
+    if not valid:
+        raise HTTPException(410, error)
     new_id = uuid.uuid4().hex
-    original = _shared_resources.get(link["resource_id"], {})
-    _shared_resources[new_id] = {**original, "id": new_id, "cloned_from": link["resource_id"]}
-
-    logger.info("resource_cloned", original=link["resource_id"], new_id=new_id)
-
+    original = get_resource_snapshot(link["resource_type"], link["resource_id"]) or {}
+    store_shared_resource(new_id, {**original, "id": new_id, "cloned_from": link["resource_id"]})
     return CloneResponse(success=True, new_resource_id=new_id)

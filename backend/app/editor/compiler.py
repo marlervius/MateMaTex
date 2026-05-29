@@ -19,10 +19,12 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
 from app.auth import get_current_user
+from app.config import get_config
+from app.rate_limit import limiter
 from app.latex.preamble import wrap_with_preamble
 
 logger = structlog.get_logger()
@@ -180,12 +182,13 @@ def _compile_latex(full_content: str, filename: str) -> tuple[str, list[dict], l
 # ---------------------------------------------------------------------------
 # Endpoint
 # ---------------------------------------------------------------------------
-@router.post(
-    "/compile",
-    response_model=EditorCompileResponse,
-    summary="Compile LaTeX body to PDF (with caching and process pool)",
-)
-async def compile_editor_latex(req: EditorCompileRequest, user_id: str = Depends(get_current_user)) -> EditorCompileResponse:
+@router.post("/compile", response_model=EditorCompileResponse, summary="Compile LaTeX body to PDF (with caching and process pool)")
+@limiter.limit("30/minute")
+async def compile_editor_latex(
+    request: Request,
+    req: EditorCompileRequest,
+    user_id: str = Depends(get_current_user),
+) -> EditorCompileResponse:
     """
     Compile LaTeX content to PDF.
 

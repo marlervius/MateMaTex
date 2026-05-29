@@ -16,31 +16,74 @@ Exposes:
 
 import asyncio
 import json
+import os
 import re
+import shutil
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 from typing import AsyncGenerator, Optional
 
 import structlog
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, StreamingResponse
-from pydantic import BaseModel
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from fastapi.responses import FileResponse, Response, StreamingResponse
+from pydantic import BaseModel, Field
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
 from app.auth import get_current_user, require_stream_access
 from app.config import get_config, get_settings
-from app.job_store import persist_terminal_job, resolve_job
+from app.job_store import cleanup_old_snapshots, get_job_memory, persist_terminal_job, resolve_job
+from app.logging_config import configure_logging
 from app.models.state import GenerationRequest, PipelineState, PipelineStatus
+from app.rate_limit import limiter
 
+configure_logging()
 logger = structlog.get_logger()
-
 settings = get_settings()
 
-limiter = Limiter(key_func=get_remote_address)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if settings.database_url:
+        try:
+            from app.db import get_pool
+            await get_pool()
+            logger.info("startup_complete", environment=settings.environment)
+        except Exception as e:
+            err_msg = str(e)
+            logger.error("startup_database_failed", error=err_msg)
+            raw = settings.database_url or ""
+            if "pooler.supabase.com" in raw and ":6543" in raw:
+                logger.error(
+                    "database_supabase_transaction_pooler",
+                    msg=(
+                        "DATABASE_URL bruker Supabase transaction pooler (:6543). "
+                        "Bytt til Direct URI eller fjern DATABASE_URL."
+                    ),
+                )
+            logger.warning("startup_continuing_without_db", msg="DB features unavailable")
+    else:
+        logger.warning("startup_no_database", msg="DATABASE_URL not set — running without DB")
+
+    if settings.environment == "production" and not settings.mate_api_key:
+        logger.error(
+            "production_missing_mate_api_key",
+            msg="Set MATE_API_KEY in production",
+        )
+
+    cleanup_old_snapshots(max_age_days=7)
+    from app.stores import collaboration_store, exercise_store
+    exercise_store._ensure_loaded()
+    collaboration_store._ensure_loaded()
+    yield
+
+    from app.db import close_pool
+    await close_pool()
+    logger.info("shutdown_complete")
+
 
 app = FastAPI(
     title="MateMaTeX 2.0 API",
@@ -48,6 +91,7 @@ app = FastAPI(
     description="AI-powered math education content generator for Norwegian schools",
     docs_url="/docs" if settings.environment == "development" else None,
     redoc_url="/redoc" if settings.environment == "development" else None,
+    lifespan=lifespan,
     openapi_tags=[
         {"name": "generation", "description": "AI content generation pipeline"},
         {"name": "exercises", "description": "Exercise bank — CRUD, search, export"},
@@ -89,56 +133,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------------------------------------------------------------------
-# Startup / Shutdown (database pool)
-# ---------------------------------------------------------------------------
-@app.on_event("startup")
-async def startup():
-    if settings.database_url:
-        try:
-            from app.db import get_pool
-            await get_pool()
-            logger.info("startup_complete", environment=settings.environment)
-        except Exception as e:
-            err_msg = str(e)
-            logger.error("startup_database_failed", error=err_msg)
-            raw = settings.database_url or ""
-            if "pooler.supabase.com" in raw and ":6543" in raw:
-                logger.error(
-                    "database_supabase_transaction_pooler",
-                    msg=(
-                        "DATABASE_URL bruker Supabase transaction pooler (:6543). "
-                        "Det feiler ofte fra Render. Valg: (1) Slett DATABASE_URL i "
-                        "Render hvis du ikke trenger DB, eller (2) Bytt til Direct URI "
-                        "fra Supabase: postgresql://postgres:PASS@db.<ref>.supabase.co:5432/postgres"
-                    ),
-                )
-            elif "tenant" in err_msg.lower() or "user not found" in err_msg.lower() or "enotfound" in err_msg.lower():
-                logger.warning(
-                    "database_pooler_hint",
-                    msg=(
-                        "Database-tilkobling feilet — sjekk DATABASE_URL. "
-                        "For Supabase: bruk Direct connection (db.*.supabase.co:5432, bruker postgres), "
-                        "eller fjern variabelen helt."
-                    ),
-                )
-            logger.warning("startup_continuing_without_db", msg="App will start but DB features are unavailable")
-    else:
-        logger.warning("startup_no_database", msg="DATABASE_URL not set — running without DB")
-
-    if settings.environment == "production" and not settings.mate_api_key:
-        logger.error(
-            "production_missing_mate_api_key",
-            msg="Set MATE_API_KEY in production — protected routes return 503 until configured",
-        )
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    from app.db import close_pool
-    await close_pool()
-    logger.info("shutdown_complete")
-
 
 # ---------------------------------------------------------------------------
 # Mount sub-routers (Fase 2 modules)
@@ -163,8 +157,7 @@ app.include_router(qr_router)
 app.include_router(sharing_router)
 app.include_router(collab_router)
 
-# In-memory job store (replace with Redis/DB in production)
-_jobs: dict[str, PipelineState] = {}
+_jobs = get_job_memory()
 _executor = ThreadPoolExecutor(max_workers=4)
 _ABORT_MESSAGE = "Avbrutt av bruker"
 _MAX_STREAM_SECONDS = 3600  # 1 hour — prevent infinite SSE if job stalls
@@ -180,8 +173,8 @@ class GenerateResponse(BaseModel):
 
 
 class CompileRequest(BaseModel):
-    latex_content: str
-    filename: str = "document"
+    latex_content: str = Field(..., max_length=500_000)
+    filename: str = Field(default="document", max_length=64)
 
 
 class CompileResponse(BaseModel):
@@ -335,11 +328,14 @@ async def get_result(job_id: str, user_id: str = Depends(get_current_user)):
     if state.status in (PipelineStatus.RUNNING, PipelineStatus.PENDING):
         raise HTTPException(status_code=202, detail="Job still running")
 
+    pdf_available = bool(state.pdf_path) and os.path.isfile(state.pdf_path)
+
     return {
         "job_id": state.job_id,
         "status": state.status.value,
         "full_document": state.full_document,
         "pdf_path": state.pdf_path,
+        "pdf_available": pdf_available,
         "math_verification": state.math_verification.model_dump(),
         "latex_compilation": state.latex_compilation.model_dump(),
         "steps": [s.model_dump() for s in state.steps],
@@ -349,18 +345,71 @@ async def get_result(job_id: str, user_id: str = Depends(get_current_user)):
     }
 
 
+@app.get("/generate/{job_id}/pdf")
+async def get_job_pdf(job_id: str, _user_id: str = Depends(get_current_user)):
+    """
+    Return the compiled PDF for a completed job.
+
+    Uses the cached PDF written by the LaTeX validator. Avoids re-compilation
+    for the common case of "show me the PDF I just generated".
+    """
+    state = resolve_job(job_id, _jobs)
+    if state is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if state.status == PipelineStatus.RUNNING:
+        raise HTTPException(status_code=202, detail="Job still running")
+    if not state.pdf_path or not os.path.isfile(state.pdf_path):
+        # Fall back to compiling the stored full_document on demand.
+        if state.full_document:
+            from app.latex.compiler import compile_to_pdf
+            config = get_config()
+            output_dir = Path(settings.output_dir) / "pipeline_pdfs"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            target = output_dir / f"{state.job_id}.pdf"
+            pdf_path = compile_to_pdf(
+                latex_content=state.full_document,
+                output_path=str(target),
+                pdflatex_path=config.pdflatex_path,
+            )
+            if pdf_path and os.path.isfile(pdf_path):
+                state.pdf_path = pdf_path
+                persist_terminal_job(state)
+            else:
+                raise HTTPException(
+                    status_code=410,
+                    detail="PDF could not be regenerated from stored LaTeX",
+                )
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail="No PDF or LaTeX available for this job",
+            )
+
+    return FileResponse(
+        state.pdf_path,
+        media_type="application/pdf",
+        filename=f"matematex_{job_id[:8]}.pdf",
+        headers={"Cache-Control": "private, max-age=0, must-revalidate"},
+    )
+
+
 @app.post("/compile", response_model=CompileResponse)
-async def compile_latex(request: CompileRequest, user_id: str = Depends(get_current_user)) -> CompileResponse:
+@limiter.limit("20/minute")
+async def compile_latex(
+    request: Request,
+    body: CompileRequest,
+    user_id: str = Depends(get_current_user),
+) -> CompileResponse:
     """Compile LaTeX content to PDF."""
     from app.latex.compiler import compile_to_pdf
     from app.latex.preamble import wrap_with_preamble
 
-    content = request.latex_content
+    content = body.latex_content
     if r"\documentclass" not in content:
         content = wrap_with_preamble(content)
 
     config = get_config()
-    safe_name = _safe_filename(request.filename)
+    safe_name = _safe_filename(body.filename)
     pdf_path = compile_to_pdf(
         latex_content=content,
         output_path=f"{config.output_dir}/{safe_name}.pdf",
@@ -407,11 +456,38 @@ async def clear_cache(user_id: str = Depends(get_current_user)):
 
 @app.get("/health")
 async def health():
-    """Health check for Render."""
+    """Liveness check for Render."""
     return {
         "status": "ok",
         "version": "2.0.0",
         "environment": settings.environment,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+@app.get("/health/ready")
+async def health_ready():
+    """Readiness check — verifies dependencies."""
+    checks: dict[str, str] = {"api_key": "ok" if settings.mate_api_key or settings.environment != "production" else "missing"}
+
+    if settings.database_url:
+        try:
+            from app.db import get_pool
+            pool = await get_pool()
+            async with pool.acquire() as conn:
+                await conn.fetchval("SELECT 1")
+            checks["database"] = "ok"
+        except Exception as e:
+            checks["database"] = f"error: {e}"
+    else:
+        checks["database"] = "not_configured"
+
+    checks["pdflatex"] = "ok" if shutil.which(settings.pdflatex_path) else "missing"
+
+    all_ok = all(v == "ok" or v == "not_configured" for v in checks.values())
+    return {
+        "status": "ready" if all_ok else "degraded",
+        "checks": checks,
         "timestamp": datetime.now().isoformat(),
     }
 

@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useAppStore } from "@/lib/store";
-import { abortGeneration } from "@/lib/api";
+import { abortGeneration, closeActiveStream } from "@/lib/api";
 import {
   GraduationCap,
   PenTool,
@@ -92,15 +92,21 @@ const BASE_PIPELINE_ORDER = [
 ];
 
 export function PipelineProgress() {
-  const { steps, currentAgent, currentJobId, setError } = useAppStore();
+  const steps = useAppStore((s) => s.steps);
+  const currentAgent = useAppStore((s) => s.currentAgent);
+  const currentJobId = useAppStore((s) => s.currentJobId);
+  const setError = useAppStore((s) => s.setError);
+  const cancelGeneration = useAppStore((s) => s.cancelGeneration);
   const completedAgents = new Set(steps.map((s) => s.agent));
 
   const handleAbort = async () => {
     if (!currentJobId) return;
+    closeActiveStream();
+    cancelGeneration();
     try {
       await abortGeneration(currentJobId);
       setError("Genereringen ble avbrutt av bruker.", null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Failed to abort:", err);
     }
   };

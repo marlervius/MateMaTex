@@ -42,9 +42,9 @@ class Settings(BaseSettings):
         default="gemini-2.0-flash",
         description="Gemini model ID used everywhere. See https://ai.google.dev/gemini-api/docs/models",
     )
-    fallback_provider: str = Field(default="google")
+    fallback_provider: str = Field(default="anthropic")
     fallback_model: str = Field(
-        default="gemini-2.0-flash",
+        default="claude-3-5-haiku-latest",
         description="Model used when primary fails.",
     )
     temperature: float = Field(default=0.15, ge=0.0, le=2.0)
@@ -60,6 +60,18 @@ class Settings(BaseSettings):
     pdflatex_path: str = Field(default="pdflatex")
     output_dir: str = Field(default="output")
     max_verification_retries: int = Field(default=3)
+    verification_fail_open: bool = Field(
+        default=False,
+        description="If True, math/LaTeX verifier errors allow pipeline to continue",
+    )
+    max_latex_chars: int = Field(
+        default=500_000,
+        description="Maximum LaTeX body size accepted by compile/export endpoints",
+    )
+    database_ssl_verify: bool = Field(
+        default=True,
+        description="Verify TLS certificates for DATABASE_URL (disable only in local dev)",
+    )
 
     # ---- CORS ----
     frontend_url: str = Field(
@@ -111,6 +123,8 @@ class AppConfig:
         self.pdflatex_path = s.pdflatex_path
         self.output_dir = s.output_dir
         self.max_verification_retries = s.max_verification_retries
+        self.verification_fail_open = s.verification_fail_open
+        self.max_latex_chars = s.max_latex_chars
         self.llm = LLMProviderConfig()
 
 
