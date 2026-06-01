@@ -10,6 +10,7 @@ import {
   getResult,
   estimateCost,
   closeActiveStream,
+  type CostEstimateResponse,
 } from "@/lib/api";
 import { mapApiResultToGenerationResult, isSuccessfulStatus } from "@/lib/map-api-result";
 import { appendHistory } from "@/lib/generation-history";
@@ -141,11 +142,9 @@ export function GenerationWizard() {
   const [goalSearch, setGoalSearch] = useState("");
   const activeJobRef = useRef<string | null>(null);
   const streamCloseRef = useRef<(() => void) | null>(null);
-  const [costEstimate, setCostEstimate] = useState<{
-    estimated_total_tokens: number;
-    similar_cached: number;
-    cache_available: boolean;
-  } | null>(null);
+  const [costEstimate, setCostEstimate] = useState<CostEstimateResponse | null>(
+    null
+  );
   const [estimateLoading, setEstimateLoading] = useState(false);
 
   useEffect(() => {

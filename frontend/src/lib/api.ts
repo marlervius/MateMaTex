@@ -299,8 +299,18 @@ export async function fetchJobPdfObjectUrl(jobId: string): Promise<string> {
   return URL.createObjectURL(blob);
 }
 
-export async function estimateCost(request: GenerateRequest): Promise<Record<string, unknown>> {
-  return fetchJson(apiUrl("estimate"), {
+export interface CostEstimateResponse {
+  estimated_input_tokens: number;
+  estimated_output_tokens: number;
+  estimated_total_tokens: number;
+  similar_cached: number;
+  cache_available: boolean;
+}
+
+export async function estimateCost(
+  request: GenerateRequest
+): Promise<CostEstimateResponse> {
+  return fetchJson<CostEstimateResponse>(apiUrl("estimate"), {
     method: "POST",
     body: JSON.stringify(request),
   });
