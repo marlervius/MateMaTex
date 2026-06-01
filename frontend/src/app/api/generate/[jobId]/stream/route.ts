@@ -2,8 +2,8 @@ import type { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-// Vercel Hobby caps at 300s; Pro allows up to 800s. Jobs can exceed 5 min with retries.
-export const maxDuration = 800;
+// Vercel Hobby: max 300s. Longer jobs rely on client polling /result after SSE ends.
+export const maxDuration = 300;
 
 /**
  * Proxies SSE from the FastAPI backend so the browser never needs MATE_API_KEY.
