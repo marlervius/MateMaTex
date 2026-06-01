@@ -146,13 +146,12 @@ async function pollJobUntilTerminal(
   onComplete: (data: StreamCompletePayload) => void,
   signal: { cancelled: boolean }
 ): Promise<boolean> {
-  const headers = await getAuthHeaders();
   for (let i = 0; i < 120; i++) {
     if (signal.cancelled) return false;
     await sleep(3000);
     if (signal.cancelled) return false;
     try {
-      const res = await fetch(`${API_BASE}/generate/${jobId}/result`, { headers });
+      const res = await fetch(apiUrl(`generate/${jobId}/result`));
       if (res.status === 202) continue;
       if (!res.ok) continue;
       const raw = (await res.json()) as Record<string, unknown>;
