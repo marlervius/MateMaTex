@@ -4,6 +4,7 @@ Fallback agent node — Returns a stripped-down, guaranteed-to-compile document 
 
 from __future__ import annotations
 
+import base64
 import re
 from datetime import datetime
 
@@ -61,6 +62,7 @@ For å sikre at du likevel får oppgavene og teksten, har systemet fjernet probl
         state.final_latex_body = body
         state.edited_latex_body = body
         state.full_document = ""
+        state.used_latex_fallback = True
 
         full_doc = wrap_with_preamble(body)
         config = get_config()
@@ -68,6 +70,7 @@ For å sikre at du likevel får oppgavene og teksten, har systemet fjernet probl
         result = checker.check(full_doc)
 
         state.latex_compilation = result
+        state.latex_compilation.used_fallback = True
         if result.success:
             state.full_document = full_doc
             from app.pipeline.agents.latex_validator import _persist_pdf
@@ -75,8 +78,10 @@ For å sikre at du likevel får oppgavene og teksten, har systemet fjernet probl
             if result.pdf_bytes:
                 try:
                     state.pdf_path = _persist_pdf(state.job_id, result.pdf_bytes)
+                    state.pdf_base64 = base64.b64encode(result.pdf_bytes).decode("ascii")
                 except OSError as persist_err:
                     state.pdf_path = ""
+                    state.pdf_base64 = ""
                     logger.warning("latex_fallback_pdf_persist_failed", error=str(persist_err))
             step.output_summary = "Laget forenklet fallback-dokument (verifisert)"
             logger.info("latex_fallback_complete", job_id=state.job_id)

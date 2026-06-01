@@ -14,4 +14,17 @@ describe("generation stream types", () => {
     };
     expect(p.latex_compiled).toBe(true);
   });
+
+  it("accepts completed_with_warnings status", () => {
+    const p: StreamCompletePayload = {
+      status: "completed_with_warnings",
+      total_duration: 2,
+      total_steps: 6,
+      math_checks: 10,
+      math_correct: 8,
+      latex_compiled: true,
+      error: null,
+    };
+    expect(p.status).toBe("completed_with_warnings");
+  });
 });

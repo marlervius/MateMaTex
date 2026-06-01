@@ -163,6 +163,7 @@ class SemanticCache:
             "arbeidsark": {"input": 2000, "output": 3000},
             "kapittel": {"input": 3000, "output": 6000},
             "prøve": {"input": 2000, "output": 4000},
+            "differensiert": {"input": 2500, "output": 5000},
         }.get(request.material_type, {"input": 2000, "output": 3000})
 
         # Scale by options

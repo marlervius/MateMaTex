@@ -47,9 +47,19 @@ export interface MathClaimDetail {
 
 export interface GenerationResult {
   jobId: string;
-  status: "pending" | "running" | "completed" | "failed";
+  status:
+    | "pending"
+    | "running"
+    | "completed"
+    | "completed_with_warnings"
+    | "failed";
   fullDocument: string;
   pdfUrl: string;
+  pdfBase64: string;
+  usedLatexFallback: boolean;
+  fromCache: boolean;
+  differentiatedBasic: string;
+  differentiatedAdvanced: string;
   steps: AgentStep[];
   mathVerification: {
     claimsChecked: number;
@@ -178,6 +188,11 @@ export const useAppStore = create<AppStore>((set) => ({
         status: "failed",
         fullDocument: "",
         pdfUrl: "",
+        pdfBase64: "",
+        usedLatexFallback: false,
+        fromCache: false,
+        differentiatedBasic: "",
+        differentiatedAdvanced: "",
         steps: state.steps,
         mathVerification: emptyMathVerification(),
         latexCompiled: false,

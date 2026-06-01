@@ -182,6 +182,55 @@ async def differentiate_content(
     return output
 
 
+def differentiate_content_sync(
+    latex_content: str,
+    topic: str = "",
+    grade: str = "",
+) -> DifferentiatedOutput:
+    """Synchronous variant for use inside the LangGraph pipeline."""
+    llm = get_llm(temperature=0.3)
+
+    user_prompt = f"STANDARD-NIVÅ INNHOLD:\n\n{latex_content}"
+    if topic:
+        user_prompt += f"\n\nEMNE: {topic}"
+    if grade:
+        user_prompt += f"\n\nTRINN: {grade}"
+    user_prompt += (
+        "\n\nReturner JSON med nøklene 'basic', 'standard', 'advanced'. "
+        "Hver verdi er komplett LaTeX-kropp."
+    )
+
+    result = llm.invoke(_DIFFERENTIATION_SYSTEM, user_prompt)
+    output = DifferentiatedOutput(standard_latex=latex_content)
+
+    try:
+        json_match = re.search(r"\{[\s\S]*\}", result)
+        if json_match:
+            data = json.loads(json_match.group())
+            output.basic_latex = data.get("basic", "")
+            output.standard_latex = data.get("standard", latex_content)
+            output.advanced_latex = data.get("advanced", "")
+    except json.JSONDecodeError as e:
+        logger.error("differentiation_sync_json_error", error=str(e))
+
+    try:
+        from app.verification.math_checker import MathChecker
+
+        checker = MathChecker()
+        for level, content in [
+            ("basic", output.basic_latex),
+            ("standard", output.standard_latex),
+            ("advanced", output.advanced_latex),
+        ]:
+            if content:
+                verification = checker.verify(content)
+                setattr(output, f"{level}_verified", verification.all_correct)
+    except Exception as e:
+        logger.warning("differentiation_sync_verify_skipped", error=str(e))
+
+    return output
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------

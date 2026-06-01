@@ -23,6 +23,7 @@ class PipelineStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
+    COMPLETED_WITH_WARNINGS = "completed_with_warnings"
     FAILED = "failed"
 
 
@@ -47,7 +48,10 @@ class GenerationRequest(BaseModel):
     """User's input to the pipeline."""
     grade: str = Field(description="Grade level, e.g. '10. trinn', 'VG2 R1'")
     topic: str = Field(description="Math topic", max_length=500)
-    material_type: str = Field(default="arbeidsark", description="arbeidsark|kapittel|prøve")
+    material_type: str = Field(
+        default="arbeidsark",
+        description="arbeidsark|kapittel|prøve|differensiert",
+    )
     language_level: str = Field(default="standard", description="standard|b2|b1")
     num_exercises: int = Field(default=10, ge=1, le=50)
     difficulty: str = Field(default="Middels", description="Lett|Middels|Vanskelig")
@@ -98,6 +102,8 @@ class LatexCompilationResult(BaseModel):
             "Used so we don't depend on temp-file paths that may have been cleaned up."
         ),
     )
+    pdf_base64: str = ""
+    used_fallback: bool = False
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     log_excerpt: str = ""
@@ -163,4 +169,9 @@ class PipelineState(BaseModel):
 
     # --- Output ---
     pdf_path: str = ""
+    pdf_base64: str = ""
+    used_latex_fallback: bool = False
+    from_cache: bool = False
+    differentiated_basic: str = ""
+    differentiated_advanced: str = ""
     error_message: str = ""

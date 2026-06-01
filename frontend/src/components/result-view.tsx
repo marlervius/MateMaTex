@@ -37,7 +37,7 @@ import {
   isJobFavorite,
   updateHistoryFavorite,
 } from "@/lib/generation-history";
-import { errorCategoryLabel } from "@/lib/map-api-result";
+import { errorCategoryLabel, isSuccessfulStatus } from "@/lib/map-api-result";
 
 type Tab = "document" | "editor" | "differentiation";
 
@@ -59,6 +59,7 @@ export function ResultView() {
     reviewed: false,
     language: false,
     classFit: false,
+    mathReviewed: false,
   });
 
   // Differentiation
@@ -94,7 +95,12 @@ export function ResultView() {
     setPdfPreviewError("");
     setPdfPreviewUrl(null);
 
-    if (!result?.jobId || result.status !== "completed" || !result.latexCompiled) {
+    if (
+      !result?.jobId ||
+      !isSuccessfulStatus(result.status) ||
+      !result.latexCompiled ||
+      result.pdfBase64
+    ) {
       return;
     }
 
@@ -116,11 +122,16 @@ export function ResultView() {
 
   if (!result) return null;
 
-  const isSuccess = result.status === "completed";
-  const canShare = approvalChecks.reviewed && approvalChecks.language && approvalChecks.classFit;
+  const isSuccess = isSuccessfulStatus(result.status);
+  const hasWarnings = result.status === "completed_with_warnings";
   const hasMathIssues =
     result.mathVerification.claimsIncorrect > 0 ||
     result.mathVerification.claimsUnparseable > 0;
+  const canShare =
+    approvalChecks.reviewed &&
+    approvalChecks.language &&
+    approvalChecks.classFit &&
+    (!hasMathIssues || approvalChecks.mathReviewed);
 
   /* ---- Export handlers ---- */
   const handleExport = async (format: string) => {
@@ -233,7 +244,9 @@ export function ResultView() {
         animate={{ opacity: 1, y: 0 }}
         className={`card mb-6 ${
           isSuccess
-            ? "!border-accent-green/30 bg-accent-green/5"
+            ? hasWarnings
+              ? "!border-accent-orange/30 bg-accent-orange/5"
+              : "!border-accent-green/30 bg-accent-green/5"
             : "!border-accent-red/30 bg-accent-red/5"
         }`}
       >
@@ -245,11 +258,15 @@ export function ResultView() {
               ) : (
                 <AlertTriangle size={20} className="text-accent-red" />
               )}
-              {isSuccess ? "Materiale generert" : "Generering feilet"}
+              {isSuccess
+                ? hasWarnings
+                  ? "Materiale generert — krever gjennomgang"
+                  : "Materiale generert"
+                : "Generering feilet"}
             </h2>
             <p className="text-sm text-text-secondary mt-1">
               {isSuccess
-                ? `Ferdig på ${result.totalDuration.toFixed(1)} sekunder`
+                ? `${result.fromCache ? "Hentet fra hurtigbuffer · " : ""}Ferdig på ${result.totalDuration.toFixed(1)} sekunder`
                 : result.error}
             </p>
             {!isSuccess && (
@@ -284,6 +301,9 @@ export function ResultView() {
           {selectedCompetencyGoals.length > 0 && (
             <div className="card mb-6">
               <h3 className="text-sm font-medium mb-2">Koblet til LK20-mål</h3>
+              <p className="text-xs text-text-muted mb-2">
+                Sjekk at dokumentet dekker disse målene før du deler med elever.
+              </p>
               <div className="flex flex-wrap gap-1.5">
                 {selectedCompetencyGoals.map((goal) => (
                   <span key={goal} className="badge text-[10px] !py-0.5 bg-accent-blue/10 text-accent-blue">
@@ -291,6 +311,15 @@ export function ResultView() {
                   </span>
                 ))}
               </div>
+            </div>
+          )}
+
+          {(result.differentiatedBasic || result.differentiatedAdvanced) && (
+            <div className="card mb-6 !border-accent-blue/20 bg-accent-blue/5">
+              <h3 className="text-sm font-medium mb-1">Differensiert materiale</h3>
+              <p className="text-xs text-text-secondary">
+                Dokumentet inneholder seksjonene Grunnleggende, Standard og Avansert.
+              </p>
             </div>
           )}
 
@@ -388,9 +417,25 @@ export function ResultView() {
                 exit={{ opacity: 0 }}
                 className="space-y-6"
               >
+                {result.usedLatexFallback && (
+                  <div className="card mb-4 !border-accent-orange/30 bg-accent-orange/5">
+                    <p className="text-sm text-text-secondary">
+                      <strong>Forenklet versjon:</strong> Noen figurer (f.eks. TikZ) ble
+                      fjernet fordi LaTeX ikke kompilerte. Oppgavene og teksten er beholdt.
+                      Eksporter PDF for å se layout.
+                    </p>
+                  </div>
+                )}
+
                 {/* PDF Preview */}
                 <div className="card !p-0 overflow-hidden">
-                  {pdfPreviewUrl ? (
+                  {result.pdfBase64 ? (
+                    <iframe
+                      title="PDF-forhåndsvisning"
+                      src={`data:application/pdf;base64,${result.pdfBase64}`}
+                      className="w-full min-h-[520px] border-0 bg-white"
+                    />
+                  ) : pdfPreviewUrl ? (
                     <iframe
                       src={pdfPreviewUrl}
                       title="PDF-forhåndsvisning"
@@ -398,26 +443,32 @@ export function ResultView() {
                       style={{ height: "75vh", border: 0 }}
                     />
                   ) : (
-                    <div className="bg-surface-elevated p-8 text-center min-h-[400px] flex items-center justify-center">
-                      <div className="text-text-muted">
-                        <FileText size={48} className="mx-auto mb-3 opacity-30" />
-                        {pdfPreviewLoading ? (
-                          <p className="text-sm">Laster PDF-forhåndsvisning…</p>
-                        ) : pdfPreviewError ? (
-                          <div className="space-y-2">
-                            <p className="text-sm text-accent-red">
-                              Kunne ikke hente PDF
-                            </p>
-                            <p className="text-xs text-text-muted max-w-md mx-auto">
-                              {pdfPreviewError}
-                            </p>
-                          </div>
-                        ) : result.latexCompiled ? (
-                          <p className="text-sm">PDF er klar — bruk «Last ned»</p>
-                        ) : (
-                          <p className="text-sm">PDF kunne ikke genereres</p>
-                        )}
-                      </div>
+                    <div className="bg-surface-elevated p-8 text-center min-h-[400px] flex flex-col items-center justify-center gap-3">
+                      <FileText size={48} className="opacity-30 text-text-muted" />
+                      {pdfPreviewLoading ? (
+                        <p className="text-sm text-text-muted">Laster PDF-forhåndsvisning…</p>
+                      ) : pdfPreviewError ? (
+                        <>
+                          <p className="text-sm text-accent-red">Kunne ikke hente PDF</p>
+                          <p className="text-xs text-text-muted max-w-md">{pdfPreviewError}</p>
+                        </>
+                      ) : (
+                        <p className="text-sm text-text-muted">
+                          {result.latexCompiled
+                            ? "PDF ikke tilgjengelig i forhåndsvisning — bruk Eksporter PDF"
+                            : "PDF kunne ikke genereres automatisk"}
+                        </p>
+                      )}
+                      {result.latexCompiled && !pdfPreviewLoading && (
+                        <button
+                          type="button"
+                          onClick={() => handleExport("pdf")}
+                          disabled={!!exportLoading}
+                          className="btn-secondary text-xs"
+                        >
+                          Generer PDF for forhåndsvisning
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -737,6 +788,18 @@ export function ResultView() {
                     />
                     Oppgavene passer klassen min
                   </label>
+                  {hasMathIssues && (
+                    <label className="flex items-center gap-1.5 text-accent-orange">
+                      <input
+                        type="checkbox"
+                        checked={approvalChecks.mathReviewed}
+                        onChange={(e) =>
+                          setApprovalChecks((s) => ({ ...s, mathReviewed: e.target.checked }))
+                        }
+                      />
+                      Jeg har manuelt sjekket mattepåstandene markert over
+                    </label>
+                  )}
                 </div>
               </div>
             </div>

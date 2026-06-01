@@ -4,6 +4,7 @@ LaTeX validator node — Compiles the document with pdflatex to check for errors
 
 from __future__ import annotations
 
+import base64
 from datetime import datetime
 from pathlib import Path
 
@@ -63,14 +64,13 @@ def run_latex_validator(state: PipelineState) -> PipelineState:
 
         if result.success:
             state.final_latex_body = state.edited_latex_body
-            # Persist the freshly-compiled PDF to a stable path keyed by job_id.
-            # The path returned by the checker points into a temp directory that
-            # has already been cleaned up by the time we get here.
             if result.pdf_bytes:
                 try:
                     state.pdf_path = _persist_pdf(state.job_id, result.pdf_bytes)
+                    state.pdf_base64 = base64.b64encode(result.pdf_bytes).decode("ascii")
                 except OSError as persist_err:
                     state.pdf_path = ""
+                    state.pdf_base64 = ""
                     logger.warning(
                         "latex_pdf_persist_failed",
                         job_id=state.job_id,
@@ -78,6 +78,7 @@ def run_latex_validator(state: PipelineState) -> PipelineState:
                     )
             else:
                 state.pdf_path = ""
+                state.pdf_base64 = ""
             logger.info("latex_validation_passed", job_id=state.job_id, pdf_path=state.pdf_path)
         else:
             logger.warning(

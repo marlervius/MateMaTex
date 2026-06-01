@@ -1,11 +1,17 @@
 "use client";
 
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, Sparkles, LayoutTemplate } from "lucide-react";
 import { useAppStore } from "@/lib/store";
-import { startGeneration, streamProgress, getResult, closeActiveStream } from "@/lib/api";
-import { mapApiResultToGenerationResult } from "@/lib/map-api-result";
+import {
+  startGeneration,
+  streamProgress,
+  getResult,
+  estimateCost,
+  closeActiveStream,
+} from "@/lib/api";
+import { mapApiResultToGenerationResult, isSuccessfulStatus } from "@/lib/map-api-result";
 import { appendHistory } from "@/lib/generation-history";
 import { searchGoals, type CompetencyGoal } from "@/data/lk20-goals";
 import {
@@ -46,7 +52,7 @@ const MATERIAL_TYPES = [
   { value: "arbeidsark", label: "Oppgaveark", desc: "Sett med oppgaver og løsninger", icon: "📝" },
   { value: "kapittel", label: "Fullt kapittel", desc: "Teori, eksempler og oppgaver", icon: "📖" },
   { value: "prøve", label: "Eksamen", desc: "Prøve med poengskjema", icon: "📋" },
-  { value: "differensiert", label: "Differensiert", desc: "Tre nivåer automatisk", icon: "🔀" },
+  { value: "differensiert", label: "Differensiert", desc: "Grunnleggende, standard og avansert i ett dokument", icon: "🔀" },
 ];
 
 const LANGUAGE_LEVELS = [
@@ -135,6 +141,12 @@ export function GenerationWizard() {
   const [goalSearch, setGoalSearch] = useState("");
   const activeJobRef = useRef<string | null>(null);
   const streamCloseRef = useRef<(() => void) | null>(null);
+  const [costEstimate, setCostEstimate] = useState<{
+    estimated_total_tokens: number;
+    similar_cached: number;
+    cache_available: boolean;
+  } | null>(null);
+  const [estimateLoading, setEstimateLoading] = useState(false);
 
   useEffect(() => {
     const prefs = loadPreferences();
@@ -189,6 +201,42 @@ export function GenerationWizard() {
 
   const canGenerate = request.topic.trim().length > 0;
 
+  useEffect(() => {
+    if (step !== totalSteps - 1 || !canGenerate) {
+      setCostEstimate(null);
+      return;
+    }
+    let cancelled = false;
+    setEstimateLoading(true);
+    estimateCost({
+      grade: request.grade,
+      topic: request.topic,
+      material_type: request.materialType,
+      language_level: request.languageLevel,
+      num_exercises: request.numExercises,
+      difficulty: request.difficulty,
+      include_theory: request.includeTheory,
+      include_examples: request.includeExamples,
+      include_exercises: request.includeExercises,
+      include_solutions: request.includeSolutions,
+      include_graphs: request.includeGraphs,
+      competency_goals: request.competencyGoals,
+      extra_instructions: request.extraInstructions,
+    })
+      .then((data) => {
+        if (!cancelled) setCostEstimate(data);
+      })
+      .catch(() => {
+        if (!cancelled) setCostEstimate(null);
+      })
+      .finally(() => {
+        if (!cancelled) setEstimateLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [step, canGenerate, request]);
+
   const handleGenerate = async () => {
     if (!canGenerate) return;
 
@@ -236,7 +284,7 @@ export function GenerationWizard() {
             if (activeJobRef.current !== job_id) return;
             const mapped = mapApiResultToGenerationResult(raw, snapshot);
             setResult(mapped);
-            if (mapped.status === "completed") {
+            if (isSuccessfulStatus(mapped.status)) {
               appendHistory({
                 jobId: job_id,
                 createdAt: new Date().toISOString(),
@@ -687,15 +735,29 @@ export function GenerationWizard() {
             <ChevronRight size={16} />
           </button>
         ) : (
-          <button
-            type="button"
-            onClick={handleGenerate}
-            disabled={!canGenerate}
-            className="btn-primary !px-8 shadow-lg shadow-accent-blue/20 disabled:opacity-40 disabled:shadow-none"
-          >
-            <Sparkles size={16} />
-            Generer materiale
-          </button>
+          <div className="flex flex-col items-end gap-2">
+            {estimateLoading && (
+              <p className="text-xs text-text-muted">Estimerer kostnad…</p>
+            )}
+            {costEstimate && !estimateLoading && (
+              <p className="text-xs text-text-muted text-right max-w-xs">
+                Ca. {costEstimate.estimated_total_tokens.toLocaleString("nb-NO")}{" "}
+                tokens
+                {costEstimate.cache_available
+                  ? ` · ${costEstimate.similar_cached} lignende i hurtigbuffer (kan bli raskere)`
+                  : ""}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={!canGenerate}
+              className="btn-primary !px-8 shadow-lg shadow-accent-blue/20 disabled:opacity-40 disabled:shadow-none"
+            >
+              <Sparkles size={16} />
+              Generer materiale
+            </button>
+          </div>
         )}
       </div>
     </div>

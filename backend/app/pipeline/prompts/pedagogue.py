@@ -139,9 +139,13 @@ def build_pedagogue_prompt(
     if goals:
         goals_text = "KOMPETANSEMÅL:\n" + "\n".join(f"- {g}" for g in goals)
 
+    from app.pipeline.material_hints import pedagogue_material_instructions
+
+    material_extra = pedagogue_material_instructions(material_type)
+
     diff_text = ""
-    if content_options.get("differentiation_mode"):
-        diff_text = "DIFFERENSIERING: Lag oppgaver på 3 nivåer (Lett/Middels/Vanskelig)"
+    if material_type == "differensiert" or content_options.get("differentiation_mode"):
+        diff_text = "DIFFERENSIERING: Planlegg tre nivåer (Grunnleggende / Standard / Avansert) i samme dokument"
 
     return f"""\
 Lag en pedagogisk plan for:
@@ -157,6 +161,7 @@ Vanskelighetsgrad: {content_options.get('difficulty', 'Middels')}
 {restrictions_text}
 {goals_text}
 {diff_text}
+{material_extra}
 {language_instructions}
 
 Følg formatet fra eksemplene. Alt på norsk (Bokmål).

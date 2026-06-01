@@ -746,7 +746,14 @@ def build_author_prompt(
     content_options: dict,
 ) -> str:
     """Build the user prompt for the author agent."""
+    from app.pipeline.material_hints import author_material_instructions
+
     template_examples = _get_templates_for_grade(grade)
+    material_type = content_options.get("material_type", "arbeidsark")
+    material_extra = author_material_instructions(
+        material_type,
+        content_options.get("include_solutions", True),
+    )
 
     return f"""\
 Skriv KOMPLETT LaTeX body-innhold basert på denne pedagogiske planen:
@@ -756,6 +763,7 @@ Skriv KOMPLETT LaTeX body-innhold basert på denne pedagogiske planen:
 Klassetrinn: {grade}
 {grade_context}
 {language_instructions}
+{material_extra}
 
 HUSK:
 - Start med \\title, \\author, \\date, \\maketitle

@@ -15,7 +15,12 @@ export interface StreamCurrentAgentPayload {
 }
 
 export interface StreamCompletePayload {
-  status: "pending" | "running" | "completed" | "failed";
+  status:
+    | "pending"
+    | "running"
+    | "completed"
+    | "completed_with_warnings"
+    | "failed";
   total_duration: number;
   total_steps: number;
   math_checks: number;

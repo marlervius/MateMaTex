@@ -40,11 +40,18 @@ export function mapApiResultToGenerationResult(
 
   const latex = (raw.latex_compilation ?? {}) as Record<string, unknown>;
 
+  const status = String(api.status ?? "failed") as GenerationResult["status"];
+
   return {
     jobId: String(raw.job_id ?? ""),
-    status: raw.status as GenerationResult["status"],
+    status,
     fullDocument: String(raw.full_document ?? ""),
     pdfUrl: String(raw.pdf_path ?? ""),
+    pdfBase64: String(raw.pdf_base64 ?? ""),
+    usedLatexFallback: Boolean(raw.used_latex_fallback),
+    fromCache: Boolean(raw.from_cache),
+    differentiatedBasic: String(raw.differentiated_basic ?? ""),
+    differentiatedAdvanced: String(raw.differentiated_advanced ?? ""),
     steps,
     mathVerification: {
       claimsChecked: Number(mv.claims_checked ?? 0),
@@ -69,6 +76,10 @@ export function mapApiResultToGenerationResult(
 }
 
 export type ErrorCategory = "aborted" | "latex" | "model" | "unknown";
+
+export function isSuccessfulStatus(status: GenerationResult["status"]): boolean {
+  return status === "completed" || status === "completed_with_warnings";
+}
 
 export function categorizeError(
   errorMessage: string,
