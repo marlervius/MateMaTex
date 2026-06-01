@@ -710,7 +710,12 @@ export function ResultView() {
 
               <button
                 onClick={() => {
-                  setApprovalChecks({ reviewed: false, language: false, classFit: false });
+                  setApprovalChecks({
+                    reviewed: false,
+                    language: false,
+                    classFit: false,
+                    mathReviewed: false,
+                  });
                   handleDifferentiate();
                 }}
                 disabled={diffLoading}
