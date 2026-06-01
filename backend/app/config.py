@@ -59,7 +59,15 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO")
     pdflatex_path: str = Field(default="pdflatex")
     output_dir: str = Field(default="output")
-    max_verification_retries: int = Field(default=3)
+    max_verification_retries: int = Field(default=2, ge=1, le=10)
+    skip_editor: bool = Field(
+        default=False,
+        description="If True, skip the LLM editor pass for all material types",
+    )
+    skip_editor_material_types: str = Field(
+        default="arbeidsark,prøve",
+        description="Comma-separated material types that skip the LLM editor (faster)",
+    )
     verification_fail_open: bool = Field(
         default=False,
         description="If True, math/LaTeX verifier errors allow pipeline to continue",
@@ -135,6 +143,8 @@ class AppConfig:
         self.max_verification_retries = s.max_verification_retries
         self.verification_fail_open = s.verification_fail_open
         self.max_latex_chars = s.max_latex_chars
+        self.skip_editor = s.skip_editor
+        self.skip_editor_material_types = s.skip_editor_material_types
         self.llm = LLMProviderConfig()
 
 

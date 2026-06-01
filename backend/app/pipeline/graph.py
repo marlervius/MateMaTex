@@ -67,9 +67,25 @@ def _math_errors_worth_author_retry(state: PipelineState) -> bool:
     return True
 
 
-def should_retry_math(state: PipelineState) -> Literal["author", "editor"]:
+def _should_skip_editor(state: PipelineState) -> bool:
+    """Skip the slow LLM editor for worksheets/exams (saves ~3–5 min per job)."""
+    config = get_config()
+    if config.skip_editor:
+        return True
+    fast_types = {
+        t.strip()
+        for t in config.skip_editor_material_types.split(",")
+        if t.strip()
+    }
+    return state.request.material_type in fast_types
+
+
+def should_retry_math(
+    state: PipelineState,
+) -> Literal["author", "editor", "tikz_validator"]:
     """
     After math verification: retry author if errors found and retries remain.
+    Otherwise proceed to editor or skip straight to validators.
     """
     config = get_config()
     max_retries = config.max_verification_retries
@@ -87,14 +103,24 @@ def should_retry_math(state: PipelineState) -> Literal["author", "editor"]:
             errors=state.math_verification.claims_incorrect,
         )
         return "author"
-    else:
-        if not state.math_verification.all_correct:
-            logger.warning(
-                "math_retry_decision",
-                decision="proceed_with_errors",
-                errors=state.math_verification.claims_incorrect,
-            )
-        return "editor"
+
+    if not state.math_verification.all_correct:
+        logger.warning(
+            "math_retry_decision",
+            decision="proceed_with_errors",
+            errors=state.math_verification.claims_incorrect,
+        )
+
+    if _should_skip_editor(state):
+        logger.info(
+            "editor_skip_decision",
+            material_type=state.request.material_type,
+            job_id=state.job_id,
+        )
+        state.edited_latex_body = state.verified_latex_body
+        return "tikz_validator"
+
+    return "editor"
 
 
 def should_retry_latex(state: PipelineState) -> Literal["latex_fixer", "latex_fallback", "finalize"]:
@@ -292,6 +318,7 @@ def create_pipeline() -> StateGraph:
         {
             "author": "author",
             "editor": "editor",
+            "tikz_validator": "tikz_validator",
         },
     )
 

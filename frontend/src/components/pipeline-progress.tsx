@@ -156,8 +156,8 @@ export function PipelineProgress() {
           AI-teamet jobber
         </h2>
         <p className="text-sm text-text-secondary">
-          Vanligvis 2–5 minutter — ved matematikk-returer kan det ta lengre. Du får
-          resultatet selv om fremdriftsstrømmen avbrytes.
+          Oppgaveark/prøve: ofte 1–3 minutter. Kapittel med redaktør: 3–6 minutter.
+          Du får resultatet selv om fremdriftsstrømmen avbrytes (~5 min på Vercel).
         </p>
         <p className="text-sm text-text-secondary mt-1">
           {remaining > 0

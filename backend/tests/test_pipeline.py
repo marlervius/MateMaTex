@@ -41,9 +41,11 @@ class TestMathRetryRouting:
         assert should_retry_math(state) == "author"
 
     def test_proceed_when_correct(self):
-        """Should proceed to editor when all math is correct."""
+        """Should proceed to editor when all math is correct (kapittel uses editor)."""
         state = PipelineState(
-            request=GenerationRequest(grade="8. trinn", topic="Algebra"),
+            request=GenerationRequest(
+                grade="8. trinn", topic="Algebra", material_type="kapittel"
+            ),
             math_verification=VerificationResult(
                 claims_checked=5,
                 claims_correct=5,
@@ -57,7 +59,9 @@ class TestMathRetryRouting:
     def test_proceed_after_max_retries(self):
         """Should proceed to editor after max retries even with errors."""
         state = PipelineState(
-            request=GenerationRequest(grade="8. trinn", topic="Algebra"),
+            request=GenerationRequest(
+                grade="8. trinn", topic="Algebra", material_type="kapittel"
+            ),
             math_verification=VerificationResult(
                 claims_checked=5,
                 claims_incorrect=2,
@@ -66,6 +70,21 @@ class TestMathRetryRouting:
             math_verification_attempts=3,  # At max
         )
         assert should_retry_math(state) == "editor"
+
+    def test_skip_editor_for_arbeidsark(self):
+        """Worksheets skip the slow LLM editor and go straight to validators."""
+        state = PipelineState(
+            request=GenerationRequest(grade="8. trinn", topic="Algebra"),
+            verified_latex_body="\\begin{taskbox}{Oppgave} $2+2=4$ \\end{taskbox}",
+            math_verification=VerificationResult(
+                claims_checked=2,
+                claims_correct=2,
+                all_correct=True,
+            ),
+            math_verification_attempts=1,
+        )
+        assert should_retry_math(state) == "tikz_validator"
+        assert state.edited_latex_body == state.verified_latex_body
 
     def test_skip_retry_when_mostly_unparseable(self):
         """Few SymPy errors among many unparseable claims should not re-run author."""
@@ -79,7 +98,7 @@ class TestMathRetryRouting:
             ),
             math_verification_attempts=1,
         )
-        assert should_retry_math(state) == "editor"
+        assert should_retry_math(state) == "tikz_validator"
 
 
 class TestLatexRetryRouting:
