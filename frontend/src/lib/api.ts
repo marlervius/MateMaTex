@@ -130,6 +130,54 @@ export async function startGeneration(
   return res.json();
 }
 
+const TERMINAL_JOB_STATUSES = new Set([
+  "completed",
+  "completed_with_warnings",
+  "failed",
+]);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Poll result when SSE drops before complete (e.g. Vercel 300s proxy limit). */
+async function pollJobUntilTerminal(
+  jobId: string,
+  onComplete: (data: StreamCompletePayload) => void,
+  signal: { cancelled: boolean }
+): Promise<boolean> {
+  const headers = await getAuthHeaders();
+  for (let i = 0; i < 120; i++) {
+    if (signal.cancelled) return false;
+    await sleep(3000);
+    if (signal.cancelled) return false;
+    try {
+      const res = await fetch(`${API_BASE}/generate/${jobId}/result`, { headers });
+      if (res.status === 202) continue;
+      if (!res.ok) continue;
+      const raw = (await res.json()) as Record<string, unknown>;
+      const status = String(raw.status ?? "");
+      if (!TERMINAL_JOB_STATUSES.has(status)) continue;
+      const mv = (raw.math_verification ?? {}) as Record<string, unknown>;
+      onComplete({
+        status: status as StreamCompletePayload["status"],
+        total_duration: Number(raw.total_duration_seconds ?? 0),
+        total_steps: Array.isArray(raw.steps) ? raw.steps.length : 0,
+        math_checks: Number(mv.claims_checked ?? 0),
+        math_correct: Number(mv.claims_correct ?? 0),
+        latex_compiled: Boolean(
+          (raw.latex_compilation as Record<string, unknown> | undefined)?.success
+        ),
+        error: raw.error ? String(raw.error) : null,
+      });
+      return true;
+    } catch {
+      /* still running or transient network error */
+    }
+  }
+  return false;
+}
+
 export function streamProgress(
   jobId: string,
   callbacks: {
@@ -147,6 +195,15 @@ export function streamProgress(
       : apiUrl(`generate/${encodeURIComponent(jobId)}/stream`);
 
   const eventSource = new EventSource(url);
+  const signal = { cancelled: false };
+  let finished = false;
+
+  const finish = (data: StreamCompletePayload) => {
+    if (finished) return;
+    finished = true;
+    callbacks.onComplete?.(data);
+    closeActiveStream();
+  };
 
   eventSource.addEventListener("step", (e: MessageEvent) => {
     const step = parseStreamData<StreamStepPayload>(e.data, "step");
@@ -158,15 +215,14 @@ export function streamProgress(
   });
   eventSource.addEventListener("complete", (e: MessageEvent) => {
     const data = parseStreamData<StreamCompletePayload>(e.data, "complete");
-    if (data) {
-      callbacks.onComplete?.(data);
-      closeActiveStream();
-    }
+    if (data) finish(data);
   });
   eventSource.addEventListener("error", (e: Event) => {
+    if (finished) return;
     if ("data" in e && (e as MessageEvent).data) {
       try {
         const j = JSON.parse((e as MessageEvent).data) as { message?: string };
+        finished = true;
         callbacks.onError?.(j.message || "Feil fra strømmen");
         closeActiveStream();
         return;
@@ -177,13 +233,27 @@ export function streamProgress(
     if (eventSource.readyState === EventSource.CONNECTING) {
       return;
     }
-    callbacks.onError?.(
-      "Mistet kontakt under generering. Sjekk nettverk og at backend kjører."
-    );
-    closeActiveStream();
+    eventSource.close();
+    void (async () => {
+      if (finished || signal.cancelled) return;
+      const ok = await pollJobUntilTerminal(
+        jobId,
+        (data) => finish(data),
+        signal
+      );
+      if (!ok && !finished && !signal.cancelled) {
+        finished = true;
+        callbacks.onError?.(
+          "Mistet kontakt under generering (jobben kan fortsatt kjøre). " +
+            "Vent litt og åpne historikk, eller prøv igjen."
+        );
+        closeActiveStream();
+      }
+    })();
   });
 
   const close = () => {
+    signal.cancelled = true;
     eventSource.close();
     if (activeStreamClose === close) {
       activeStreamClose = null;

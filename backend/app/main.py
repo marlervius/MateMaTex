@@ -15,6 +15,7 @@ Exposes:
 """
 
 import asyncio
+import base64
 import json
 import os
 import re
@@ -273,7 +274,11 @@ async def stream_progress(
                 })
                 last_heartbeat = _time.monotonic()
 
-            if state.status in (PipelineStatus.COMPLETED, PipelineStatus.FAILED):
+            if state.status in (
+                PipelineStatus.COMPLETED,
+                PipelineStatus.COMPLETED_WITH_WARNINGS,
+                PipelineStatus.FAILED,
+            ):
                 yield _sse_event("complete", {
                     "status": state.status.value,
                     "total_duration": state.total_duration_seconds,
@@ -336,6 +341,11 @@ async def get_result(job_id: str, user_id: str = Depends(get_current_user)):
         "full_document": state.full_document,
         "pdf_path": state.pdf_path,
         "pdf_available": pdf_available,
+        "pdf_base64": state.pdf_base64,
+        "used_latex_fallback": state.used_latex_fallback,
+        "from_cache": state.from_cache,
+        "differentiated_basic": state.differentiated_basic,
+        "differentiated_advanced": state.differentiated_advanced,
         "math_verification": state.math_verification.model_dump(),
         "latex_compilation": state.latex_compilation.model_dump(),
         "steps": [s.model_dump() for s in state.steps],
@@ -356,8 +366,20 @@ async def get_job_pdf(job_id: str, _user_id: str = Depends(get_current_user)):
     state = resolve_job(job_id, _jobs)
     if state is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    if state.status == PipelineStatus.RUNNING:
+    if state.status in (PipelineStatus.RUNNING, PipelineStatus.PENDING):
         raise HTTPException(status_code=202, detail="Job still running")
+
+    if state.pdf_base64:
+        try:
+            pdf_bytes = base64.b64decode(state.pdf_base64)
+            return Response(
+                content=pdf_bytes,
+                media_type="application/pdf",
+                headers={"Cache-Control": "private, max-age=0, must-revalidate"},
+            )
+        except Exception:
+            raise HTTPException(status_code=500, detail="Invalid PDF data")
+
     if not state.pdf_path or not os.path.isfile(state.pdf_path):
         # Fall back to compiling the stored full_document on demand.
         if state.full_document:

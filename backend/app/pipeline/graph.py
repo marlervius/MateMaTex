@@ -22,6 +22,7 @@ Implements the multi-agent pipeline with verification loops:
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Literal
 
@@ -52,6 +53,20 @@ logger = structlog.get_logger()
 # Routing functions (conditional edges)
 # ---------------------------------------------------------------------------
 
+def _math_errors_worth_author_retry(state: PipelineState) -> bool:
+    """Skip author retry when SymPy mostly could not parse (false positives)."""
+    mv = state.math_verification
+    incorrect = mv.claims_incorrect
+    if incorrect <= 0:
+        return False
+    if mv.claims_unparseable >= incorrect * 10:
+        return False
+    verified = max(0, mv.claims_checked - mv.claims_unparseable)
+    if incorrect <= 3 and verified < 10 and mv.claims_unparseable > verified:
+        return False
+    return True
+
+
 def should_retry_math(state: PipelineState) -> Literal["author", "editor"]:
     """
     After math verification: retry author if errors found and retries remain.
@@ -62,7 +77,7 @@ def should_retry_math(state: PipelineState) -> Literal["author", "editor"]:
     if (
         not state.math_verification.all_correct
         and state.math_verification_attempts < max_retries
-        and state.math_verification.claims_incorrect > 0
+        and _math_errors_worth_author_retry(state)
     ):
         logger.info(
             "math_retry_decision",
@@ -114,29 +129,111 @@ def should_retry_latex(state: PipelineState) -> Literal["latex_fixer", "latex_fa
 # Terminal nodes
 # ---------------------------------------------------------------------------
 
+def _apply_differentiation(state: PipelineState) -> None:
+    """Build a three-level document when material_type is differensiert."""
+    from app.differentiation.generator import differentiate_content_sync
+
+    body = (
+        state.final_latex_body
+        or state.edited_latex_body
+        or state.verified_latex_body
+        or state.raw_latex_body
+    )
+    if not body.strip():
+        return
+
+    logger.info("differentiation_pipeline_start", job_id=state.job_id)
+    output = differentiate_content_sync(
+        body,
+        topic=state.request.topic,
+        grade=state.request.grade,
+    )
+    state.differentiated_basic = output.basic_latex
+    state.differentiated_advanced = output.advanced_latex
+
+    combined_body = (
+        "\\section*{Grunnleggende}\n"
+        + (output.basic_latex or body)
+        + "\n\n\\section*{Standard}\n"
+        + (output.standard_latex or body)
+        + "\n\n\\section*{Avansert}\n"
+        + (output.advanced_latex or body)
+    )
+    state.final_latex_body = combined_body
+    state.full_document = wrap_with_preamble(combined_body)
+
+
 def finalize(state: PipelineState) -> PipelineState:
     """
     Final node: assemble the complete document and compute summary stats.
     """
-    # Ensure we have a full document
-    if not state.full_document:
-        body = state.final_latex_body or state.edited_latex_body or state.verified_latex_body or state.raw_latex_body
+    body = (
+        state.final_latex_body
+        or state.edited_latex_body
+        or state.verified_latex_body
+        or state.raw_latex_body
+    )
+
+    if state.request.material_type == "differensiert":
+        _apply_differentiation(state)
+        try:
+            from app.verification.latex_checker import LatexChecker
+
+            config = get_config()
+            checker = LatexChecker(pdflatex_path=config.pdflatex_path)
+            compile_result = checker.check(state.full_document)
+            state.latex_compilation = compile_result
+            if compile_result.pdf_base64:
+                state.pdf_base64 = compile_result.pdf_base64
+        except Exception as e:
+            logger.warning(
+                "differentiation_recompile_failed",
+                error=str(e),
+                job_id=state.job_id,
+            )
+    elif not state.full_document:
         state.full_document = wrap_with_preamble(body)
+    elif state.final_latex_body and state.full_document:
+        state.full_document = wrap_with_preamble(state.final_latex_body)
+
+    if not state.pdf_base64 and state.latex_compilation.pdf_base64:
+        state.pdf_base64 = state.latex_compilation.pdf_base64
+
+    state.used_latex_fallback = (
+        state.used_latex_fallback or state.latex_compilation.used_fallback
+    )
 
     # Compute totals
     state.total_duration_seconds = sum(s.duration_seconds for s in state.steps)
     state.total_tokens = sum(s.total_tokens for s in state.steps)
-    state.status = PipelineStatus.COMPLETED
     state.current_agent = None
+
+    has_math_issues = (
+        state.math_verification.claims_incorrect > 0
+        or state.math_verification.claims_unparseable > 0
+    )
+    if has_math_issues:
+        state.status = PipelineStatus.COMPLETED_WITH_WARNINGS
+    else:
+        state.status = PipelineStatus.COMPLETED
+
+    try:
+        from app.cache import get_cache
+
+        get_cache().set_full_result(state.request, state.model_dump_json())
+    except Exception as e:
+        logger.warning("cache_full_result_failed", error=str(e), job_id=state.job_id)
 
     logger.info(
         "pipeline_complete",
         job_id=state.job_id,
+        status=state.status.value,
         total_steps=len(state.steps),
         total_duration=round(state.total_duration_seconds, 1),
         math_verification_attempts=state.math_verification_attempts,
         latex_fix_attempts=state.latex_fix_attempts,
         latex_compiled=state.latex_compilation.success,
+        used_fallback=state.used_latex_fallback,
     )
 
     return state
@@ -252,6 +349,30 @@ def run_pipeline(request: GenerationRequest) -> PipelineState:
         request=request,
         status=PipelineStatus.RUNNING,
     )
+
+    # Exact cache hit — return prior result with new job id
+    try:
+        from app.cache import get_cache
+
+        cached_json = get_cache().get_full_result(request)
+        if cached_json:
+            data = json.loads(cached_json)
+            restored = PipelineState(**data)
+            restored.job_id = state.job_id
+            restored.created_at = state.created_at
+            restored.from_cache = True
+            restored.status = (
+                PipelineStatus.COMPLETED_WITH_WARNINGS
+                if (
+                    restored.math_verification.claims_incorrect > 0
+                    or restored.math_verification.claims_unparseable > 0
+                )
+                else PipelineStatus.COMPLETED
+            )
+            logger.info("pipeline_cache_hit", job_id=restored.job_id)
+            return restored
+    except Exception as e:
+        logger.warning("pipeline_cache_restore_failed", error=str(e))
 
     # Create and compile the graph
     graph = create_pipeline()

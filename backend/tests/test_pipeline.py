@@ -15,6 +15,7 @@ from app.models.state import (
 )
 from app.pipeline.graph import (
     create_pipeline,
+    finalize,
     should_retry_latex,
     should_retry_math,
 )
@@ -66,6 +67,20 @@ class TestMathRetryRouting:
         )
         assert should_retry_math(state) == "editor"
 
+    def test_skip_retry_when_mostly_unparseable(self):
+        """Few SymPy errors among many unparseable claims should not re-run author."""
+        state = PipelineState(
+            request=GenerationRequest(grade="8. trinn", topic="Algebra"),
+            math_verification=VerificationResult(
+                claims_checked=69,
+                claims_incorrect=3,
+                claims_unparseable=66,
+                all_correct=False,
+            ),
+            math_verification_attempts=1,
+        )
+        assert should_retry_math(state) == "editor"
+
 
 class TestLatexRetryRouting:
     """Test the LaTeX validation retry routing logic."""
@@ -102,6 +117,37 @@ class TestLatexRetryRouting:
             latex_fix_attempts=3,
         )
         assert should_retry_latex(state) == "latex_fallback"
+
+
+class TestFinalizeStatus:
+    """Test final status reflects math verification quality."""
+
+    def test_completed_with_warnings_when_math_issues(self):
+        state = PipelineState(
+            request=GenerationRequest(grade="8. trinn", topic="Algebra"),
+            raw_latex_body="\\title{T}\\maketitle",
+            math_verification=VerificationResult(
+                claims_checked=3,
+                claims_incorrect=1,
+                claims_unparseable=0,
+                all_correct=False,
+            ),
+        )
+        result = finalize(state)
+        assert result.status == PipelineStatus.COMPLETED_WITH_WARNINGS
+
+    def test_completed_when_math_clean(self):
+        state = PipelineState(
+            request=GenerationRequest(grade="8. trinn", topic="Algebra"),
+            raw_latex_body="\\title{T}\\maketitle",
+            math_verification=VerificationResult(
+                claims_checked=3,
+                claims_correct=3,
+                all_correct=True,
+            ),
+        )
+        result = finalize(state)
+        assert result.status == PipelineStatus.COMPLETED
 
 
 class TestGraphStructure:

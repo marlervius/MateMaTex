@@ -156,7 +156,8 @@ export function PipelineProgress() {
           AI-teamet jobber
         </h2>
         <p className="text-sm text-text-secondary">
-          Vanligvis 1–3 minutter — tida varierer med lengde og kompleksitet.
+          Vanligvis 2–5 minutter — ved matematikk-returer kan det ta lengre. Du får
+          resultatet selv om fremdriftsstrømmen avbrytes.
         </p>
         <p className="text-sm text-text-secondary mt-1">
           {remaining > 0

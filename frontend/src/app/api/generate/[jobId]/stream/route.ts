@@ -2,7 +2,8 @@ import type { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const maxDuration = 300; // 5 min — generation can take 3-4 min on Render free tier
+// Vercel Hobby caps at 300s; Pro allows up to 800s. Jobs can exceed 5 min with retries.
+export const maxDuration = 800;
 
 /**
  * Proxies SSE from the FastAPI backend so the browser never needs MATE_API_KEY.
@@ -30,19 +31,14 @@ export async function GET(
 
   const url = `${backend}/generate/${encodeURIComponent(jobId)}/stream`;
   let upstream: Response;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 300_000);
   try {
     upstream = await fetch(url, {
       headers,
       cache: "no-store",
-      signal: controller.signal,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "fetch failed";
     return new Response(`Upstream unreachable: ${msg}`, { status: 502 });
-  } finally {
-    clearTimeout(timeout);
   }
 
   if (!upstream.ok || !upstream.body) {

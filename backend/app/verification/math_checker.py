@@ -33,13 +33,13 @@ class MathChecker:
     """
 
     # Patterns to extract mathematical claims from LaTeX
+    _MAX_CLAIMS = 40
+
     _EQUATION_PATTERNS = [
         # Standalone equation: $expr = expr$
         re.compile(r'\$([^$]+?)\s*=\s*([^$]+?)\$'),
         # Display equation: \[ expr = expr \]
         re.compile(r'\\\[([^\\]+?)\s*=\s*([^\\]+?)\\\]'),
-        # align environment lines: expr &= expr \\
-        re.compile(r'([^&\\]+?)\s*&=\s*([^\\]+?)\\\\'),
     ]
 
     # Pattern for "Oppgave N ... fasit: answer" or solution blocks
@@ -138,7 +138,7 @@ class MathChecker:
         # 2. Extract solution claims (match exercises with their solutions)
         claims.extend(self._extract_solution_claims(latex_content))
 
-        return claims
+        return self._cap_claims(claims)
 
     def _extract_equation_claims(self, content: str) -> list[MathClaim]:
         """Extract 'LHS = RHS' equations from inline/display math."""
@@ -154,6 +154,8 @@ class MathChecker:
 
                 # Skip trivial definitions (x = ...) with no computation
                 if self._is_definition(lhs_raw, rhs_raw):
+                    continue
+                if not self._looks_like_computation(lhs_raw, rhs_raw):
                     continue
 
                 claim = MathClaim(
@@ -620,6 +622,35 @@ class MathChecker:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+    def _cap_claims(self, claims: list[MathClaim]) -> list[MathClaim]:
+        """Deduplicate and limit work — large documents produced 60+ false claims."""
+        seen: set[str] = set()
+        out: list[MathClaim] = []
+        for claim in claims:
+            key = claim.latex_expression.strip()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(claim)
+            if len(out) >= self._MAX_CLAIMS:
+                break
+        return out
+
+    @staticmethod
+    def _looks_like_computation(lhs: str, rhs: str) -> bool:
+        """Skip labels, prose, and layout lines that are not arithmetic checks."""
+        for side in (lhs, rhs):
+            if re.search(r"\\(text|textbf|section|begin|end)\b", side):
+                return False
+            if "{" in side or "}" in side:
+                return False
+        combined = f"{lhs} {rhs}"
+        if re.search(r"[+\-*/^]|\\frac|\\sqrt|\\cdot", combined):
+            return True
+        if re.search(r"\d", combined) and "=" in combined:
+            return True
+        return False
+
     @staticmethod
     def _is_valid_math_fragment(expr: str) -> bool:
         """Reject malformed LaTeX fragments (unbalanced braces, incomplete macros)."""
@@ -642,8 +673,12 @@ class MathChecker:
     @staticmethod
     def _is_definition(lhs: str, rhs: str) -> bool:
         """Check if this is a variable definition rather than a verifiable claim."""
+        lhs = lhs.strip()
+        rhs = rhs.strip()
         # Single variable = expression is usually a definition (e.g., f(x) = 2x+1)
-        if re.match(r'^[a-zA-Z]\(?[a-z]?\)?$', lhs.strip()):
+        if re.match(r"^[a-zA-Z](\([a-zA-Z,\s]+\))?$", lhs):
+            return True
+        if re.match(r"^[a-zA-Z]$", lhs) and not re.search(r"\d|[+\-*/^]", rhs):
             return True
         return False
 
