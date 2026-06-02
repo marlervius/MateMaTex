@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from app.auth import get_current_user
 from app.latex.compiler import compile_to_pdf_with_log
+from app.pipeline.agents.tikz_validator import sanitize_latex_body, strip_tikz_and_plots
 from app.rate_limit import limiter
 from app.latex.preamble import wrap_with_preamble
 
@@ -228,6 +229,10 @@ async def export_pdf(
             topic=req.cover_topic,
         ))
 
+    content, sanitize_notes = sanitize_latex_body(content)
+    if sanitize_notes:
+        logger.info("export_pdf_sanitized", fixes=sanitize_notes)
+
     body_parts.append(content)
     full_body = "\n".join(body_parts)
 
@@ -240,6 +245,32 @@ async def export_pdf(
         out_path = os.path.join(tmpdir, "export.pdf")
         pdf_path, log_excerpt = compile_to_pdf_with_log(full_doc, out_path)
 
+        # If TikZ still breaks pdflatex, strip figures and retry once.
+        if not pdf_path and log_excerpt and (
+            "tikzpicture" in log_excerpt.lower()
+            or "undefined control sequence" in log_excerpt.lower()
+        ):
+            logger.warning("export_pdf_retry_without_tikz", user_id=user_id)
+            stripped_body = strip_tikz_and_plots(content)
+            retry_parts: list[str] = []
+            if req.include_cover:
+                retry_parts.append(
+                    _build_cover_page(
+                        school=req.cover_school,
+                        teacher=req.cover_teacher,
+                        subject=req.cover_subject,
+                        topic=req.cover_topic,
+                    )
+                )
+            retry_parts.append(stripped_body)
+            retry_full = "\n".join(retry_parts)
+            retry_doc = (
+                wrap_with_preamble(retry_full)
+                if r"\documentclass" not in retry_full
+                else retry_full
+            )
+            pdf_path, log_excerpt = compile_to_pdf_with_log(retry_doc, out_path)
+
         if pdf_path and os.path.exists(pdf_path):
             with open(pdf_path, "rb") as f:
                 pdf_bytes = f.read()
@@ -249,7 +280,7 @@ async def export_pdf(
                 filename="matematikk.pdf",
                 mime_type="application/pdf",
             )
-        # Surface enough log context so the user sees WHY the compile failed.
+
         log_tail = (log_excerpt or "").strip().splitlines()[-25:]
         errors = ["PDF-kompilering feilet."]
         if log_tail:

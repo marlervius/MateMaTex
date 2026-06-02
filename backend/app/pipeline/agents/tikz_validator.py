@@ -440,6 +440,94 @@ def _add_missing_centering(body: str) -> tuple[str, int]:
     return new_body, count
 
 
+def _fix_quoted_math_in_tikz(body: str) -> tuple[str, int]:
+    """
+    Fix ``"$\\alpha$"`` style labels inside TikZ (breaks parsing → error at
+    ``\\end{tikzpicture}``).
+    """
+    count = 0
+    tikz_re = re.compile(
+        r"\\begin\{tikzpicture\}.*?\\end\{tikzpicture\}",
+        re.DOTALL,
+    )
+
+    def fix_block(m: re.Match) -> str:
+        nonlocal count
+        block = m.group(0)
+        new = re.sub(r'"(\$.*?\$)"', r"\1", block)
+        new = re.sub(r'"\\?\$([^"]*?)\\?\$"', r"$\1$", new)
+        if new != block:
+            count += 1
+        return new
+
+    return tikz_re.sub(fix_block, body), count
+
+
+def strip_tikz_and_plots(body: str) -> str:
+    """Remove TikZ/pgfplots blocks when compilation cannot be salvaged."""
+    body = re.sub(
+        r"\\begin\{tikzpicture\}.*?\\end\{tikzpicture\}",
+        "% [Figur fjernet — kunne ikke kompileres]",
+        body,
+        flags=re.DOTALL,
+    )
+    body = re.sub(
+        r"\\begin\{axis\}.*?\\end\{axis\}",
+        "% [Graf fjernet — kunne ikke kompileres]",
+        body,
+        flags=re.DOTALL,
+    )
+    return body
+
+
+def sanitize_latex_body(body: str) -> tuple[str, list[str]]:
+    """
+    Run all rule-based TikZ/figure fixes on a LaTeX body.
+
+    Used by the pipeline TikZ validator and by export/compile paths that
+    bypass the graph.
+    """
+    fixes: list[str] = []
+
+    body, n = _strip_includegraphics(body)
+    if n:
+        fixes.append(f"Removed {n} \\includegraphics")
+
+    body, n = _fix_quoted_math_in_tikz(body)
+    if n:
+        fixes.append(f"Fixed quoted math in {n} tikzpicture(s)")
+
+    body, n = _fix_double_caption(body)
+    if n:
+        fixes.append(f"Fixed {n} double-caption figure(s)")
+
+    body, n = _move_figures_out_of_taskbox(body)
+    if n:
+        fixes.append(f"Moved {n} figure(s) out of taskbox")
+
+    body, n = _fix_figure_placement(body)
+    if n:
+        fixes.append(f"Added [H] to {n} figure(s)")
+
+    body, n = _add_missing_centering(body)
+    if n:
+        fixes.append(f"Added \\centering to {n} figure(s)")
+
+    body, n = _wrap_bare_tikzpicture(body)
+    if n:
+        fixes.append(f"Wrapped {n} bare tikzpicture(s)")
+
+    body, n = _wrap_bare_axis(body)
+    if n:
+        fixes.append(f"Wrapped {n} bare axis environment(s)")
+
+    body, n = _replace_pytagoras_squares(body)
+    if n:
+        fixes.append(f"Replaced {n} Pytagoras figure(s) with macro")
+
+    return body.strip(), fixes
+
+
 # ---------------------------------------------------------------------------
 # Main agent
 # ---------------------------------------------------------------------------
@@ -458,50 +546,8 @@ def run_tikz_validator(state: PipelineState) -> PipelineState:
 
     try:
         body = state.edited_latex_body or state.verified_latex_body or state.raw_latex_body
-
-        fixes: list[str] = []
-
-        # Rule 1: strip \includegraphics
-        body, n = _strip_includegraphics(body)
-        if n:
-            fixes.append(f"Removed {n} \\includegraphics")
-
-        # Rule 2: fix double caption / orphaned caption bug
-        body, n = _fix_double_caption(body)
-        if n:
-            fixes.append(f"Fixed {n} double-caption/orphaned-caption figure(s)")
-
-        # Rule 3: move figures out of taskbox environments
-        body, n = _move_figures_out_of_taskbox(body)
-        if n:
-            fixes.append(f"Moved {n} figure(s) out of taskbox environment(s)")
-
-        # Rule 4: fix figure[H] placement
-        body, n = _fix_figure_placement(body)
-        if n:
-            fixes.append(f"Added [H] to {n} figure(s)")
-
-        # Rule 5: add \centering
-        body, n = _add_missing_centering(body)
-        if n:
-            fixes.append(f"Added \\centering to {n} figure(s)")
-
-        # Rule 6: wrap bare tikzpicture in figure
-        body, n = _wrap_bare_tikzpicture(body)
-        if n:
-            fixes.append(f"Wrapped {n} bare tikzpicture(s) in figure environment")
-
-        # Rule 7: wrap bare axis (pgfplots) in figure+tikzpicture
-        body, n = _wrap_bare_axis(body)
-        if n:
-            fixes.append(f"Wrapped {n} bare axis environment(s) in figure")
-
-        # Rule 8: replace problematic Pytagoras square patterns
-        body, n = _replace_pytagoras_squares(body)
-        if n:
-            fixes.append(f"Replaced {n} complex Pytagoras figure(s) with \\MMArettvinklet macro")
-
-        state.edited_latex_body = body.strip()
+        body, fixes = sanitize_latex_body(body)
+        state.edited_latex_body = body
 
         summary = "; ".join(fixes) if fixes else "No changes needed"
         step.output_summary = summary

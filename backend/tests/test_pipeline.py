@@ -241,3 +241,20 @@ class TestGraphStructure:
         assert set(graph.nodes.keys()) == expected_nodes
         compiled = graph.compile()
         assert compiled is not None
+
+
+class TestTikzSanitize:
+    def test_fixes_quoted_math_in_pic_angle(self):
+        from app.pipeline.agents.tikz_validator import sanitize_latex_body
+
+        body = r"""
+\begin{figure}[H]
+\begin{tikzpicture}
+\pic [angle eccentricity=1.3, "$\theta$", mainOrange] {angle=A--B--C};
+\end{tikzpicture}
+\end{figure}
+"""
+        cleaned, fixes = sanitize_latex_body(body)
+        assert '"$\\theta$"' not in cleaned
+        assert r"$\theta$" in cleaned
+        assert any("quoted math" in f for f in fixes)
