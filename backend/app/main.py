@@ -523,7 +523,19 @@ def _run_job(job_id: str, request: GenerationRequest) -> None:
 
     try:
         _jobs[job_id].status = PipelineStatus.RUNNING
-        result = run_pipeline(request)
+
+        def _on_progress(s: PipelineState) -> None:
+            existing = _jobs.get(job_id)
+            if (
+                existing
+                and existing.status == PipelineStatus.FAILED
+                and existing.error_message == _ABORT_MESSAGE
+            ):
+                return  # don't resurrect an aborted job
+            s.job_id = job_id
+            _jobs[job_id] = s
+
+        result = run_pipeline(request, job_id=job_id, on_progress=_on_progress)
         existing = _jobs.get(job_id)
         if (
             existing
@@ -532,6 +544,7 @@ def _run_job(job_id: str, request: GenerationRequest) -> None:
         ):
             logger.info("job_aborted_skipping_overwrite", job_id=job_id)
             return
+        result.job_id = job_id
         _jobs[job_id] = result
         persist_terminal_job(result)
     except Exception as e:

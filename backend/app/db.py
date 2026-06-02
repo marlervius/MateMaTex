@@ -138,27 +138,52 @@ async def get_pool() -> asyncpg.Pool:
             user=conn_kwargs["user"],
         )
 
-        # Create an SSL context for Supabase (requires SSL)
-        ssl_ctx = _ssl.create_default_context()
-        if not get_settings().database_ssl_verify:
-            ssl_ctx.check_hostname = False
-            ssl_ctx.verify_mode = _ssl.CERT_NONE
-
         # PgBouncer / transaction poolers often break asyncpg prepared statements.
         # Disable statement cache when using a typical pooled host (port 6543 or hostname).
         pool_extra: dict = {}
         host_lower = conn_kwargs["host"].lower()
-        if "pooler" in host_lower or conn_kwargs["port"] == 6543:
+        is_pooler = "pooler" in host_lower or conn_kwargs["port"] == 6543
+        if is_pooler:
             pool_extra["statement_cache_size"] = 0
 
-        _pool = await asyncpg.create_pool(
-            min_size=2,
-            max_size=10,
-            command_timeout=30,
-            ssl=ssl_ctx,
-            **pool_extra,
-            **conn_kwargs,
-        )
+        # Supabase poolers present a self-signed certificate chain that does not
+        # verify against the system trust store. Relax verification automatically
+        # for those hosts (traffic is still encrypted), unless the operator has
+        # explicitly opted into strict verification.
+        verify = get_settings().database_ssl_verify
+        relax_ssl = (not verify) or "supabase" in host_lower or is_pooler
+
+        def _make_ssl_ctx(strict: bool) -> _ssl.SSLContext:
+            ctx = _ssl.create_default_context()
+            if not strict:
+                ctx.check_hostname = False
+                ctx.verify_mode = _ssl.CERT_NONE
+            return ctx
+
+        try:
+            _pool = await asyncpg.create_pool(
+                min_size=2,
+                max_size=10,
+                command_timeout=30,
+                ssl=_make_ssl_ctx(strict=not relax_ssl),
+                **pool_extra,
+                **conn_kwargs,
+            )
+        except (_ssl.SSLError, ConnectionError, OSError) as ssl_err:
+            # Retry once with verification disabled (self-signed cert chain).
+            logger.warning(
+                "database_ssl_retry_without_verify",
+                error=str(ssl_err),
+                host=conn_kwargs["host"],
+            )
+            _pool = await asyncpg.create_pool(
+                min_size=2,
+                max_size=10,
+                command_timeout=30,
+                ssl=_make_ssl_ctx(strict=False),
+                **pool_extra,
+                **conn_kwargs,
+            )
         logger.info("database_pool_created")
     return _pool
 

@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Literal
+from typing import Callable, Literal
 
 import structlog
 from langgraph.graph import END, StateGraph
@@ -354,12 +354,21 @@ def create_pipeline() -> StateGraph:
 # Convenience runner
 # ---------------------------------------------------------------------------
 
-def run_pipeline(request: GenerationRequest) -> PipelineState:
+def run_pipeline(
+    request: GenerationRequest,
+    job_id: str | None = None,
+    on_progress: "Callable[[PipelineState], None] | None" = None,
+) -> PipelineState:
     """
     Run the full pipeline synchronously.
 
     Args:
         request: The generation request from the user.
+        job_id: Optional fixed job id so the result matches the id handed to
+            the client by POST /generate (otherwise progress/stream/result use
+            mismatched ids and the UI never updates).
+        on_progress: Optional callback invoked with the latest PipelineState
+            after each pipeline node, enabling live SSE progress.
 
     Returns:
         Final PipelineState with all outputs and observability data.
@@ -369,6 +378,7 @@ def run_pipeline(request: GenerationRequest) -> PipelineState:
         grade=request.grade,
         topic=request.topic,
         material_type=request.material_type,
+        job_id=job_id,
     )
 
     # Build initial state
@@ -376,8 +386,10 @@ def run_pipeline(request: GenerationRequest) -> PipelineState:
         request=request,
         status=PipelineStatus.RUNNING,
     )
+    if job_id:
+        state.job_id = job_id
 
-    # Exact cache hit — return prior result with new job id
+    # Exact cache hit — return prior result with the active job id
     try:
         from app.cache import get_cache
 
@@ -397,6 +409,8 @@ def run_pipeline(request: GenerationRequest) -> PipelineState:
                 else PipelineStatus.COMPLETED
             )
             logger.info("pipeline_cache_hit", job_id=restored.job_id)
+            if on_progress:
+                on_progress(restored)
             return restored
     except Exception as e:
         logger.warning("pipeline_cache_restore_failed", error=str(e))
@@ -405,18 +419,25 @@ def run_pipeline(request: GenerationRequest) -> PipelineState:
     graph = create_pipeline()
     compiled = graph.compile()
 
-    # Run
+    # Run, streaming intermediate state so the SSE endpoint sees live progress.
+    final_state = state
     try:
-        final_state = compiled.invoke(state)
-
-        # LangGraph returns a dict — reconstruct PipelineState
-        if isinstance(final_state, dict):
-            final_state = PipelineState(**final_state)
+        for chunk in compiled.stream(state, stream_mode="values"):
+            if isinstance(chunk, dict):
+                chunk = PipelineState(**chunk)
+            if job_id:
+                chunk.job_id = job_id
+            final_state = chunk
+            if on_progress:
+                try:
+                    on_progress(chunk)
+                except Exception as cb_err:
+                    logger.warning("pipeline_progress_callback_failed", error=str(cb_err))
 
         return final_state
 
     except Exception as e:
-        state.status = PipelineStatus.FAILED
-        state.error_message = str(e)
-        logger.error("pipeline_failed", error=str(e), job_id=state.job_id)
-        return state
+        final_state.status = PipelineStatus.FAILED
+        final_state.error_message = str(e)
+        logger.error("pipeline_failed", error=str(e), job_id=final_state.job_id)
+        return final_state
