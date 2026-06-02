@@ -52,6 +52,7 @@ export function mapApiResultToGenerationResult(
     fromCache: Boolean(raw.from_cache),
     differentiatedBasic: String(raw.differentiated_basic ?? ""),
     differentiatedAdvanced: String(raw.differentiated_advanced ?? ""),
+    warningReason: String(raw.warning_reason ?? ""),
     steps,
     mathVerification: {
       claimsChecked: Number(mv.claims_checked ?? 0),
@@ -105,6 +106,24 @@ export function categorizeError(
   }
   if (errorMessage) return "model";
   return "unknown";
+}
+
+/** Human-readable explanation for a completed_with_warnings result. */
+export function warningReasonLabel(reason: string): string {
+  const parts = (reason || "").split(",").map((r) => r.trim()).filter(Boolean);
+  const hasMath = parts.includes("math");
+  const hasFallback = parts.includes("fallback");
+
+  if (hasMath && hasFallback) {
+    return "Noen figurer ble forenklet, og matematikken bør dobbeltsjekkes før bruk.";
+  }
+  if (hasFallback) {
+    return "Avanserte figurer (f.eks. TikZ) ble fjernet for å få dokumentet til å kompilere. Tekst og oppgaver er beholdt.";
+  }
+  if (hasMath) {
+    return "Noen utregninger kunne ikke verifiseres automatisk — kontroller matematikken før du deler.";
+  }
+  return "Materialet bør gjennomgås før det deles med elever.";
 }
 
 export function errorCategoryLabel(cat: ErrorCategory): string {

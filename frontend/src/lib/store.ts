@@ -60,6 +60,7 @@ export interface GenerationResult {
   fromCache: boolean;
   differentiatedBasic: string;
   differentiatedAdvanced: string;
+  warningReason: string;
   steps: AgentStep[];
   mathVerification: {
     claimsChecked: number;
@@ -190,6 +191,7 @@ export const useAppStore = create<AppStore>((set) => ({
         pdfUrl: "",
         pdfBase64: "",
         usedLatexFallback: false,
+        warningReason: "",
         fromCache: false,
         differentiatedBasic: "",
         differentiatedAdvanced: "",

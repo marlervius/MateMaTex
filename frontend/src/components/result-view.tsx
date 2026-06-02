@@ -37,7 +37,11 @@ import {
   isJobFavorite,
   updateHistoryFavorite,
 } from "@/lib/generation-history";
-import { errorCategoryLabel, isSuccessfulStatus } from "@/lib/map-api-result";
+import {
+  errorCategoryLabel,
+  isSuccessfulStatus,
+  warningReasonLabel,
+} from "@/lib/map-api-result";
 
 type Tab = "document" | "editor" | "differentiation";
 
@@ -272,6 +276,11 @@ export function ResultView() {
             {!isSuccess && (
               <p className="text-xs text-text-muted mt-1">
                 Feilkategori: {errorCategoryLabel(result.errorCategory || "unknown")}
+              </p>
+            )}
+            {isSuccess && hasWarnings && (
+              <p className="text-xs text-accent-orange mt-1">
+                {warningReasonLabel(result.warningReason)}
               </p>
             )}
           </div>

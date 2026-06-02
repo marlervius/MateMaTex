@@ -346,6 +346,7 @@ async def get_result(job_id: str, user_id: str = Depends(get_current_user)):
         "from_cache": state.from_cache,
         "differentiated_basic": state.differentiated_basic,
         "differentiated_advanced": state.differentiated_advanced,
+        "warning_reason": state.warning_reason,
         "math_verification": state.math_verification.model_dump(),
         "latex_compilation": state.latex_compilation.model_dump(),
         "steps": [s.model_dump() for s in state.steps],

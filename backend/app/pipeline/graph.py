@@ -53,6 +53,24 @@ logger = structlog.get_logger()
 # Routing functions (conditional edges)
 # ---------------------------------------------------------------------------
 
+def _over_time_budget(state: PipelineState) -> bool:
+    """True when the job has used more than its wall-clock budget."""
+    try:
+        budget = get_config().pipeline_max_seconds
+    except Exception:
+        return False
+    elapsed = (datetime.now() - state.created_at).total_seconds()
+    if elapsed > budget:
+        logger.warning(
+            "pipeline_time_budget_exceeded",
+            job_id=state.job_id,
+            elapsed=round(elapsed, 1),
+            budget=budget,
+        )
+        return True
+    return False
+
+
 def _math_errors_worth_author_retry(state: PipelineState) -> bool:
     """Skip author retry when SymPy mostly could not parse (false positives)."""
     mv = state.math_verification
@@ -94,6 +112,7 @@ def should_retry_math(
         not state.math_verification.all_correct
         and state.math_verification_attempts < max_retries
         and _math_errors_worth_author_retry(state)
+        and not _over_time_budget(state)
     ):
         logger.info(
             "math_retry_decision",
@@ -133,7 +152,15 @@ def should_retry_latex(state: PipelineState) -> Literal["latex_fixer", "latex_fa
 
     if state.latex_compilation.success:
         return "finalize"
-        
+
+    if _over_time_budget(state):
+        logger.warning(
+            "latex_retry_decision",
+            decision="fallback",
+            msg="Time budget exceeded. Using fallback document.",
+        )
+        return "latex_fallback"
+
     if state.latex_fix_attempts < max_retries:
         logger.info(
             "latex_retry_decision",
@@ -238,9 +265,17 @@ def finalize(state: PipelineState) -> PipelineState:
         state.math_verification.claims_incorrect > 0
         or state.math_verification.claims_unparseable > 0
     )
+    reasons: list[str] = []
     if has_math_issues:
+        reasons.append("math")
+    if state.used_latex_fallback:
+        reasons.append("fallback")
+
+    if reasons:
+        state.warning_reason = ",".join(reasons)
         state.status = PipelineStatus.COMPLETED_WITH_WARNINGS
     else:
+        state.warning_reason = ""
         state.status = PipelineStatus.COMPLETED
 
     try:

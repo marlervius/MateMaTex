@@ -175,3 +175,7 @@ class PipelineState(BaseModel):
     differentiated_basic: str = ""
     differentiated_advanced: str = ""
     error_message: str = ""
+    warning_reason: str = Field(
+        default="",
+        description="Why status is completed_with_warnings: 'math' | 'fallback' | 'math,fallback'",
+    )

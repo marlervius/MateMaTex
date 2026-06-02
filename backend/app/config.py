@@ -65,8 +65,17 @@ class Settings(BaseSettings):
         description="If True, skip the LLM editor pass for all material types",
     )
     skip_editor_material_types: str = Field(
-        default="arbeidsark,prøve",
+        default="arbeidsark,prøve,differensiert",
         description="Comma-separated material types that skip the LLM editor (faster)",
+    )
+    pipeline_max_seconds: int = Field(
+        default=240,
+        ge=30,
+        le=3600,
+        description=(
+            "Soft wall-clock budget for a job. When exceeded, the pipeline stops "
+            "retrying and delivers the best document it has (fallback if needed)."
+        ),
     )
     verification_fail_open: bool = Field(
         default=False,
@@ -145,6 +154,7 @@ class AppConfig:
         self.max_latex_chars = s.max_latex_chars
         self.skip_editor = s.skip_editor
         self.skip_editor_material_types = s.skip_editor_material_types
+        self.pipeline_max_seconds = s.pipeline_max_seconds
         self.llm = LLMProviderConfig()
 
 

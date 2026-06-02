@@ -154,6 +154,20 @@ class TestFinalizeStatus:
         )
         result = finalize(state)
         assert result.status == PipelineStatus.COMPLETED_WITH_WARNINGS
+        assert "math" in result.warning_reason
+
+    def test_warning_reason_fallback(self):
+        state = PipelineState(
+            request=GenerationRequest(grade="8. trinn", topic="Algebra"),
+            raw_latex_body="\\title{T}\\maketitle",
+            used_latex_fallback=True,
+            math_verification=VerificationResult(
+                claims_checked=3, claims_correct=3, all_correct=True
+            ),
+        )
+        result = finalize(state)
+        assert result.status == PipelineStatus.COMPLETED_WITH_WARNINGS
+        assert "fallback" in result.warning_reason
 
     def test_completed_when_math_clean(self):
         state = PipelineState(
@@ -167,6 +181,36 @@ class TestFinalizeStatus:
         )
         result = finalize(state)
         assert result.status == PipelineStatus.COMPLETED
+        assert result.warning_reason == ""
+
+
+class TestRuleBasedLatexFix:
+    """The fixer should repair trivial errors without calling an LLM."""
+
+    def test_closes_unbalanced_braces(self):
+        from app.pipeline.agents.latex_fixer import _try_rule_based_fix
+
+        doc = "\\documentclass{article}\\begin{document}\\textbf{Hei\\end{document}"
+        fixed = _try_rule_based_fix(doc)
+        assert fixed is not None
+        assert fixed.count("{") == fixed.count("}")
+
+    def test_closes_unclosed_environment(self):
+        from app.pipeline.agents.latex_fixer import _try_rule_based_fix
+
+        doc = (
+            "\\documentclass{article}\\begin{document}"
+            "\\begin{itemize}\\item A\\end{document}"
+        )
+        fixed = _try_rule_based_fix(doc)
+        assert fixed is not None
+        assert "\\end{itemize}" in fixed
+
+    def test_no_change_returns_none(self):
+        from app.pipeline.agents.latex_fixer import _try_rule_based_fix
+
+        doc = "\\documentclass{article}\\begin{document}Hei\\end{document}"
+        assert _try_rule_based_fix(doc) is None
 
 
 class TestGraphStructure:
