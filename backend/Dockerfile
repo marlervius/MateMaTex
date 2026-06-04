@@ -14,10 +14,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     texlive-science \
     texlive-pictures \
     texlive-lang-european \
+    texlive-luatex \
+    texlive-xetex \
+    fonts-lato \
     latexmk \
     cm-super \
     lmodern \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && apt-get clean && rm -rf /var/lib/apt/lists/* \
+    && luaotfload-tool --update || true
 
 # Stage 2: Python dependencies (cached layer)
 FROM texlive AS dependencies

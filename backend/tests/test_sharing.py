@@ -5,20 +5,20 @@ Tests for sharing — access control, password, expiry.
 import pytest
 from datetime import datetime, timedelta
 
+from app.stores import sharing_store as share_store
 from app.sharing.router import (
     ShareRequest,
     _check_link_valid,
     _check_password,
     _hash_password,
-    _shared_links,
 )
 
 
 @pytest.fixture(autouse=True)
 def clean_stores():
-    _shared_links.clear()
+    share_store.all_links().clear()
     yield
-    _shared_links.clear()
+    share_store.all_links().clear()
 
 
 class TestPasswordHashing:

@@ -7,18 +7,30 @@ output_dir/job_snapshots/.
 
 from __future__ import annotations
 
+import re
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import structlog
 
 from app.config import get_settings
 from app.models.state import PipelineState, PipelineStatus
+from app.stores.fs_utils import atomic_write_text
 
 logger = structlog.get_logger()
 
 # Central in-memory job registry (single-worker deployments)
 _memory_jobs: dict[str, PipelineState] = {}
 _shared_resources: dict[str, dict] = {}
+
+# Job IDs are uuid4().hex (32 hex chars). Anything else is rejected before any
+# filesystem access to prevent path traversal via crafted IDs (e.g. "../../x").
+_JOB_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+
+
+def is_safe_job_id(job_id: str) -> bool:
+    """Reject IDs containing path separators or traversal sequences."""
+    return bool(job_id) and bool(_JOB_ID_RE.match(job_id))
 
 
 def get_job_memory() -> dict[str, PipelineState]:
@@ -38,13 +50,16 @@ def persist_terminal_job(state: PipelineState) -> None:
         return
     try:
         path = _snapshots_dir() / f"{state.job_id}.json"
-        path.write_text(state.model_dump_json(indent=2), encoding="utf-8")
+        atomic_write_text(path, state.model_dump_json(indent=2))
         logger.debug("job_persisted", job_id=state.job_id, status=state.status.value)
     except OSError as e:
         logger.warning("job_persist_failed", job_id=state.job_id, error=str(e))
 
 
 def load_job_from_disk(job_id: str) -> PipelineState | None:
+    if not is_safe_job_id(job_id):
+        logger.warning("job_load_rejected_unsafe_id", job_id=job_id)
+        return None
     path = _snapshots_dir() / f"{job_id}.json"
     if not path.is_file():
         return None
@@ -89,8 +104,6 @@ def store_shared_resource(resource_id: str, content: dict) -> None:
 
 def cleanup_old_snapshots(max_age_days: int = 7) -> int:
     """Remove job snapshot files older than max_age_days."""
-    from datetime import datetime, timedelta
-
     cutoff = datetime.now() - timedelta(days=max_age_days)
     removed = 0
     for path in _snapshots_dir().glob("*.json"):
@@ -104,3 +117,33 @@ def cleanup_old_snapshots(max_age_days: int = 7) -> int:
     if removed:
         logger.info("job_snapshots_cleaned", removed=removed)
     return removed
+
+
+def evict_terminal_jobs(
+    memory: dict[str, PipelineState] | None = None,
+    *,
+    max_age_hours: int = 24,
+    max_count: int = 200,
+) -> int:
+    """Drop completed/failed jobs from memory to prevent unbounded growth."""
+    store = memory if memory is not None else _memory_jobs
+    cutoff = datetime.now() - timedelta(hours=max_age_hours)
+    evicted = 0
+
+    terminal = [
+        (jid, st)
+        for jid, st in store.items()
+        if st.status in (PipelineStatus.COMPLETED, PipelineStatus.FAILED)
+    ]
+    terminal.sort(key=lambda x: x[1].created_at)
+
+    for jid, st in terminal:
+        too_old = st.created_at < cutoff
+        over_cap = len(store) > max_count
+        if too_old or over_cap:
+            store.pop(jid, None)
+            evicted += 1
+
+    if evicted:
+        logger.info("jobs_evicted_from_memory", count=evicted)
+    return evicted

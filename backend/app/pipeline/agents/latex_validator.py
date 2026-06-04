@@ -11,7 +11,7 @@ from pathlib import Path
 import structlog
 
 from app.config import get_config, get_settings
-from app.latex.preamble import wrap_with_preamble
+from app.latex.preamble import wrap_with_style
 from app.models.state import AgentRole, AgentStep, PipelineState
 from app.verification.latex_checker import LatexChecker
 
@@ -50,7 +50,7 @@ def run_latex_validator(state: PipelineState) -> PipelineState:
             # On retry, use the fixed full document directly
             full_doc = state.full_document
         else:
-            full_doc = wrap_with_preamble(body)
+            full_doc = wrap_with_style(body, state.request.pdf_style)
 
         state.full_document = full_doc
 

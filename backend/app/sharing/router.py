@@ -19,12 +19,22 @@ from pydantic import BaseModel, Field
 from app.auth import get_current_user
 from app.job_store import get_resource_snapshot, store_shared_resource
 from app.rate_limit import limiter
+from app.stores import sharing_store as share_store
 
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/sharing", tags=["sharing"])
 
-_shared_links: dict[str, dict] = {}
+
+def _get_link(token: str) -> dict:
+    link = share_store.get_link(token)
+    if not link:
+        raise HTTPException(404, "Shared link not found")
+    return link
+
+
+def _persist_link(token: str, link: dict) -> None:
+    share_store.save_link(token, link)
 
 
 class ShareRequest(BaseModel):
@@ -66,6 +76,10 @@ class CloneResponse(BaseModel):
 
 class VerifyPasswordRequest(BaseModel):
     password: str
+
+
+class CloneRequest(BaseModel):
+    password: str | None = Field(None, description="Required when the link is password-protected")
 
 
 def _hash_password(password: str) -> str:
@@ -127,7 +141,7 @@ async def create_share(
         "allow_clone": req.allow_clone,
         "created_at": datetime.now().isoformat(),
     }
-    _shared_links[token] = link_data
+    _persist_link(token, link_data)
 
     logger.info("share_created", token=token[:8], resource_type=req.resource_type)
     return ShareResponse(
@@ -141,15 +155,14 @@ async def create_share(
 @router.get("/{token}", response_model=SharedResourceResponse)
 @limiter.limit("60/minute")
 async def get_shared(request: Request, token: str) -> SharedResourceResponse:
-    link = _shared_links.get(token)
-    if not link:
-        raise HTTPException(404, "Shared link not found")
+    link = _get_link(token)
     valid, error = _check_link_valid(link)
     if not valid:
         raise HTTPException(410, error)
     if link["password_hash"]:
         raise HTTPException(401, "Password required — use POST /sharing/{token}/access")
     link["view_count"] += 1
+    _persist_link(token, link)
     return SharedResourceResponse(
         success=True,
         resource_type=link["resource_type"],
@@ -167,15 +180,14 @@ async def access_shared(
     token: str,
     req: VerifyPasswordRequest,
 ) -> SharedResourceResponse:
-    link = _shared_links.get(token)
-    if not link:
-        raise HTTPException(404, "Shared link not found")
+    link = _get_link(token)
     valid, error = _check_link_valid(link)
     if not valid:
         raise HTTPException(410, error)
     if link["password_hash"] and not _check_password(req.password, link["password_hash"]):
         raise HTTPException(403, "Incorrect password")
     link["view_count"] += 1
+    _persist_link(token, link)
     return SharedResourceResponse(
         success=True,
         resource_type=link["resource_type"],
@@ -187,15 +199,24 @@ async def access_shared(
 
 
 @router.post("/{token}/clone", response_model=CloneResponse)
-async def clone_shared(token: str, user_id: str = Depends(get_current_user)) -> CloneResponse:
-    link = _shared_links.get(token)
-    if not link:
-        raise HTTPException(404, "Shared link not found")
+async def clone_shared(
+    token: str,
+    req: CloneRequest | None = None,
+    user_id: str = Depends(get_current_user),
+) -> CloneResponse:
+    link = _get_link(token)
     if not link.get("allow_clone", True):
         raise HTTPException(403, "Cloning not allowed")
     valid, error = _check_link_valid(link)
     if not valid:
         raise HTTPException(410, error)
+    # Password-protected links must be unlocked to clone, mirroring read access.
+    if link["password_hash"]:
+        provided = req.password if req else None
+        if not provided:
+            raise HTTPException(401, "Password required to clone this resource")
+        if not _check_password(provided, link["password_hash"]):
+            raise HTTPException(403, "Incorrect password")
     new_id = uuid.uuid4().hex
     original = get_resource_snapshot(link["resource_type"], link["resource_id"]) or {}
     store_shared_resource(new_id, {**original, "id": new_id, "cloned_from": link["resource_id"]})

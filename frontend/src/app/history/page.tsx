@@ -1,13 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Clock, Sparkles, Star, Trash2, Copy } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Clock, Sparkles, Star, Trash2, Copy, FolderOpen } from "lucide-react";
 import { listHistory, removeHistoryEntry, updateHistoryFavorite, type HistoryEntry } from "@/lib/generation-history";
 import { useAppStore } from "@/lib/store";
+import { getResult } from "@/lib/api";
+import { mapApiResultToGenerationResult } from "@/lib/map-api-result";
 
 export default function HistoryPage() {
+  const router = useRouter();
   const setRequest = useAppStore((s) => s.setRequest);
+  const setResult = useAppStore((s) => s.setResult);
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
+  const [openingId, setOpeningId] = useState<string | null>(null);
+  const [openError, setOpenError] = useState("");
 
   useEffect(() => {
     setEntries(listHistory());
@@ -15,14 +22,37 @@ export default function HistoryPage() {
 
   const refresh = () => setEntries(listHistory());
 
+  const openJob = async (entry: HistoryEntry) => {
+    setOpeningId(entry.jobId);
+    setOpenError("");
+    try {
+      const raw = await getResult(entry.jobId);
+      const mapped = mapApiResultToGenerationResult(raw, entry.request);
+      setRequest({ ...entry.request });
+      setResult(mapped);
+      router.push("/");
+    } catch (e: unknown) {
+      setOpenError(
+        e instanceof Error ? e.message : "Kunne ikke åpne jobben — den kan være utløpt."
+      );
+    } finally {
+      setOpeningId(null);
+    }
+  };
+
   if (entries.length > 0) {
     return (
       <div className="max-w-content mx-auto">
         <div className="mb-6">
           <h1 className="font-display text-3xl mb-1">Historikk</h1>
           <p className="text-text-secondary text-sm">
-            Gjenbruk tidligere innstillinger, merk favoritter, og rydd opp ved behov.
+            Gjenbruk tidligere innstillinger, åpne resultater, merk favoritter.
           </p>
+          {openError && (
+            <p className="text-sm text-accent-red mt-2" role="alert">
+              {openError}
+            </p>
+          )}
         </div>
         <div className="space-y-3">
           {entries.map((entry) => (
@@ -30,19 +60,23 @@ export default function HistoryPage() {
               <div>
                 <h3 className="text-sm font-medium">{entry.topic}</h3>
                 <p className="text-xs text-text-secondary mt-1">
-                  {entry.grade} · {entry.materialType} · {new Date(entry.createdAt).toLocaleString("nb-NO")}
+                  {entry.grade} · {entry.materialType} ·{" "}
+                  {new Date(entry.createdAt).toLocaleString("nb-NO")}
                 </p>
                 {entry.request.competencyGoals.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-2">
                     {entry.request.competencyGoals.slice(0, 3).map((goal) => (
-                      <span key={goal} className="badge text-[10px] !py-0.5 bg-accent-blue/10 text-accent-blue">
+                      <span
+                        key={goal}
+                        className="badge text-[10px] !py-0.5 bg-accent-blue/10 text-accent-blue"
+                      >
                         {goal}
                       </span>
                     ))}
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 flex-shrink-0">
                 <button
                   className="btn-ghost !p-2"
                   title="Merk som favoritt"
@@ -53,17 +87,29 @@ export default function HistoryPage() {
                 >
                   <Star
                     size={16}
-                    className={entry.favorite ? "fill-accent-orange text-accent-orange" : "text-text-muted"}
+                    className={
+                      entry.favorite ? "fill-accent-orange text-accent-orange" : "text-text-muted"
+                    }
                   />
                 </button>
-                <a
-                  href="/"
+                <button
                   className="btn-secondary"
-                  onClick={() => setRequest({ ...entry.request })}
+                  disabled={openingId === entry.jobId}
+                  onClick={() => openJob(entry)}
+                >
+                  <FolderOpen size={14} />
+                  {openingId === entry.jobId ? "Åpner…" : "Åpne"}
+                </button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => {
+                    setRequest({ ...entry.request });
+                    router.push("/");
+                  }}
                 >
                   <Copy size={14} />
                   Lag lignende
-                </a>
+                </button>
                 <button
                   className="btn-ghost !p-2 text-accent-red"
                   title="Slett fra historikk"

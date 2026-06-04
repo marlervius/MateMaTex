@@ -4,10 +4,20 @@
 
 import { create } from "zustand";
 import type { ErrorCategory } from "@/lib/map-api-result";
+import { categorizeError } from "@/lib/map-api-result";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+export type PdfTheme = "default" | "calm" | "playful" | "highcontrast";
+
+export interface PdfStyle {
+  theme: PdfTheme;
+  accessible: boolean;
+  dyslexia: boolean;
+  highContrast: boolean;
+}
+
 export interface GenerationRequest {
   grade: string;
   topic: string;
@@ -22,6 +32,7 @@ export interface GenerationRequest {
   includeGraphs: boolean;
   competencyGoals: string[];
   extraInstructions: string;
+  pdfStyle: PdfStyle;
 }
 
 export interface AgentStep {
@@ -45,6 +56,23 @@ export interface MathClaimDetail {
   actualResult: string;
 }
 
+export interface LayoutIssue {
+  kind: string;
+  severity: "info" | "warning" | "error";
+  detail: string;
+  overflowPt: number;
+}
+
+export interface LayoutReport {
+  score: number;
+  issues: LayoutIssue[];
+  overfullCount: number;
+  underfullCount: number;
+  maxOverflowPt: number;
+  undefinedReferences: number;
+  summary: string;
+}
+
 export interface GenerationResult {
   jobId: string;
   status:
@@ -61,6 +89,7 @@ export interface GenerationResult {
   differentiatedBasic: string;
   differentiatedAdvanced: string;
   warningReason: string;
+  layoutReport?: LayoutReport;
   steps: AgentStep[];
   mathVerification: {
     claimsChecked: number;
@@ -133,6 +162,12 @@ const DEFAULT_REQUEST: GenerationRequest = {
   includeGraphs: true,
   competencyGoals: [],
   extraInstructions: "",
+  pdfStyle: {
+    theme: "default",
+    accessible: false,
+    dyslexia: false,
+    highContrast: false,
+  },
 };
 
 const emptyMathVerification = (): GenerationResult["mathVerification"] => ({
@@ -171,7 +206,13 @@ export const useAppStore = create<AppStore>((set) => ({
       result: null,
     }),
   setJobId: (jobId: string) => set({ currentJobId: jobId }),
-  cancelGeneration: () => set({ isGenerating: false, currentJobId: null }),
+  cancelGeneration: () =>
+    set({
+      isGenerating: false,
+      currentJobId: null,
+      currentAgent: null,
+      steps: [],
+    }),
   addStep: (step) =>
     set((state) => ({ steps: [...state.steps, step] })),
   setCurrentAgent: (agent) => set({ currentAgent: agent }),
@@ -200,9 +241,11 @@ export const useAppStore = create<AppStore>((set) => ({
         latexCompiled: false,
         totalDuration: 0,
         error,
-        errorCategory: error.toLowerCase().includes("avbrutt")
-          ? "aborted"
-          : "model",
+        errorCategory: categorizeError(
+          error,
+          false,
+          !error.toLowerCase().includes("avbrutt")
+        ),
       },
       isGenerating: false,
       lastFailedRequest:

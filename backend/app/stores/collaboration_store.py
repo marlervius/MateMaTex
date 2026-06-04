@@ -9,6 +9,7 @@ from typing import Any
 import structlog
 
 from app.config import get_settings
+from app.stores.fs_utils import atomic_write_json
 
 logger = structlog.get_logger()
 
@@ -36,8 +37,7 @@ def _load_json(name: str, default: Any) -> Any:
 
 
 def _save_json(name: str, data: Any) -> None:
-    path = _base_dir() / f"{name}.json"
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_json(_base_dir() / f"{name}.json", data)
 
 
 def _ensure_loaded() -> None:

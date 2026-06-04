@@ -95,6 +95,7 @@ export function PipelineProgress() {
   const steps = useAppStore((s) => s.steps);
   const currentAgent = useAppStore((s) => s.currentAgent);
   const currentJobId = useAppStore((s) => s.currentJobId);
+  const request = useAppStore((s) => s.request);
   const setError = useAppStore((s) => s.setError);
   const cancelGeneration = useAppStore((s) => s.cancelGeneration);
   const completedAgents = new Set(steps.map((s) => s.agent));
@@ -105,7 +106,7 @@ export function PipelineProgress() {
     cancelGeneration();
     try {
       await abortGeneration(currentJobId);
-      setError("Genereringen ble avbrutt av bruker.", null);
+      setError("Genereringen ble avbrutt av bruker.", request);
     } catch (err: unknown) {
       console.error("Failed to abort:", err);
     }

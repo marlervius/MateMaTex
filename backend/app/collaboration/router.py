@@ -104,12 +104,20 @@ school_router = APIRouter(prefix="/school", tags=["collaboration"])
 async def list_school_exercises(
     topic: str | None = None,
     grade_level: str | None = None,
+    school: str | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user_id: str = Depends(get_current_user),
 ) -> SchoolListResponse:
-    """List all exercises published to the school's shared bank."""
+    """List exercises published to the school's shared bank."""
     results = list(collab.school_exercises().values())
+
+    scope = school or (user_id if user_id not in ("anonymous", "api-user") else "")
+    if scope:
+        results = [
+            r for r in results
+            if r.get("school_id") == scope or r.get("published_by") == scope
+        ]
 
     if topic:
         results = [r for r in results if topic.lower() in r.get("topic", "").lower()]
@@ -148,6 +156,7 @@ async def publish_to_school(exercise_id: str, req: PublishRequest, user_id: str 
         "difficulty": exercise.difficulty,
         "latex_content": exercise.latex_content,
         "published_by": req.school or user_id,
+        "school_id": req.school or user_id,
         "published_at": datetime.now().isoformat(),
     }
     collab.school_exercises()[exercise_id] = school_entry
@@ -204,6 +213,14 @@ async def list_comments(generation_id: str, user_id: str = Depends(get_current_u
 )
 async def add_comment(generation_id: str, req: CommentCreate, user_id: str = Depends(get_current_user)) -> CommentOut:
     """Add a comment (optionally threaded) to a generation."""
+    if req.parent_id:
+        parent = next(
+            (c for c in collab.all_comments(generation_id) if c.get("id") == req.parent_id),
+            None,
+        )
+        if not parent:
+            raise HTTPException(400, "parent_id not found for this generation")
+
     display_name = "Lærer" if user_id in ("anonymous", "api-user") else f"Bruker {user_id[:8]}"
     comment = {
         "id": uuid.uuid4().hex[:12],

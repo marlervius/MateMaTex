@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, Sparkles, LayoutTemplate } from "lucide-react";
 import { useAppStore } from "@/lib/store";
+import type { PdfTheme } from "@/lib/store";
 import {
   startGeneration,
   streamProgress,
@@ -60,6 +61,13 @@ const LANGUAGE_LEVELS = [
   { value: "standard", label: "Standard norsk" },
   { value: "b2", label: "Forenklet (B2)" },
   { value: "b1", label: "Enklere (B1)" },
+];
+
+const THEME_OPTIONS: { value: PdfTheme; label: string; icon: string }[] = [
+  { value: "default", label: "Klassisk", icon: "🔵" },
+  { value: "calm", label: "Rolig", icon: "🌿" },
+  { value: "playful", label: "Leken", icon: "🎨" },
+  { value: "highcontrast", label: "Kontrast", icon: "⬛" },
 ];
 
 const slideVariants = {
@@ -189,6 +197,8 @@ export function GenerationWizard() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    const tag = (e.target as HTMLElement)?.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
     if (e.key === "ArrowRight" || e.key === "ArrowDown") {
       e.preventDefault();
       goNext();
@@ -259,6 +269,12 @@ export function GenerationWizard() {
         include_graphs: request.includeGraphs,
         competency_goals: request.competencyGoals,
         extra_instructions: request.extraInstructions,
+        pdf_style: {
+          theme: request.pdfStyle.theme,
+          accessible: request.pdfStyle.accessible,
+          dyslexia: request.pdfStyle.dyslexia,
+          high_contrast: request.pdfStyle.highContrast,
+        },
       });
 
       activeJobRef.current = job_id;
@@ -276,8 +292,12 @@ export function GenerationWizard() {
             retries: s.retries,
           }),
         onCurrentAgent: (a) => setCurrentAgent(a),
-        onComplete: async () => {
+        onComplete: async (data) => {
           if (activeJobRef.current !== job_id) return;
+          if (data.status === "failed") {
+            setError(data.error || "Generering feilet", snapshot);
+            return;
+          }
           try {
             const raw = await getResult(job_id);
             if (activeJobRef.current !== job_id) return;
@@ -296,18 +316,18 @@ export function GenerationWizard() {
             }
           } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : "Kunne ikke hente resultat";
-            setError(msg, useAppStore.getState().request);
+            setError(msg, snapshot);
           }
         },
         onError: (err) => {
           if (activeJobRef.current === job_id) {
-            setError(err, useAppStore.getState().request);
+            setError(err, snapshot);
           }
         },
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Noe gikk galt";
-      setError(msg, useAppStore.getState().request);
+      setError(msg, snapshot);
     }
   };
 
@@ -708,6 +728,60 @@ export function GenerationWizard() {
                         rows={2}
                         className="input resize-none"
                       />
+                    </div>
+
+                    <div className="card !p-3 space-y-3">
+                      <label className="text-xs text-text-muted block">
+                        Design & universell utforming
+                      </label>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {THEME_OPTIONS.map((t) => (
+                          <button
+                            key={t.value}
+                            type="button"
+                            onClick={() =>
+                              setRequest({
+                                pdfStyle: { ...request.pdfStyle, theme: t.value },
+                              })
+                            }
+                            className={`rounded-lg border px-2 py-2 text-xs transition-colors ${
+                              request.pdfStyle.theme === t.value
+                                ? "border-accent-blue bg-accent-blue/10 text-text-primary"
+                                : "border-border text-text-secondary hover:text-text-primary"
+                            }`}
+                          >
+                            <span className="mr-1">{t.icon}</span>
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        {[
+                          { key: "dyslexia" as const, label: "Dyslektikervennlig" },
+                          { key: "highContrast" as const, label: "Høy kontrast" },
+                          { key: "accessible" as const, label: "Tagget PDF (UU)" },
+                        ].map(({ key, label }) => (
+                          <label
+                            key={key}
+                            className="flex items-center gap-2 text-sm cursor-pointer text-text-secondary hover:text-text-primary transition-colors"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={request.pdfStyle[key]}
+                              onChange={(e) =>
+                                setRequest({
+                                  pdfStyle: {
+                                    ...request.pdfStyle,
+                                    [key]: e.target.checked,
+                                  },
+                                })
+                              }
+                              className="rounded border-border"
+                            />
+                            {label}
+                          </label>
+                        ))}
+                      </div>
                     </div>
                   </motion.div>
                 )}

@@ -67,7 +67,17 @@ export function ResultView() {
   });
 
   // Differentiation
-  const [diffData, setDiffData] = useState<any>(null);
+  const [diffData, setDiffData] = useState<{
+    success: boolean;
+    basic_latex?: string;
+    standard_latex?: string;
+    advanced_latex?: string;
+    basic_exercise_count?: number;
+    standard_exercise_count?: number;
+    advanced_exercise_count?: number;
+    errors?: string[];
+  } | null>(null);
+  const [diffError, setDiffError] = useState("");
   const [diffLoading, setDiffLoading] = useState(false);
   const [activeLevel, setActiveLevel] = useState<"basic" | "standard" | "advanced">("standard");
 
@@ -95,6 +105,7 @@ export function ResultView() {
   );
 
   useEffect(() => {
+    let cancelled = false;
     let revoke: string | null = null;
     setPdfPreviewError("");
     setPdfPreviewUrl(null);
@@ -111,18 +122,27 @@ export function ResultView() {
     setPdfPreviewLoading(true);
     fetchJobPdfObjectUrl(result.jobId)
       .then((url) => {
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+          return;
+        }
         revoke = url;
         setPdfPreviewUrl(url);
       })
       .catch((err: Error) => {
-        setPdfPreviewError(err.message || "Kunne ikke laste PDF for forhåndsvisning");
+        if (!cancelled) {
+          setPdfPreviewError(err.message || "Kunne ikke laste PDF for forhåndsvisning");
+        }
       })
-      .finally(() => setPdfPreviewLoading(false));
+      .finally(() => {
+        if (!cancelled) setPdfPreviewLoading(false);
+      });
 
     return () => {
+      cancelled = true;
       if (revoke) URL.revokeObjectURL(revoke);
     };
-  }, [result?.jobId, result?.status, result?.latexCompiled]);
+  }, [result?.jobId, result?.status, result?.latexCompiled, result?.fullDocument]);
 
   if (!result) return null;
 
@@ -186,10 +206,17 @@ export function ResultView() {
 
   const handleDifferentiate = async () => {
     setDiffLoading(true);
+    setDiffError("");
     setActiveTab("differentiation");
     try {
       const res = await differentiate(result.fullDocument);
-      if (res.success) setDiffData(res);
+      if (res.success) {
+        setDiffData(res);
+      } else {
+        setDiffError((res.errors || []).join("; ") || "Differensiering feilet");
+      }
+    } catch (e: unknown) {
+      setDiffError(e instanceof Error ? e.message : "Differensiering feilet");
     } finally {
       setDiffLoading(false);
     }
@@ -383,8 +410,47 @@ export function ResultView() {
             </div>
           )}
 
+          {result.layoutReport && result.layoutReport.issues.length > 0 && (
+            <div className="card mb-6 !border-accent-blue/30 bg-accent-blue/5">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold">Layout-kvalitet</h3>
+                <span
+                  className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                    result.layoutReport.score >= 90
+                      ? "bg-accent-green/15 text-accent-green"
+                      : result.layoutReport.score >= 70
+                        ? "bg-accent-orange/15 text-accent-orange"
+                        : "bg-accent-red/15 text-accent-red"
+                  }`}
+                >
+                  {result.layoutReport.score}/100
+                </span>
+              </div>
+              <p className="text-xs text-text-secondary mb-3">
+                {result.layoutReport.summary}
+              </p>
+              <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                {result.layoutReport.issues
+                  .filter((i) => i.severity !== "info")
+                  .slice(0, 12)
+                  .map((i, idx) => (
+                    <div
+                      key={idx}
+                      className="text-xs text-text-secondary rounded-md border border-border/60 px-2 py-1"
+                    >
+                      {i.detail}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
           {/* Tabs */}
-          <div className="flex items-center gap-1 border-b border-border mb-6">
+          <div
+            className="flex items-center gap-1 border-b border-border mb-6"
+            role="tablist"
+            aria-label="Resultatfaner"
+          >
             {([
               { id: "document" as Tab, label: "Dokument" },
               { id: "editor" as Tab, label: "Rediger" },
@@ -392,6 +458,11 @@ export function ResultView() {
             ]).map((tab) => (
               <button
                 key={tab.id}
+                type="button"
+                role="tab"
+                id={`tab-${tab.id}`}
+                aria-selected={activeTab === tab.id}
+                aria-controls={`panel-${tab.id}`}
                 onClick={() => {
                   if (tab.id === "differentiation" && !diffData && !diffLoading) {
                     handleDifferentiate();
@@ -559,10 +630,18 @@ export function ResultView() {
             {activeTab === "differentiation" && (
               <motion.div
                 key="diff"
+                role="tabpanel"
+                id="panel-differentiation"
+                aria-labelledby="tab-differentiation"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
               >
+                {diffError && (
+                  <p className="text-sm text-accent-red mb-3" role="alert">
+                    {diffError}
+                  </p>
+                )}
                 {diffLoading ? (
                   <div className="card text-center py-12">
                     <motion.div
@@ -618,7 +697,7 @@ export function ResultView() {
                               level === "basic" ? diffData.basic_latex
                               : level === "standard" ? diffData.standard_latex
                               : diffData.advanced_latex;
-                            downloadText(c, `oppgaver_${level}.tex`);
+                            if (c) downloadText(c, `oppgaver_${level}.tex`);
                           }}
                           className="btn-secondary text-xs flex-1"
                         >
@@ -743,6 +822,11 @@ export function ResultView() {
                 <Share2 size={14} />
                 {shareLoading ? "Oppretter..." : shareUrl ? "Lenke kopiert" : "Del"}
               </button>
+              {shareError && (
+                <p className="text-xs text-accent-red w-full mt-1" role="alert">
+                  {shareError}
+                </p>
+              )}
 
               <div className="flex-1" />
 

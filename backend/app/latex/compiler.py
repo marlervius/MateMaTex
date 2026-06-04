@@ -24,20 +24,71 @@ _DOUBLE_PASS_TRIGGERS = (
     "\\printindex",
 )
 
+# Recognised engines (in auto-preference order). LuaLaTeX gives the best
+# typography (OpenType fonts + unicode-math); pdfLaTeX is the universal fallback.
+_ENGINE_PREFERENCE = ("lualatex", "xelatex", "pdflatex")
+_VALID_ENGINES = frozenset(_ENGINE_PREFERENCE)
+
+
+def resolve_engine(preferred: str | None = None) -> str:
+    """
+    Decide which LaTeX engine binary to invoke.
+
+    ``preferred`` (or ``settings.latex_engine``) may be a concrete engine name
+    or ``"auto"``. We only ever return an engine that is actually installed; if
+    nothing is found we return ``"pdflatex"`` so the caller still produces a
+    sensible "not found" error rather than silently picking a missing binary.
+    """
+    if preferred is None:
+        try:
+            from app.config import get_settings
+
+            preferred = get_settings().latex_engine
+        except Exception:  # pragma: no cover - config import guard
+            preferred = "auto"
+
+    pref = (preferred or "auto").strip().lower()
+
+    if pref in _VALID_ENGINES:
+        if shutil.which(pref):
+            return pref
+        # Requested engine missing — degrade gracefully to anything available.
+        for eng in _ENGINE_PREFERENCE:
+            if shutil.which(eng):
+                logger.warning("latex_engine_fallback", requested=pref, using=eng)
+                return eng
+        return "pdflatex"
+
+    # "auto" (or anything unrecognised): prefer the richest engine present.
+    for eng in _ENGINE_PREFERENCE:
+        if shutil.which(eng):
+            return eng
+    return "pdflatex"
+
+
+def _engine_binary(engine: str, pdflatex_path: str) -> str:
+    """Map an engine name to the executable, honouring a pdflatex path override."""
+    if engine == "pdflatex" and pdflatex_path and pdflatex_path != "pdflatex":
+        return pdflatex_path
+    return engine
+
 
 def compile_to_pdf_with_log(
     latex_content: str,
     output_path: str | Path | None = None,
     pdflatex_path: str = "pdflatex",
+    engine: str | None = None,
 ) -> tuple[str | None, str]:
     """
     Compile a LaTeX document and return (pdf_path_or_None, log_excerpt).
 
-    The log excerpt is the last portion of the pdflatex .log file, suitable
-    for surfacing to end users on failure. ``compile_to_pdf`` wraps this and
-    discards the log for back-compat.
+    The engine is chosen via :func:`resolve_engine` (LuaLaTeX preferred, with a
+    pdfLaTeX fallback). The log excerpt is the last portion of the engine .log
+    file, suitable for surfacing to end users on failure.
     """
     log_excerpt = ""
+    engine_name = resolve_engine(engine)
+    binary = _engine_binary(engine_name, pdflatex_path)
 
     with tempfile.TemporaryDirectory(prefix="matematex_") as tmpdir:
         tex_path = Path(tmpdir) / "document.tex"
@@ -51,7 +102,7 @@ def compile_to_pdf_with_log(
             try:
                 proc = subprocess.run(
                     [
-                        pdflatex_path,
+                        binary,
                         "-interaction=nonstopmode",
                         # halt on first hard error so we don't loop on a broken doc
                         "-halt-on-error",
@@ -60,8 +111,8 @@ def compile_to_pdf_with_log(
                         str(tex_path),
                     ],
                     capture_output=True,
-                    text=False,  # pdflatex mixes UTF-8 and latin1
-                    timeout=120,
+                    text=False,  # engines mix UTF-8 and latin1 in output
+                    timeout=180,
                     cwd=tmpdir,
                 )
                 last_return_code = proc.returncode
@@ -69,11 +120,11 @@ def compile_to_pdf_with_log(
                     # No point running another pass after a hard failure.
                     break
             except FileNotFoundError as e:
-                logger.error("pdflatex_not_found", path=pdflatex_path, error=str(e))
-                return None, f"pdflatex ikke funnet på '{pdflatex_path}'."
+                logger.error("latex_engine_not_found", engine=binary, error=str(e))
+                return None, f"LaTeX-motor ikke funnet: '{binary}'."
             except subprocess.TimeoutExpired as e:
-                logger.error("pdflatex_timeout", error=str(e))
-                return None, "pdflatex tidsavbrudd (>120s)."
+                logger.error("latex_timeout", engine=binary, error=str(e))
+                return None, f"{engine_name} tidsavbrudd (>180s)."
 
         # Capture log excerpt (last ~80 lines is usually enough to find the cause)
         log_path = Path(tmpdir) / "document.log"
@@ -88,6 +139,7 @@ def compile_to_pdf_with_log(
         if not pdf_in_tmp.exists() or (last_return_code not in (0, None)):
             logger.error(
                 "pdf_not_generated",
+                engine=engine_name,
                 return_code=last_return_code,
                 has_log=bool(log_excerpt),
             )
@@ -107,12 +159,14 @@ def compile_to_pdf(
     latex_content: str,
     output_path: str | Path | None = None,
     pdflatex_path: str = "pdflatex",
+    engine: str | None = None,
 ) -> str | None:
     """Backwards-compatible wrapper that discards the log excerpt."""
     pdf_path, _log = compile_to_pdf_with_log(
         latex_content=latex_content,
         output_path=output_path,
         pdflatex_path=pdflatex_path,
+        engine=engine,
     )
     return pdf_path
 
@@ -120,6 +174,7 @@ def compile_to_pdf(
 def compile_latex_to_bytes(
     latex_content: str,
     pdflatex_path: str = "pdflatex",
+    engine: str | None = None,
 ) -> tuple[bytes | None, str]:
     """Compile LaTeX and return PDF bytes plus log excerpt."""
     with tempfile.TemporaryDirectory(prefix="matematex_bytes_") as tmpdir:
@@ -128,6 +183,7 @@ def compile_latex_to_bytes(
             latex_content=latex_content,
             output_path=out,
             pdflatex_path=pdflatex_path,
+            engine=engine,
         )
         if pdf_path and Path(pdf_path).is_file():
             return Path(pdf_path).read_bytes(), log_excerpt

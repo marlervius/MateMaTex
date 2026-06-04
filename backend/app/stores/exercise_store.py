@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import structlog
 
 from app.config import get_settings
+from app.stores.fs_utils import atomic_write_json
 
 logger = structlog.get_logger()
 
 _memory: dict[str, dict] = {}
 _loaded = False
+
+_EXERCISE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 def _store_dir() -> Path:
@@ -36,8 +40,12 @@ def _ensure_loaded() -> None:
 
 
 def _persist_one(exercise: dict) -> None:
-    path = _store_dir() / f"{exercise['id']}.json"
-    path.write_text(json.dumps(exercise, ensure_ascii=False, indent=2), encoding="utf-8")
+    eid = exercise.get("id", "")
+    if not eid or not _EXERCISE_ID_RE.match(eid):
+        logger.warning("exercise_store_rejected_unsafe_id", id=eid)
+        return
+    path = _store_dir() / f"{eid}.json"
+    atomic_write_json(path, exercise)
 
 
 def _save_file(exercise: dict) -> dict:

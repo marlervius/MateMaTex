@@ -6,6 +6,7 @@ All endpoints accept LaTeX content and return downloadable documents.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import os
 import re
@@ -20,6 +21,7 @@ from app.latex.compiler import compile_to_pdf_with_log
 from app.pipeline.agents.tikz_validator import sanitize_latex_body, strip_tikz_and_plots
 from app.rate_limit import limiter
 from app.latex.preamble import wrap_with_preamble
+from app.validators import ensure_latex_size
 
 logger = structlog.get_logger()
 
@@ -89,6 +91,11 @@ class PdfExportRequest(BaseModel):
     cover_topic: str = ""
     print_optimized: bool = False
     include_qr: bool = False
+    # Design + accessibility (Track B/D)
+    theme: str = "default"
+    accessible: bool = False
+    dyslexia: bool = False
+    high_contrast: bool = False
 
     class Config:
         json_schema_extra = {
@@ -208,6 +215,7 @@ async def export_pdf(
     - Print-optimized variant (grayscale, no background colors)
     - QR codes for digital solutions
     """
+    ensure_latex_size(req.latex_content)
     content = req.latex_content
 
     # Honour the "elevkopi" toggle by stripping solutions BEFORE wrapping.
@@ -237,13 +245,21 @@ async def export_pdf(
     full_body = "\n".join(body_parts)
 
     if r"\documentclass" not in full_body:
-        full_doc = wrap_with_preamble(full_body)
+        full_doc = wrap_with_preamble(
+            full_body,
+            theme=req.theme,
+            accessible=req.accessible,
+            dyslexia=req.dyslexia,
+            high_contrast=req.high_contrast or req.print_optimized,
+        )
     else:
         full_doc = full_body
 
     with tempfile.TemporaryDirectory() as tmpdir:
         out_path = os.path.join(tmpdir, "export.pdf")
-        pdf_path, log_excerpt = compile_to_pdf_with_log(full_doc, out_path)
+        pdf_path, log_excerpt = await asyncio.to_thread(
+            compile_to_pdf_with_log, full_doc, out_path
+        )
 
         # If TikZ still breaks pdflatex, strip figures and retry once.
         if not pdf_path and log_excerpt and (
@@ -306,13 +322,16 @@ async def export_docx(
     Uses python-docx to build the document programmatically for
     maximum control over formatting. Math is rendered as OMML.
     """
+    ensure_latex_size(req.latex_content)
     try:
         from app.export.word import latex_to_docx
 
-        docx_bytes = latex_to_docx(
-            req.latex_content,
-            title=req.title,
-            include_solutions=req.include_solutions,
+        docx_bytes = await asyncio.to_thread(
+            lambda: latex_to_docx(
+                req.latex_content,
+                title=req.title,
+                include_solutions=req.include_solutions,
+            )
         )
 
         return ExportFileResponse(
@@ -345,13 +364,16 @@ async def export_pptx(
     Each exercise becomes its own slide. Solutions are placed as
     speaker notes or hidden slides, depending on the request.
     """
+    ensure_latex_size(req.latex_content)
     try:
         from app.export.powerpoint import latex_to_pptx
 
-        pptx_bytes = latex_to_pptx(
-            req.latex_content,
-            title=req.title,
-            solutions_as=req.solutions_as,
+        pptx_bytes = await asyncio.to_thread(
+            lambda: latex_to_pptx(
+                req.latex_content,
+                title=req.title,
+                solutions_as=req.solutions_as,
+            )
         )
 
         return ExportFileResponse(

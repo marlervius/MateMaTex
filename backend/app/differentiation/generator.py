@@ -12,6 +12,7 @@ three separate LaTeX documents. All three are SymPy-verified.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from dataclasses import dataclass, field
@@ -22,6 +23,7 @@ from pydantic import BaseModel, Field
 
 from app.auth import get_current_user
 from app.rate_limit import limiter
+from app.validators import ensure_latex_size
 
 from app.models.llm import get_llm
 
@@ -162,7 +164,7 @@ async def differentiate_content(
             ("advanced", output.advanced_latex),
         ]:
             if content:
-                verification = checker.verify(content)
+                verification = await asyncio.to_thread(checker.verify, content)
                 setattr(output, f"{level}_verified", verification.all_correct)
                 if not verification.all_correct:
                     logger.warning(
@@ -248,6 +250,7 @@ async def differentiate(
     Uses AI to adapt exercises for different ability levels while
     maintaining mathematical correctness (verified with SymPy).
     """
+    ensure_latex_size(req.latex_content)
     try:
         output = await differentiate_content(
             req.latex_content,

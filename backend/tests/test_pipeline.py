@@ -236,6 +236,7 @@ class TestGraphStructure:
             "latex_validator",
             "latex_fixer",
             "latex_fallback",
+            "layout",
             "finalize",
         }
         assert set(graph.nodes.keys()) == expected_nodes

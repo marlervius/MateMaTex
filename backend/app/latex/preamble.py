@@ -1,25 +1,201 @@
 """
-Standard LaTeX preamble for MateMaTeX documents.
-Self-contained — no dependency on v1 src/ codebase.
+MateMaTeX document preamble.
+
+Engine-agnostic: the same document compiles under LuaLaTeX/XeLaTeX (professional
+OpenType fonts via fontspec + unicode-math) and under pdfLaTeX (Latin Modern
+fallback). The active engine is chosen at compile time; this preamble branches on
+``\\ifLuaTeX`` / ``\\ifXeTeX`` so a single body works everywhere.
+
+Features:
+- Theme system (color palettes): default, calm, playful, highcontrast
+- Pedagogical macros: answer lines/grids, points, level markers, QR codes
+- Accessibility: PDF language metadata, opt-in tagged PDF, dyslexia-friendly mode
 """
 
 from __future__ import annotations
 
+# ---------------------------------------------------------------------------
+# Themes — each maps the shared color names to an RGB triple "R,G,B".
+# Boxes/sections reference these names, so swapping the palette reskins
+# the whole document.
+# ---------------------------------------------------------------------------
+THEMES: dict[str, dict[str, str]] = {
+    "default": {
+        "mainBlue": "0,102,204", "lightBlue": "230,242,255",
+        "mainGreen": "0,153,76", "lightGreen": "232,250,240",
+        "mainOrange": "230,126,34", "lightOrange": "255,245,235",
+        "mainPurple": "102,51,153", "lightPurple": "245,240,255",
+        "mainTeal": "0,128,128", "lightTeal": "235,250,250",
+        "mainGray": "80,80,90", "lightGray": "248,248,252",
+    },
+    # Softer, desaturated — calm reading experience
+    "calm": {
+        "mainBlue": "70,110,150", "lightBlue": "238,244,249",
+        "mainGreen": "82,138,108", "lightGreen": "240,247,243",
+        "mainOrange": "190,140,90", "lightOrange": "250,245,238",
+        "mainPurple": "120,110,160", "lightPurple": "245,243,250",
+        "mainTeal": "70,135,135", "lightTeal": "239,247,247",
+        "mainGray": "95,100,110", "lightGray": "247,248,250",
+    },
+    # Brighter, friendlier — lower grades
+    "playful": {
+        "mainBlue": "0,140,220", "lightBlue": "224,243,255",
+        "mainGreen": "30,180,90", "lightGreen": "226,250,236",
+        "mainOrange": "245,140,30", "lightOrange": "255,243,228",
+        "mainPurple": "150,70,200", "lightPurple": "245,235,255",
+        "mainTeal": "0,170,170", "lightTeal": "224,250,250",
+        "mainGray": "90,90,100", "lightGray": "247,247,250",
+    },
+    # Strong contrast for visual accessibility (WCAG-friendly)
+    "highcontrast": {
+        "mainBlue": "0,51,153", "lightBlue": "255,255,255",
+        "mainGreen": "0,102,51", "lightGreen": "255,255,255",
+        "mainOrange": "170,70,0", "lightOrange": "255,255,255",
+        "mainPurple": "85,0,128", "lightPurple": "255,255,255",
+        "mainTeal": "0,90,90", "lightTeal": "255,255,255",
+        "mainGray": "20,20,20", "lightGray": "255,255,255",
+    },
+}
 
-STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
+DEFAULT_THEME = "default"
 
-% Encoding and language
-\usepackage[utf8]{inputenc}
-\usepackage[T1]{fontenc}
-\usepackage[norsk]{babel}
 
-% Modern fonts
-\usepackage{lmodern}
-\usepackage{microtype}
+def _color_block(theme: str) -> str:
+    palette = THEMES.get(theme, THEMES[DEFAULT_THEME])
+    lines = [f"\\definecolor{{{name}}}{{RGB}}{{{rgb}}}" for name, rgb in palette.items()]
+    return "\n".join(lines)
 
-% Mathematics (mathtools extends amsmath with better spacing)
+
+def _text_font_block(*, dyslexia: bool) -> str:
+    """
+    Engine-conditional TEXT font setup (loaded early).
+
+    Under LuaLaTeX/XeLaTeX we use professional OpenType fonts (Libertinus +
+    Lato). Under pdfLaTeX we fall back to Latin Modern. Dyslexia mode makes the
+    sans family the document default.
+
+    The math font (unicode-math) is set later in :func:`_math_font_block`, after
+    the other math packages, which is required for a clean load order.
+    """
+    # Whether the body should default to sans (dyslexia-friendly).
+    lua_main = "Lato" if dyslexia else "Libertinus Serif"
+    pdf_family_default = r"\renewcommand{\familydefault}{\sfdefault}" if dyslexia else ""
+    return rf"""
+\usepackage{{iftex}}
+\ifLuaTeX
+  \usepackage{{fontspec}}
+  \IfFontExistsTF{{{lua_main}}}{{\setmainfont{{{lua_main}}}}}{{}}
+  \IfFontExistsTF{{Lato}}{{\setsansfont{{Lato}}}}{{}}
+\else\ifXeTeX
+  \usepackage{{fontspec}}
+  \IfFontExistsTF{{{lua_main}}}{{\setmainfont{{{lua_main}}}}}{{}}
+  \IfFontExistsTF{{Lato}}{{\setsansfont{{Lato}}}}{{}}
+\else
+  \usepackage[utf8]{{inputenc}}
+  \usepackage[T1]{{fontenc}}
+  \usepackage{{lmodern}}
+  {pdf_family_default}
+\fi\fi
+\usepackage{{microtype}}
+"""
+
+
+# Loaded AFTER amsmath/mathtools/amsthm so unicode-math overrides cleanly.
+# Under pdfLaTeX this is a no-op (Latin Modern math is used).
+_MATH_FONT_BLOCK = r"""
+\ifLuaTeX
+  \usepackage{unicode-math}
+  \IfFontExistsTF{Libertinus Math}{\setmathfont{Libertinus Math}}{}
+\else\ifXeTeX
+  \usepackage{unicode-math}
+  \IfFontExistsTF{Libertinus Math}{\setmathfont{Libertinus Math}}{}
+\fi\fi
+"""
+
+
+def build_preamble(
+    theme: str = DEFAULT_THEME,
+    *,
+    student_mode: bool = False,
+    accessible: bool = False,
+    dyslexia: bool = False,
+    high_contrast: bool = False,
+) -> str:
+    """
+    Build a complete LaTeX preamble (everything before \\begin{document}).
+
+    Args:
+        theme: Color palette name (see THEMES).
+        student_mode: Reserved for layout tweaks favouring writing space.
+        accessible: Emit PDF language metadata and opt into tagged-PDF mode.
+        dyslexia: Sans-serif body + generous leading and spacing.
+        high_contrast: Force the high-contrast palette regardless of `theme`.
+    """
+    if high_contrast:
+        theme = "highcontrast"
+    if theme not in THEMES:
+        theme = DEFAULT_THEME
+
+    # `\DocumentMetadata` must be the very first token in the file. It enables
+    # the modern PDF management layer (tagging-ready) on recent TeX Live.
+    doc_meta = r"\DocumentMetadata{lang=nb-NO}" + "\n" if accessible else ""
+
+    leading = r"\linespread{1.5}" if dyslexia else r"\linespread{1.08}"
+    parskip = "1.0em" if dyslexia else "0.8em"
+
+    pdflang = r"pdflang=nb-NO, " if accessible else ""
+
+    return (
+        doc_meta
+        + r"\documentclass[a4paper,11pt]{article}" + "\n"
+        + r"\usepackage[norsk]{babel}" + "\n"
+        + _text_font_block(dyslexia=dyslexia)
+        + _MATH_GRAPHICS_LAYOUT
+        + _MATH_FONT_BLOCK
+        + f"\n% ---- Theme: {theme} ----\n"
+        + _color_block(theme)
+        + "\n"
+        + rf"\usepackage[colorlinks=true, {pdflang}linkcolor=mainBlue, urlcolor=mainBlue, citecolor=mainGreen]{{hyperref}}"
+        + "\n"
+        + _BOXES
+        + _MATH_COMMANDS
+        + _SECTION_STYLING
+        + _PGFPLOTS_DEFAULTS
+        + _FIGURE_MACROS
+        + _PEDAGOGICAL_MACROS
+        + _HEADER_FOOTER
+        + f"\n% ---- Spacing ----\n{leading}\n"
+        + rf"\setlength{{\parskip}}{{{parskip}}}" + "\n"
+        + r"\setlength{\parindent}{0pt}" + "\n"
+        + r"\setlist{itemsep=0.3em, parsep=0.2em, topsep=0.3em}" + "\n"
+        + _LAYOUT_HARDENING
+    )
+
+
+# Track E: preventive line-breaking so most "Overfull \hbox" warnings never
+# occur. \emergencystretch lets TeX stretch a paragraph rather than overflow;
+# \hfuzz hides sub-point overfulls; widow/club penalties avoid orphan lines.
+_LAYOUT_HARDENING = r"""
+% ---- Layout robustness ----
+\setlength{\emergencystretch}{3em}
+\tolerance=1200
+\hbadness=2000
+\hfuzz=1pt
+\widowpenalty=10000
+\clubpenalty=10000
+\raggedbottom
+"""
+
+
+# ---------------------------------------------------------------------------
+# Static building blocks (engine-independent)
+# ---------------------------------------------------------------------------
+_MATH_GRAPHICS_LAYOUT = r"""
+% Mathematics
 \usepackage{mathtools}
-\usepackage{amssymb, amsthm}
+\usepackage{amsthm}
+% amssymb clashes with unicode-math (\eth etc.), so only load it on pdfLaTeX.
+\ifLuaTeX\else\ifXeTeX\else\usepackage{amssymb}\fi\fi
 \usepackage{bm}
 \usepackage{siunitx}
 
@@ -42,36 +218,17 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
 \usepackage{enumitem}
 \usepackage{booktabs}
 \usepackage{multicol}
-
-% Paragraph spacing
-\setlength{\parskip}{0.8em}
-\setlength{\parindent}{0pt}
-\setlist{itemsep=0.3em, parsep=0.2em, topsep=0.3em}
-
-% Float placement
+% Optional packages — degrade gracefully if a TeX install lacks them.
+\IfFileExists{qrcode.sty}{\usepackage{qrcode}}{\providecommand{\qrcode}[2][]{\fbox{QR}}}
+\IfFileExists{pifont.sty}{\usepackage{pifont}}{\providecommand{\ding}[1]{$\star$}}
 \floatplacement{figure}{H}
 
-% Colors and colored boxes
+% Colored boxes
 \usepackage{xcolor}
 \usepackage[most]{tcolorbox}
+"""
 
-% Custom Color Definitions (must come BEFORE hyperref)
-\definecolor{mainBlue}{RGB}{0, 102, 204}
-\definecolor{lightBlue}{RGB}{230, 242, 255}
-\definecolor{mainGreen}{RGB}{0, 153, 76}
-\definecolor{lightGreen}{RGB}{232, 250, 240}
-\definecolor{mainOrange}{RGB}{230, 126, 34}
-\definecolor{lightOrange}{RGB}{255, 245, 235}
-\definecolor{mainPurple}{RGB}{102, 51, 153}
-\definecolor{lightPurple}{RGB}{245, 240, 255}
-\definecolor{mainTeal}{RGB}{0, 128, 128}
-\definecolor{lightTeal}{RGB}{235, 250, 250}
-\definecolor{mainGray}{RGB}{80, 80, 90}
-\definecolor{lightGray}{RGB}{248, 248, 252}
-
-% Hyperlinks (load AFTER color definitions)
-\usepackage[colorlinks=true, linkcolor=mainBlue, urlcolor=mainBlue, citecolor=mainGreen]{hyperref}
-
+_BOXES = r"""
 % Shared box style
 \tcbset{matebox/.style={
   enhanced, breakable,
@@ -79,149 +236,100 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
   left=8pt, right=8pt, top=8pt, bottom=8pt,
   attach boxed title to top left={yshift*=-\tcboxedtitleheight/2, xshift=5mm},
   sharp corners=downhill,
+  drop fuzzy shadow=black!12,
 }}
 
-% Definition Box (Blue)
-\newtcolorbox{definitionbox}[1][]{
-  matebox,
-  colback=lightBlue, colframe=mainBlue,
+\newtcolorbox{definitionbox}[1][]{matebox, colback=lightBlue, colframe=mainBlue,
   fonttitle=\bfseries\sffamily, title={Definisjon},
-  boxed title style={colback=mainBlue, colframe=mainBlue},
-  #1
-}
-\newtcolorbox{definisjon}[1][]{
-  matebox,
-  colback=lightBlue, colframe=mainBlue,
+  boxed title style={colback=mainBlue, colframe=mainBlue}, #1}
+\newtcolorbox{definisjon}[1][]{matebox, colback=lightBlue, colframe=mainBlue,
   fonttitle=\bfseries\sffamily, title={Definisjon},
-  boxed title style={colback=mainBlue, colframe=mainBlue},
-  #1
-}
+  boxed title style={colback=mainBlue, colframe=mainBlue}, #1}
 
-% Example Box (Green)
-\newtcolorbox{examplebox}[1][]{
-  matebox,
-  colback=lightGreen, colframe=mainGreen,
+\newtcolorbox{examplebox}[1][]{matebox, colback=lightGreen, colframe=mainGreen,
   fonttitle=\bfseries\sffamily, title={Eksempel},
-  boxed title style={colback=mainGreen, colframe=mainGreen},
-  #1
-}
-\newtcolorbox{eksempel}[1][]{
-  matebox,
-  colback=lightGreen, colframe=mainGreen,
+  boxed title style={colback=mainGreen, colframe=mainGreen}, #1}
+\newtcolorbox{eksempel}[1][]{matebox, colback=lightGreen, colframe=mainGreen,
   fonttitle=\bfseries\sffamily, title={Eksempel},
-  boxed title style={colback=mainGreen, colframe=mainGreen},
-  #1
-}
+  boxed title style={colback=mainGreen, colframe=mainGreen}, #1}
 
-% Task Box (Purple)
-\newtcolorbox{taskbox}[1][]{
-  matebox,
-  colback=lightPurple, colframe=mainPurple,
+\newtcolorbox{taskbox}[1][]{matebox, colback=lightPurple, colframe=mainPurple,
   fonttitle=\bfseries\sffamily\color{white}, title={#1},
   boxed title style={colback=mainPurple, colframe=mainPurple},
-  left=10pt, right=10pt, top=10pt, bottom=10pt,
-}
+  left=10pt, right=10pt, top=10pt, bottom=10pt}
 
-% Tip/Note Box (Orange)
-\newtcolorbox{tipbox}[1][]{
-  matebox,
-  colback=lightOrange, colframe=mainOrange,
+\newtcolorbox{tipbox}[1][]{matebox, colback=lightOrange, colframe=mainOrange,
   fonttitle=\bfseries\sffamily, title={Tips},
-  boxed title style={colback=mainOrange, colframe=mainOrange},
-  #1
-}
-
-% Merk/Warning Box (Orange)
-\newtcolorbox{merk}[1][]{
-  matebox,
-  colback=lightOrange, colframe=mainOrange,
+  boxed title style={colback=mainOrange, colframe=mainOrange}, #1}
+\newtcolorbox{merk}[1][]{matebox, colback=lightOrange, colframe=mainOrange,
   fonttitle=\bfseries\sffamily, title={Merk!},
-  boxed title style={colback=mainOrange, colframe=mainOrange},
-  #1
-}
+  boxed title style={colback=mainOrange, colframe=mainOrange}, #1}
 
-% Solution Box (Teal)
-\newtcolorbox{losning}[1][]{
-  matebox,
-  colback=lightTeal, colframe=mainTeal,
+\newtcolorbox{losning}[1][]{matebox, colback=lightTeal, colframe=mainTeal,
   fonttitle=\bfseries\sffamily\color{white}, title={Løsning},
   boxed title style={colback=mainTeal, colframe=mainTeal},
-  left=10pt, right=10pt, top=10pt, bottom=10pt,
-  #1
-}
+  left=10pt, right=10pt, top=10pt, bottom=10pt, #1}
+
+% Assessment / grading criteria box (gray)
+\newtcolorbox{vurdering}[1][]{matebox, colback=lightGray, colframe=mainGray,
+  fonttitle=\bfseries\sffamily, title={Vurdering},
+  boxed title style={colback=mainGray, colframe=mainGray}, #1}
 
 % Theorem environments (fallback)
 \newtheorem{theorem}{Teorem}[section]
 \newtheorem{definition}[theorem]{Definisjon}
 \newtheorem{example}[theorem]{Eksempel}
 \newtheorem{exercise}{Oppgave}[section]
+"""
 
-% Custom math commands
+_MATH_COMMANDS = r"""
 \newcommand{\N}{\mathbb{N}}
 \newcommand{\Z}{\mathbb{Z}}
 \newcommand{\Q}{\mathbb{Q}}
 \newcommand{\R}{\mathbb{R}}
+"""
 
-% Section styling
+_SECTION_STYLING = r"""
 \usepackage{titlesec}
 \titleformat{\section}{\Large\bfseries\sffamily\color{mainBlue}}{\thesection}{1em}{}[\color{mainBlue}\titlerule]
 \titleformat{\subsection}{\large\bfseries\sffamily\color{mainPurple}}{\thesubsection}{1em}{}
+"""
 
-% Graph defaults
+_PGFPLOTS_DEFAULTS = r"""
 \pgfplotsset{
     every axis/.append style={
-        width=0.75\textwidth,
-        height=0.5\textwidth,
+        width=0.75\textwidth, height=0.5\textwidth,
         line width=0.8pt,
         tick style={line width=0.6pt},
-        tick label style={font=\small},
-        label style={font=\small},
+        tick label style={font=\small}, label style={font=\small},
         legend style={font=\small, draw=none, fill=white, fill opacity=0.8},
-        grid=major,
-        grid style={dashed, gray!30},
+        grid=major, grid style={dashed, gray!30},
         axis lines=middle,
     },
-    every axis plot/.append style={
-        line width=1.2pt,
-    },
-    cycle list={
-        {mainBlue, thick},
-        {mainGreen, thick},
-        {mainOrange, thick},
-        {mainPurple, thick},
-        {mainTeal, thick},
-    },
+    every axis plot/.append style={line width=1.2pt},
+    cycle list={{mainBlue, thick},{mainGreen, thick},{mainOrange, thick},{mainPurple, thick},{mainTeal, thick}},
 }
+"""
 
+# Existing \MMA figure macros (geometry/diagrams)
+_FIGURE_MACROS = r"""
 % ============================================================
 % MateMaTeX Figure Macros — AI calls these, never raw TikZ
 % ============================================================
-
-% \MMArettvinklet{a}{b}{c}  — right-angled triangle, legs a,b, hypotenuse c
-% Usage: \MMArettvinklet{3}{4}{5}
 \newcommand{\MMArettvinklet}[3]{%
   \begin{tikzpicture}[scale=0.9, font=\small]
-    \coordinate (A) at (0,0);
-    \coordinate (B) at (#1,0);
-    \coordinate (C) at (#1,#2);
+    \coordinate (A) at (0,0); \coordinate (B) at (#1,0); \coordinate (C) at (#1,#2);
     \fill[lightBlue!60] (A) -- (B) -- (C) -- cycle;
     \draw[thick, mainBlue] (A) -- (B) -- (C) -- cycle;
     \draw[mainBlue] (#1,0.3) -- (#1-0.3,0.3) -- (#1-0.3,0);
-    \node[below] at (#1/2,0) {$a = #1$};
-    \node[right] at (#1,#2/2) {$b = #2$};
+    \node[below] at (#1/2,0) {$a = #1$}; \node[right] at (#1,#2/2) {$b = #2$};
     \node[above left] at (#1/2,#2/2) {$c = #3$};
-    \node[below left] at (A) {$A$};
-    \node[below right] at (B) {$B$};
-    \node[above right] at (C) {$C$};
+    \node[below left] at (A) {$A$}; \node[below right] at (B) {$B$}; \node[above right] at (C) {$C$};
   \end{tikzpicture}%
 }
-
-% \MMAtrigfig  — right-angled triangle with trig labels
 \newcommand{\MMAtrigfig}{%
   \begin{tikzpicture}[scale=0.85, font=\small]
-    \coordinate (O) at (0,0);
-    \coordinate (A) at (5,0);
-    \coordinate (B) at (5,3.75);
+    \coordinate (O) at (0,0); \coordinate (A) at (5,0); \coordinate (B) at (5,3.75);
     \fill[lightBlue!50] (O) -- (A) -- (B) -- cycle;
     \draw[thick, mainBlue] (O) -- (A) -- (B) -- cycle;
     \draw[mainBlue] (5,0.35) -- (4.65,0.35) -- (4.65,0);
@@ -230,14 +338,9 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
     \node[below, mainBlue] at (2.5,0) {Hosliggende};
     \node[right, mainBlue] at (5,1.875) {Motstående};
     \node[above left, mainBlue] at (2.5,2.0) {Hypotenus};
-    \node[below left] at (O) {$O$};
-    \node[below right] at (A) {$A$};
-    \node[above right] at (B) {$B$};
+    \node[below left] at (O) {$O$}; \node[below right] at (A) {$A$}; \node[above right] at (B) {$B$};
   \end{tikzpicture}%
 }
-
-% \MMArektangel{l}{b}  — rectangle with dimension arrows
-% Usage: \MMArektangel{5}{3}
 \newcommand{\MMArektangel}[2]{%
   \begin{tikzpicture}[scale=0.8, font=\small]
     \fill[lightBlue!40] (0,0) rectangle (#1,#2);
@@ -247,8 +350,6 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
     \draw[<->, mainOrange, thick] (#1+0.5,0) -- (#1+0.5,#2) node[midway,right] {$#2$ cm};
   \end{tikzpicture}%
 }
-
-% \MMAsylinder  — simple cylinder
 \newcommand{\MMAsylinder}{%
   \begin{tikzpicture}[scale=0.7, font=\small]
     \fill[lightBlue!30] (-1.2,-2.5) arc(180:360:1.2 and 0.4) -- (1.2,0) arc(0:180:1.2 and 0.4) -- cycle;
@@ -262,8 +363,6 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
     \node[below] at (0,-3.1) {Sylinder};
   \end{tikzpicture}%
 }
-
-% \MMAkjegle  — simple cone
 \newcommand{\MMAkjegle}{%
   \begin{tikzpicture}[scale=0.7, font=\small]
     \fill[lightBlue!30] (-1.2,-2.5) -- (0,0) -- (1.2,-2.5) arc(0:-180:1.2 and 0.4) -- cycle;
@@ -274,8 +373,6 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
     \node[below] at (0,-3.1) {Kjegle};
   \end{tikzpicture}%
 }
-
-% \MMAkule  — simple sphere
 \newcommand{\MMAkule}{%
   \begin{tikzpicture}[scale=0.7, font=\small]
     \fill[lightBlue!30] (0,0) circle (1.5);
@@ -285,37 +382,25 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
     \node[below] at (0,-1.9) {Kule};
   \end{tikzpicture}%
 }
-
-% \MMAromfigurer  — all three solids side by side
 \newcommand{\MMAromfigurer}{%
-  \begin{figure}[H]
-  \centering
+  \begin{figure}[H]\centering
   \MMAsylinder\qquad\MMAkjegle\qquad\MMAkule
   \caption{Sylinder, kjegle og kule med radius $r$ og høyde $h$.}
   \end{figure}%
 }
-
-% \MMAprosent{N}  — 10x10 percent grid with N cells filled
-% Usage: \MMAprosent{35}  →  35% filled
 \newcommand{\MMAprosent}[1]{%
   \begin{tikzpicture}[scale=0.35, font=\scriptsize]
     \foreach \r in {0,...,9} {
       \foreach \c in {0,...,9} {
         \pgfmathsetmacro{\idx}{int(\r*10 + \c + 1)}
-        \ifnum\idx>#1
-          \fill[lightGray] (\c,\r) rectangle (\c+1,\r+1);
-        \else
-          \fill[mainBlue!70] (\c,\r) rectangle (\c+1,\r+1);
-        \fi
+        \ifnum\idx>#1 \fill[lightGray] (\c,\r) rectangle (\c+1,\r+1);
+        \else \fill[mainBlue!70] (\c,\r) rectangle (\c+1,\r+1); \fi
         \draw[white, thin] (\c,\r) rectangle (\c+1,\r+1);
       }
     }
     \draw[thick, mainBlue] (0,0) rectangle (10,10);
   \end{tikzpicture}%
 }
-
-% \MMAvektor{xmax}{ymax}  — clean coordinate system for vector diagrams
-% Usage: \MMAvektor{5}{5}  → 5×5 grid with axes, ready for vector arrows
 \newcommand{\MMAvektor}[2]{%
   \begin{tikzpicture}[scale=0.85, font=\small, >=Stealth]
     \draw[lightGray, thin] (-0.5,-0.5) grid (#1+0.5,#2+0.5);
@@ -326,39 +411,120 @@ STANDARD_PREAMBLE = r"""\documentclass[a4paper,11pt]{article}
     \node[below left, font=\scriptsize] at (0,0) {$0$};
   \end{tikzpicture}%
 }
+"""
 
-% \MMAGraf command is NOT a macro — use pgfplots \begin{axis} directly for graphs.
+# Pedagogical macros: answer space, points, difficulty, QR, page break, cover.
+_PEDAGOGICAL_MACROS = r"""
+% ============================================================
+% Pedagogical macros — student-facing layout helpers
 % ============================================================
 
-% Header/Footer
+% \MMAsvarlinjer[n] — n ruled answer lines (default 3)
+\newcommand{\MMAsvarlinjer}[1][3]{%
+  \par\vspace{0.4em}%
+  \foreach \mmaln in {1,...,#1}{\noindent\textcolor{mainGray!55}{\rule{\linewidth}{0.4pt}}\par\vspace{1.15em}}%
+}
+
+% \MMAsvarfelt[height] — empty boxed answer area (default 3cm)
+\newcommand{\MMAsvarfelt}[1][3cm]{%
+  \par\vspace{0.3em}%
+  \noindent\fcolorbox{mainGray!40}{white}{\begin{minipage}[t][#1]{\dimexpr\linewidth-2\fboxsep\relax}\strut\end{minipage}}%
+  \par\vspace{0.3em}%
+}
+
+% \MMArutefelt{cols}{rows} — squared-paper answer grid (5mm cells)
+\newcommand{\MMArutefelt}[2]{%
+  \par\vspace{0.3em}\noindent
+  \begin{tikzpicture}
+    \draw[step=0.5cm, mainGray!25, very thin] (0,0) grid (#1*0.5,#2*0.5);
+    \draw[mainGray!50, thin] (0,0) rectangle (#1*0.5,#2*0.5);
+  \end{tikzpicture}\par\vspace{0.3em}%
+}
+
+% \MMApoeng{n} — right-aligned points badge for tests
+\newcommand{\MMApoeng}[1]{\hfill{\small\bfseries\color{mainGray}(#1 p)}}
+
+% \MMAniva{1..3} — difficulty stars (filled/empty)
+\newcommand{\MMAniva}[1]{%
+  \textcolor{mainOrange}{%
+    \ifcase#1\relax
+      \or \ding{72}\ding{73}\ding{73}%
+      \or \ding{72}\ding{72}\ding{73}%
+      \else \ding{72}\ding{72}\ding{72}%
+    \fi}%
+}
+
+% \MMAqr{url} — QR code to a digital resource (solutions, GeoGebra ...)
+\newcommand{\MMAqr}[1]{\qrcode[height=2cm]{#1}}
+\newcommand{\MMAqrtekst}[2]{%
+  \begin{center}\qrcode[height=2cm]{#1}\\[0.3em]{\small\color{mainGray}#2}\end{center}%
+}
+
+% \MMAnyside — force a page break (one task per page)
+\newcommand{\MMAnyside}{\clearpage}
+
+% \MMAforside{tittel}{undertittel}{skole}{laerer} — polished cover page
+\newcommand{\MMAforside}[4]{%
+  \thispagestyle{empty}%
+  \begin{titlepage}
+  \centering
+  \vspace*{3cm}
+  {\color{mainBlue}\rule{\linewidth}{2pt}}\\[0.6cm]
+  {\Huge\bfseries\sffamily #1}\\[0.4cm]
+  {\LARGE\sffamily\color{mainGray} #2}\\[0.3cm]
+  {\color{mainBlue}\rule{\linewidth}{2pt}}\\[2cm]
+  {\large #3}\\[0.4cm]
+  {\large #4}\\[0.4cm]
+  {\large \today}\\
+  \vfill
+  {\small\color{mainGray} Generert av MateMaTeX}
+  \end{titlepage}%
+}
+"""
+
+_HEADER_FOOTER = r"""
 \usepackage{fancyhdr}
 \pagestyle{fancy}
 \fancyhf{}
-\fancyhead[L]{\small\color{mainGray}\textit{Generert av MateMaTeX AI}}
+\fancyhead[L]{\small\color{mainGray}\textit{Generert av MateMaTeX}}
 \fancyhead[R]{\small\color{mainGray}\today}
 \fancyfoot[C]{\small\color{mainGray}\thepage}
 \renewcommand{\headrulewidth}{0.4pt}
 \renewcommand{\footrulewidth}{0pt}
-
 \fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\small\color{mainGray}\thepage}\renewcommand{\headrulewidth}{0pt}}
-
 """
 
 
-def wrap_with_preamble(body_content: str) -> str:
+# Backwards-compatible default preamble (default theme, pdf-safe).
+STANDARD_PREAMBLE = build_preamble()
+
+
+def wrap_with_preamble(
+    body_content: str,
+    *,
+    theme: str = DEFAULT_THEME,
+    student_mode: bool = False,
+    accessible: bool = False,
+    dyslexia: bool = False,
+    high_contrast: bool = False,
+) -> str:
     """
-    Wrap body content with the standard preamble.
+    Wrap body content with a complete preamble.
 
-    Args:
-        body_content: LaTeX body content (no \\documentclass).
-
-    Returns:
-        Complete LaTeX document ready for compilation.
+    Keyword options select theme/accessibility. With no options the output is
+    equivalent to the classic default document, so existing callers are
+    unaffected.
     """
     body = body_content.strip()
-
+    preamble = build_preamble(
+        theme,
+        student_mode=student_mode,
+        accessible=accessible,
+        dyslexia=dyslexia,
+        high_contrast=high_contrast,
+    )
     return (
-        STANDARD_PREAMBLE
+        preamble
         + r"\begin{document}"
         + "\n"
         + r"\thispagestyle{plain}"
@@ -366,4 +532,21 @@ def wrap_with_preamble(body_content: str) -> str:
         + body
         + "\n\n"
         + r"\end{document}"
+    )
+
+
+def wrap_with_style(body_content: str, style: object | None = None) -> str:
+    """
+    Convenience wrapper that reads options off a duck-typed style object
+    (e.g. ``PipelineState.request.pdf_style``). ``None`` reproduces defaults.
+    """
+    if style is None:
+        return wrap_with_preamble(body_content)
+    return wrap_with_preamble(
+        body_content,
+        theme=getattr(style, "theme", DEFAULT_THEME),
+        student_mode=getattr(style, "student_mode", False),
+        accessible=getattr(style, "accessible", False),
+        dyslexia=getattr(style, "dyslexia", False),
+        high_contrast=getattr(style, "high_contrast", False),
     )

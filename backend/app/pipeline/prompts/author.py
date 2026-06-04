@@ -77,6 +77,20 @@ TILGJENGELIGE MAKROER (for standard tilfeller — bruk når de passer):
 \\MMAprosent{35}             → 10×10 prosentrutenett
 \\MMAvektor{5}{5}            → Koordinatsystem med rutenett
 
+=== PEDAGOGISKE MAKROER (bruk når de passer materialtypen) ===
+\\MMAsvarlinjer[4]           → 4 svarlinjer for håndskrift (arbeidsark/prøve)
+\\MMAsvarfelt[4cm]           → Tomt, innrammet svarfelt med gitt høyde
+\\MMArutefelt{20}{12}        → Rutenett (5mm) til utregning/graf
+\\MMApoeng{6}                → Poeng-merke til høyre i oppgavetittel (prøver)
+\\MMAniva{2}                 → Vanskelighetsgrad: 1–3 stjerner
+\\MMAqrtekst{URL}{Fasit}     → QR-kode med tekst under
+\\MMAnyside                  → Sideskift (én oppgave per side ved behov)
+
+Retningslinjer:
+- arbeidsark: legg \\MMAsvarlinjer eller \\MMAsvarfelt rett etter hver \\end{taskbox} så eleven har plass til å skrive.
+- prøve: bruk \\MMApoeng i oppgavetittelen, f.eks. \\begin{taskbox}{Oppgave 1 \\MMApoeng{4}} ... \\end{taskbox}, og gjerne \\MMAniva for nivå.
+- Bruk QR kun når en digital ressurs faktisk finnes; ALDRI finn på lenker.
+
 KREATIVE TikZ-FIGURER (bruk alltid når makro ikke gir best resultat):
 Lag konteksttilpassede, detaljerte scener og figurer. Eksempler:
 - Person + flaggstang med skygger og solstråler (formlikhet/målestokk)

@@ -7,6 +7,7 @@ All endpoints are grouped under the `exercises` tag in OpenAPI docs.
 from __future__ import annotations
 
 import hashlib
+import asyncio
 import uuid
 from datetime import datetime
 from enum import Enum
@@ -148,7 +149,23 @@ def _parsed_to_dict(
 
 
 def _dict_to_out(d: dict) -> ExerciseOut:
-    return ExerciseOut(**{k: v for k, v in d.items() if k != "deleted"})
+    return ExerciseOut(**{k: v for k, v in d.items() if k not in ("deleted", "owner_id", "db_id")})
+
+
+def _user_owns(d: dict, user_id: str) -> bool:
+    """
+    Ownership check for a single exercise.
+
+    Legacy exercises without an owner stay accessible, as does any access in the
+    shared-key / no-auth modes where every caller resolves to the same identity.
+    Real per-user identities (Supabase UUID) must match the stored owner.
+    """
+    owner = d.get("owner_id")
+    if not owner:
+        return True
+    if user_id in ("anonymous", "api-user"):
+        return True
+    return owner == user_id
 
 
 # ---------------------------------------------------------------------------
@@ -285,7 +302,7 @@ async def search_exercises(
 )
 async def get_exercise(exercise_id: str, user_id: str = Depends(get_current_user)) -> ExerciseOut:
     d = await store.get(exercise_id)
-    if not d or d.get("deleted"):
+    if not d or d.get("deleted") or not _user_owns(d, user_id):
         raise HTTPException(404, "Exercise not found")
     return _dict_to_out(d)
 
@@ -297,7 +314,7 @@ async def get_exercise(exercise_id: str, user_id: str = Depends(get_current_user
 )
 async def update_exercise(exercise_id: str, update: ExerciseUpdate, user_id: str = Depends(get_current_user)) -> ExerciseOut:
     d = await store.get(exercise_id)
-    if not d or d.get("deleted"):
+    if not d or d.get("deleted") or not _user_owns(d, user_id):
         raise HTTPException(404, "Exercise not found")
 
     for field, value in update.model_dump(exclude_unset=True).items():
@@ -311,6 +328,9 @@ async def update_exercise(exercise_id: str, update: ExerciseUpdate, user_id: str
     summary="Soft-delete an exercise",
 )
 async def delete_exercise(exercise_id: str, user_id: str = Depends(get_current_user)):
+    d = await store.get(exercise_id)
+    if not d or d.get("deleted") or not _user_owns(d, user_id):
+        raise HTTPException(404, "Exercise not found")
     if not await store.soft_delete(exercise_id):
         raise HTTPException(404, "Exercise not found")
     return {"deleted": True}
@@ -329,7 +349,7 @@ async def find_similar(exercise_id: str, limit: int = Query(5, ge=1, le=20), use
     Placeholder: keyword overlap scoring.
     """
     target = await store.get(exercise_id)
-    if not target:
+    if not target or not _user_owns(target, user_id):
         raise HTTPException(404, "Exercise not found")
 
     target_kw = set(target.get("keywords", []))
@@ -356,7 +376,7 @@ async def generate_variant(
 ) -> ExerciseOut:
     """Generate a new variant of an existing exercise using AI."""
     target = await store.get(exercise_id)
-    if not target:
+    if not target or not _user_owns(target, user_id):
         raise HTTPException(404, "Exercise not found")
 
     from app.models.llm import get_llm
@@ -375,7 +395,7 @@ async def generate_variant(
         f"{f'Ekstra instruksjoner: {req.instructions}' if req.instructions else ''}"
     )
 
-    variant_latex = llm.invoke(system_prompt, user_prompt)
+    variant_latex = await asyncio.to_thread(llm.invoke, system_prompt, user_prompt)
 
     variant_id = uuid.uuid4().hex[:12]
     variant = {
@@ -408,7 +428,7 @@ async def export_exercises(
     exercises = []
     for eid in req.exercise_ids:
         d = await store.get(eid)
-        if d:
+        if d and not d.get("deleted") and _user_owns(d, user_id):
             exercises.append(
                 ParsedExercise(
                     id=d["id"],
@@ -435,7 +455,7 @@ async def export_exercises(
 
         with tempfile.TemporaryDirectory() as tmpdir:
             out_path = os.path.join(tmpdir, "export.pdf")
-            pdf_path = compile_to_pdf(full_doc, out_path)
+            pdf_path = await asyncio.to_thread(compile_to_pdf, full_doc, out_path)
             if pdf_path and os.path.exists(pdf_path):
                 with open(pdf_path, "rb") as f:
                     pdf_bytes = f.read()
@@ -453,7 +473,7 @@ async def export_exercises(
         try:
             from app.export.word import latex_to_docx
 
-            docx_bytes = latex_to_docx(full_doc, req.title)
+            docx_bytes = await asyncio.to_thread(latex_to_docx, full_doc, req.title)
             return ExportResponse(
                 success=True,
                 content_base64=base64.b64encode(docx_bytes).decode(),

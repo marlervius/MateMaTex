@@ -197,23 +197,16 @@ async def list_active(*, user_id: str | None = None) -> list[dict]:
     uid = resolve_user_id(user_id) if user_id else None
 
     async with pool.acquire() as conn:
-        if uid:
-            rows = await conn.fetch(
-                """
-                SELECT * FROM exercises
-                WHERE deleted_at IS NULL AND user_id = $1
-                ORDER BY created_at DESC
-                """,
-                uid,
-            )
-        else:
-            rows = await conn.fetch(
-                """
-                SELECT * FROM exercises
-                WHERE deleted_at IS NULL
-                ORDER BY created_at DESC
-                """
-            )
+        if not uid:
+            return []
+        rows = await conn.fetch(
+            """
+            SELECT * FROM exercises
+            WHERE deleted_at IS NULL AND user_id = $1
+            ORDER BY created_at DESC
+            """,
+            uid,
+        )
     return [_row_to_dict(r) for r in rows]
 
 

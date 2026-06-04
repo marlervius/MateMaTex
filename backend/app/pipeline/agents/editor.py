@@ -28,6 +28,8 @@ def run_editor(state: PipelineState) -> PipelineState:
 
     logger.info("editor_start", job_id=state.job_id)
 
+    source_latex = state.verified_latex_body or state.raw_latex_body
+
     try:
         config = get_config()
         fast_types = {
@@ -47,7 +49,7 @@ def run_editor(state: PipelineState) -> PipelineState:
             llm = LLMInterface(temperature=config.llm.temperature)
 
             user_prompt = build_editor_prompt(
-                latex_content=state.verified_latex_body,
+                latex_content=source_latex,
                 language_level=state.request.language_level,
             )
 
@@ -69,7 +71,7 @@ def run_editor(state: PipelineState) -> PipelineState:
             )
             body = _re.sub(r'\\end\{document\}.*$', '', body, flags=_re.DOTALL)
 
-            state.edited_latex_body = body.strip()
+            state.edited_latex_body = body.strip() or source_latex
 
             step.output_summary = f"Edited LaTeX ({len(state.edited_latex_body)} chars)"
             logger.info(
@@ -81,7 +83,7 @@ def run_editor(state: PipelineState) -> PipelineState:
     except Exception as e:
         step.error = str(e)
         # Fallback: use verified content as-is
-        state.edited_latex_body = state.verified_latex_body
+        state.edited_latex_body = source_latex
         logger.error("editor_failed", job_id=state.job_id, error=str(e))
 
     finally:

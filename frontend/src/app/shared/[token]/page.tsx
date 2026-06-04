@@ -1,49 +1,94 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Lock, AlertTriangle, Download, Copy, FileText } from "lucide-react";
-import { getShared } from "@/lib/api";
+import { getShared, cloneShared, downloadSharedLatex } from "@/lib/api";
+
+interface SharedResource {
+  success: boolean;
+  resource_type: string;
+  content: Record<string, unknown>;
+  allow_download: boolean;
+  allow_clone: boolean;
+}
 
 export default function SharedResourcePage({
   params,
 }: {
   params: { token: string };
 }) {
-  const [resource, setResource] = useState<any>(null);
+  const [resource, setResource] = useState<SharedResource | null>(null);
   const [error, setError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
   const [loading, setLoading] = useState(true);
   const [needsPassword, setNeedsPassword] = useState(false);
   const [password, setPassword] = useState("");
+  const [actionLoading, setActionLoading] = useState("");
+  const [cloneMessage, setCloneMessage] = useState("");
 
-  const loadResource = async (pwd?: string) => {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await getShared(params.token, pwd);
-      if (res.success) {
-        setResource(res);
-        setNeedsPassword(false);
-      } else {
-        setError("Kunne ikke laste ressursen.");
+  const loadResource = useCallback(
+    async (pwd?: string) => {
+      setLoading(true);
+      setError("");
+      setPasswordError("");
+      try {
+        const res = await getShared(params.token, pwd);
+        if (res.success) {
+          setResource(res);
+          setNeedsPassword(false);
+        } else {
+          setError("Kunne ikke laste ressursen.");
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Noe gikk galt.";
+        if (msg.includes("401") || msg.toLowerCase().includes("password")) {
+          setNeedsPassword(true);
+        } else if (msg.includes("403") && msg.toLowerCase().includes("incorrect password")) {
+          setNeedsPassword(true);
+          setPasswordError("Feil passord — prøv igjen.");
+        } else if (msg.includes("410")) {
+          setError("Denne delingen har utløpt.");
+        } else if (msg.includes("404")) {
+          setError("Delt lenke ikke funnet.");
+        } else {
+          setError(msg);
+        }
+      } finally {
+        setLoading(false);
       }
-    } catch (e: any) {
-      if (e.message?.includes("401") || e.message?.includes("Password")) {
-        setNeedsPassword(true);
-      } else if (e.message?.includes("410")) {
-        setError("Denne delingen har utløpt.");
-      } else if (e.message?.includes("404")) {
-        setError("Delt lenke ikke funnet.");
-      } else {
-        setError(e.message || "Noe gikk galt.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [params.token]
+  );
 
   useEffect(() => {
     loadResource();
-  }, [params.token]);
+  }, [loadResource]);
+
+  const handleDownload = () => {
+    if (!resource?.content) return;
+    downloadSharedLatex(resource.content);
+  };
+
+  const handleClone = async () => {
+    setActionLoading("clone");
+    setCloneMessage("");
+    try {
+      const res = await cloneShared(params.token, password || undefined);
+      if (res.success) {
+        setCloneMessage(`Klonet! Ny ressurs-id: ${res.new_resource_id.slice(0, 8)}…`);
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Kloning feilet";
+      if (msg.includes("401") || msg.includes("403")) {
+        setNeedsPassword(true);
+        setPasswordError(msg.includes("403") ? "Feil passord for kloning." : "Passord kreves for å klone.");
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setActionLoading("");
+    }
+  };
 
   if (needsPassword) {
     return (
@@ -53,7 +98,18 @@ export default function SharedResourcePage({
         <p className="text-sm text-text-secondary mb-6">
           Denne ressursen krever passord.
         </p>
-        <form onSubmit={(e) => { e.preventDefault(); loadResource(password); }} className="space-y-3">
+        {passwordError && (
+          <p className="text-sm text-accent-red mb-3" role="alert">
+            {passwordError}
+          </p>
+        )}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            loadResource(password);
+          }}
+          className="space-y-3"
+        >
           <input
             type="password"
             value={password}
@@ -62,7 +118,9 @@ export default function SharedResourcePage({
             className="input text-center"
             autoFocus
           />
-          <button type="submit" className="btn-primary w-full">Åpne</button>
+          <button type="submit" className="btn-primary w-full">
+            Åpne
+          </button>
         </form>
       </div>
     );
@@ -81,7 +139,9 @@ export default function SharedResourcePage({
       <div className="max-w-sm mx-auto py-20 text-center">
         <AlertTriangle size={32} className="mx-auto mb-4 text-accent-red opacity-60" />
         <h1 className="font-display text-xl mb-2">Feil</h1>
-        <p className="text-sm text-text-secondary">{error}</p>
+        <p className="text-sm text-text-secondary" role="alert">
+          {error}
+        </p>
       </div>
     );
   }
@@ -91,7 +151,7 @@ export default function SharedResourcePage({
   return (
     <div className="max-w-reading mx-auto">
       <div className="card mb-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-lg font-semibold flex items-center gap-2">
               <FileText size={18} className="text-text-muted" />
@@ -100,16 +160,25 @@ export default function SharedResourcePage({
             <p className="text-sm text-text-secondary mt-1">
               Type: {resource.resource_type}
             </p>
+            {cloneMessage && (
+              <p className="text-xs text-accent-green mt-2">{cloneMessage}</p>
+            )}
           </div>
           <div className="flex gap-2">
             {resource.allow_download && (
-              <button className="btn-primary">
+              <button type="button" onClick={handleDownload} className="btn-primary">
                 <Download size={14} /> Last ned
               </button>
             )}
             {resource.allow_clone && (
-              <button className="btn-secondary">
-                <Copy size={14} /> Klon
+              <button
+                type="button"
+                onClick={handleClone}
+                disabled={actionLoading === "clone"}
+                className="btn-secondary"
+              >
+                <Copy size={14} />
+                {actionLoading === "clone" ? "Kloner…" : "Klon"}
               </button>
             )}
           </div>
@@ -118,19 +187,9 @@ export default function SharedResourcePage({
 
       <div className="card">
         <h2 className="text-sm font-medium mb-3">Innhold</h2>
-        {resource.content?.full_document ? (
-          <pre className="bg-bg rounded-lg p-4 text-xs font-mono text-text-secondary overflow-x-auto max-h-[60vh] overflow-y-auto">
-            {String(resource.content.full_document)}
-          </pre>
-        ) : resource.content?.latex_body ? (
-          <pre className="bg-bg rounded-lg p-4 text-xs font-mono text-text-secondary overflow-x-auto max-h-[60vh] overflow-y-auto">
-            {String(resource.content.latex_body)}
-          </pre>
-        ) : (
-          <div className="text-center py-8 text-text-muted text-sm">
-            Forhåndsvisning ikke tilgjengelig
-          </div>
-        )}
+        <pre className="text-xs font-mono whitespace-pre-wrap text-text-secondary max-h-[60vh] overflow-y-auto">
+          {String(resource.content.full_document || JSON.stringify(resource.content, null, 2))}
+        </pre>
       </div>
     </div>
   );

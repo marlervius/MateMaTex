@@ -1,5 +1,30 @@
 import type { GenerationResultApi } from "@/lib/api";
-import type { GenerationRequest, GenerationResult, MathClaimDetail } from "@/lib/store";
+import type {
+  GenerationRequest,
+  GenerationResult,
+  LayoutReport,
+  MathClaimDetail,
+} from "@/lib/store";
+
+function mapLayoutReport(raw: unknown): LayoutReport | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Record<string, any>;
+  const issues = Array.isArray(r.issues) ? r.issues : [];
+  return {
+    score: Number(r.score ?? 100),
+    overfullCount: Number(r.overfull_count ?? 0),
+    underfullCount: Number(r.underfull_count ?? 0),
+    maxOverflowPt: Number(r.max_overflow_pt ?? 0),
+    undefinedReferences: Number(r.undefined_references ?? 0),
+    summary: String(r.summary ?? ""),
+    issues: issues.map((i: any) => ({
+      kind: String(i.kind ?? ""),
+      severity: (i.severity ?? "info") as LayoutReport["issues"][number]["severity"],
+      detail: String(i.detail ?? ""),
+      overflowPt: Number(i.overflow_pt ?? 0),
+    })),
+  };
+}
 
 function mapClaims(raw: unknown[]): MathClaimDetail[] {
   if (!Array.isArray(raw)) return [];
@@ -40,7 +65,15 @@ export function mapApiResultToGenerationResult(
 
   const latex = (raw.latex_compilation ?? {}) as Record<string, unknown>;
 
-  const status = String(api.status ?? "failed") as GenerationResult["status"];
+  const statusRaw = String(raw.status ?? "");
+  const status: GenerationResult["status"] =
+    statusRaw === "pending" ||
+    statusRaw === "running" ||
+    statusRaw === "completed" ||
+    statusRaw === "completed_with_warnings" ||
+    statusRaw === "failed"
+      ? statusRaw
+      : "failed";
 
   return {
     jobId: String(raw.job_id ?? ""),
@@ -53,6 +86,7 @@ export function mapApiResultToGenerationResult(
     differentiatedBasic: String(raw.differentiated_basic ?? ""),
     differentiatedAdvanced: String(raw.differentiated_advanced ?? ""),
     warningReason: String(raw.warning_reason ?? ""),
+    layoutReport: mapLayoutReport(raw.layout_report),
     steps,
     mathVerification: {
       claimsChecked: Number(mv.claims_checked ?? 0),
@@ -64,7 +98,7 @@ export function mapApiResultToGenerationResult(
       incorrectClaims: incorrect,
       unparseableClaims: unparseable,
     },
-    latexCompiled: Boolean(latex.success),
+    latexCompiled: Boolean(raw.pdf_available ?? latex.success),
     totalDuration: Number(raw.total_duration_seconds ?? 0),
     error: String(raw.error ?? ""),
     generationMeta,

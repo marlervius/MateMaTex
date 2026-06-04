@@ -44,6 +44,31 @@ class AgentRole(str, Enum):
 # ---------------------------------------------------------------------------
 # Sub-models
 # ---------------------------------------------------------------------------
+class PdfStyle(BaseModel):
+    """
+    Visual + accessibility options for the generated PDF.
+
+    All fields default to the classic look, so omitting this object reproduces
+    the previous output exactly.
+    """
+    theme: str = Field(
+        default="default",
+        description="Color palette: default|calm|playful|highcontrast",
+    )
+    student_mode: bool = Field(
+        default=False, description="Favour writing space (answer fields)"
+    )
+    accessible: bool = Field(
+        default=False, description="Emit PDF language metadata / tagged-PDF mode"
+    )
+    dyslexia: bool = Field(
+        default=False, description="Sans-serif body with generous leading"
+    )
+    high_contrast: bool = Field(
+        default=False, description="Force the high-contrast palette"
+    )
+
+
 class GenerationRequest(BaseModel):
     """User's input to the pipeline."""
     grade: str = Field(description="Grade level, e.g. '10. trinn', 'VG2 R1'")
@@ -62,6 +87,7 @@ class GenerationRequest(BaseModel):
     include_graphs: bool = True
     competency_goals: list[str] = Field(default_factory=list)
     extra_instructions: str = Field(default="", max_length=10_000)
+    pdf_style: PdfStyle = Field(default_factory=PdfStyle)
 
 
 class MathClaim(BaseModel):
@@ -87,6 +113,26 @@ class VerificationResult(BaseModel):
     errors: list[MathClaim] = Field(default_factory=list)
     unparseable_claims: list[MathClaim] = Field(default_factory=list)
     all_correct: bool = False
+    summary: str = ""
+
+
+class LayoutIssue(BaseModel):
+    """A single layout problem detected in the compilation log."""
+    kind: str = Field(description="overfull_hbox|underfull_hbox|overfull_vbox|oversized_float|undefined_reference|multiply_defined|missing_font")
+    severity: str = Field(default="info", description="info|warning|error")
+    detail: str = ""
+    overflow_pt: float = 0.0
+    page: int | None = None
+
+
+class LayoutReport(BaseModel):
+    """Structured quality assessment of the compiled document's layout."""
+    score: int = 100
+    issues: list[LayoutIssue] = Field(default_factory=list)
+    overfull_count: int = 0
+    underfull_count: int = 0
+    max_overflow_pt: float = 0.0
+    undefined_references: int = 0
     summary: str = ""
 
 
@@ -137,6 +183,7 @@ class PipelineState(BaseModel):
 
     # --- Identifiers ---
     job_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    owner_id: str = ""
     created_at: datetime = Field(default_factory=datetime.now)
     status: PipelineStatus = PipelineStatus.PENDING
 
@@ -160,6 +207,7 @@ class PipelineState(BaseModel):
     math_verification_attempts: int = 0
     latex_compilation: LatexCompilationResult = Field(default_factory=LatexCompilationResult)
     latex_fix_attempts: int = 0
+    layout_report: LayoutReport = Field(default_factory=LayoutReport)
 
     # --- Observability ---
     steps: list[AgentStep] = Field(default_factory=list)

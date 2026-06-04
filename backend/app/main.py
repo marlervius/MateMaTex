@@ -37,7 +37,8 @@ from slowapi.errors import RateLimitExceeded
 
 from app.auth import get_current_user, require_stream_access
 from app.config import get_config, get_settings
-from app.job_store import cleanup_old_snapshots, get_job_memory, persist_terminal_job, resolve_job
+from app.job_store import cleanup_old_snapshots, evict_terminal_jobs, get_job_memory, persist_terminal_job, resolve_job
+from app.pipeline.cancel import cancel_job, clear_cancel
 from app.logging_config import configure_logging
 from app.models.state import GenerationRequest, PipelineState, PipelineStatus
 from app.rate_limit import limiter
@@ -70,16 +71,18 @@ async def lifespan(app: FastAPI):
         logger.warning("startup_no_database", msg="DATABASE_URL not set — running without DB")
 
     if settings.environment == "production" and not settings.mate_api_key:
-        logger.error(
-            "production_missing_mate_api_key",
-            msg="Set MATE_API_KEY in production",
-        )
+        raise RuntimeError("MATE_API_KEY must be set in production")
 
     cleanup_old_snapshots(max_age_days=7)
+    evict_terminal_jobs(get_job_memory())
     from app.stores import collaboration_store, exercise_store
+    from app.stores import sharing_store
     exercise_store._ensure_loaded()
     collaboration_store._ensure_loaded()
+    sharing_store._ensure_loaded()
     yield
+
+    _executor.shutdown(wait=False, cancel_futures=True)
 
     from app.db import close_pool
     await close_pool()
@@ -215,11 +218,12 @@ async def start_generation(
     state = PipelineState(
         request=generation_request,
         status=PipelineStatus.PENDING,
+        owner_id=user_id,
     )
     _jobs[state.job_id] = state
 
     loop = asyncio.get_event_loop()
-    loop.run_in_executor(_executor, _run_job, state.job_id, generation_request)
+    loop.run_in_executor(_executor, _run_job, state.job_id, generation_request, user_id)
 
     logger.info("generation_started", job_id=state.job_id, topic=generation_request.topic)
 
@@ -233,9 +237,13 @@ async def start_generation(
 @app.get("/generate/{job_id}/stream")
 async def stream_progress(
     job_id: str,
-    _user_id: str = Depends(require_stream_access),
+    user_id: str = Depends(require_stream_access),
 ) -> StreamingResponse:
     """Stream agent progress via Server-Sent Events."""
+
+    initial_state = resolve_job(job_id, _jobs)
+    if initial_state is not None:
+        _authorize_job(initial_state, user_id)
 
     async def event_generator() -> AsyncGenerator[str, None]:
         import time as _time
@@ -311,8 +319,10 @@ async def abort_generation(job_id: str, user_id: str = Depends(get_current_user)
     state = resolve_job(job_id, _jobs)
     if state is None:
         raise HTTPException(status_code=404, detail="Job not found")
+    _authorize_job(state, user_id)
 
     if state.status == PipelineStatus.RUNNING or state.status == PipelineStatus.PENDING:
+        cancel_job(job_id)
         state.status = PipelineStatus.FAILED
         state.error_message = _ABORT_MESSAGE
         _jobs[job_id] = state
@@ -329,6 +339,7 @@ async def get_result(job_id: str, user_id: str = Depends(get_current_user)):
     state = resolve_job(job_id, _jobs)
     if state is None:
         raise HTTPException(status_code=404, detail="Job not found")
+    _authorize_job(state, user_id)
 
     if state.status in (PipelineStatus.RUNNING, PipelineStatus.PENDING):
         raise HTTPException(status_code=202, detail="Job still running")
@@ -349,6 +360,7 @@ async def get_result(job_id: str, user_id: str = Depends(get_current_user)):
         "warning_reason": state.warning_reason,
         "math_verification": state.math_verification.model_dump(),
         "latex_compilation": state.latex_compilation.model_dump(),
+        "layout_report": state.layout_report.model_dump(),
         "steps": [s.model_dump() for s in state.steps],
         "total_duration_seconds": state.total_duration_seconds,
         "total_tokens": state.total_tokens,
@@ -357,7 +369,7 @@ async def get_result(job_id: str, user_id: str = Depends(get_current_user)):
 
 
 @app.get("/generate/{job_id}/pdf")
-async def get_job_pdf(job_id: str, _user_id: str = Depends(get_current_user)):
+async def get_job_pdf(job_id: str, user_id: str = Depends(get_current_user)):
     """
     Return the compiled PDF for a completed job.
 
@@ -367,6 +379,7 @@ async def get_job_pdf(job_id: str, _user_id: str = Depends(get_current_user)):
     state = resolve_job(job_id, _jobs)
     if state is None:
         raise HTTPException(status_code=404, detail="Job not found")
+    _authorize_job(state, user_id)
     if state.status in (PipelineStatus.RUNNING, PipelineStatus.PENDING):
         raise HTTPException(status_code=202, detail="Job still running")
 
@@ -389,7 +402,8 @@ async def get_job_pdf(job_id: str, _user_id: str = Depends(get_current_user)):
             output_dir = Path(settings.output_dir) / "pipeline_pdfs"
             output_dir.mkdir(parents=True, exist_ok=True)
             target = output_dir / f"{state.job_id}.pdf"
-            pdf_path = compile_to_pdf(
+            pdf_path = await asyncio.to_thread(
+                compile_to_pdf,
                 latex_content=state.full_document,
                 output_path=str(target),
                 pdflatex_path=config.pdflatex_path,
@@ -433,9 +447,12 @@ async def compile_latex(
 
     config = get_config()
     safe_name = _safe_filename(body.filename)
-    pdf_path = compile_to_pdf(
+    out_dir = Path(config.output_dir) / "compile_cache"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    pdf_path = await asyncio.to_thread(
+        compile_to_pdf,
         latex_content=content,
-        output_path=f"{config.output_dir}/{safe_name}.pdf",
+        output_path=str(out_dir / f"{uuid.uuid4().hex}.pdf"),
         pdflatex_path=config.pdflatex_path,
     )
 
@@ -518,36 +535,42 @@ async def health_ready():
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-def _run_job(job_id: str, request: GenerationRequest) -> None:
+def _run_job(job_id: str, request: GenerationRequest, owner_id: str = "") -> None:
     """Run a generation job in a background thread."""
     from app.pipeline.graph import run_pipeline
 
-    try:
-        _jobs[job_id].status = PipelineStatus.RUNNING
-
-        def _on_progress(s: PipelineState) -> None:
-            existing = _jobs.get(job_id)
-            if (
-                existing
-                and existing.status == PipelineStatus.FAILED
-                and existing.error_message == _ABORT_MESSAGE
-            ):
-                return  # don't resurrect an aborted job
-            s.job_id = job_id
-            _jobs[job_id] = s
-
-        result = run_pipeline(request, job_id=job_id, on_progress=_on_progress)
+    def _is_aborted() -> bool:
         existing = _jobs.get(job_id)
-        if (
+        return bool(
             existing
             and existing.status == PipelineStatus.FAILED
             and existing.error_message == _ABORT_MESSAGE
-        ):
+        )
+
+    def _publish(state: PipelineState) -> None:
+        # Live progress: keep the registry object SSE watches in sync after each
+        # super-step. Never resurrect a job the user already aborted.
+        if _is_aborted():
+            return
+        _jobs[job_id] = state
+
+    try:
+        _jobs[job_id].status = PipelineStatus.RUNNING
+        result = run_pipeline(
+            request,
+            job_id=job_id,
+            owner_id=owner_id,
+            on_progress=_publish,
+        )
+        if _is_aborted():
             logger.info("job_aborted_skipping_overwrite", job_id=job_id)
+            clear_cancel(job_id)
             return
         result.job_id = job_id
         _jobs[job_id] = result
         persist_terminal_job(result)
+        evict_terminal_jobs(_jobs)
+        clear_cancel(job_id)
     except Exception as e:
         state = _jobs.get(job_id)
         if state:
@@ -555,6 +578,24 @@ def _run_job(job_id: str, request: GenerationRequest) -> None:
             state.error_message = str(e)
             persist_terminal_job(state)
         logger.error("job_failed", job_id=job_id, error=str(e))
+
+
+def _authorize_job(state: PipelineState, user_id: str) -> None:
+    """
+    Raise 403 if the job belongs to a different user.
+
+    Legacy jobs without an owner (owner_id == "") stay accessible, as does any
+    job in the no-auth or shared-key modes where every caller resolves to the
+    same identity ("anonymous" / "api-user").
+    """
+    if state.owner_id and user_id and state.owner_id != user_id:
+        logger.warning(
+            "job_access_denied",
+            job_id=state.job_id,
+            owner=state.owner_id,
+            requester=user_id,
+        )
+        raise HTTPException(status_code=403, detail="Not authorized for this job")
 
 
 def _safe_filename(name: str) -> str:

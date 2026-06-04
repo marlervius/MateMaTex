@@ -30,7 +30,7 @@ import structlog
 from langgraph.graph import END, StateGraph
 
 from app.config import get_config
-from app.latex.preamble import wrap_with_preamble
+from app.latex.preamble import wrap_with_style
 from app.models.state import (
     GenerationRequest,
     PipelineState,
@@ -41,12 +41,16 @@ from app.pipeline.agents.editor import run_editor
 from app.pipeline.agents.latex_fixer import run_latex_fixer
 from app.pipeline.agents.latex_fallback import run_latex_fallback
 from app.pipeline.agents.latex_validator import run_latex_validator
+from app.pipeline.agents.layout import run_layout
 from app.pipeline.agents.math_verifier import run_math_verifier
 from app.pipeline.agents.pedagogue import run_pedagogue
 from app.pipeline.agents.tikz_validator import run_tikz_validator
 from app.pipeline.agents.table_validator import run_table_validator
+from app.pipeline.cancel import clear_cancel, is_cancelled
 
 logger = structlog.get_logger()
+
+_ABORT_MESSAGE = "Avbrutt av bruker"
 
 
 # ---------------------------------------------------------------------------
@@ -213,7 +217,7 @@ def _apply_differentiation(state: PipelineState) -> None:
         + (output.advanced_latex or body)
     )
     state.final_latex_body = combined_body
-    state.full_document = wrap_with_preamble(combined_body)
+    state.full_document = wrap_with_style(combined_body, state.request.pdf_style)
 
 
 def finalize(state: PipelineState) -> PipelineState:
@@ -245,9 +249,9 @@ def finalize(state: PipelineState) -> PipelineState:
                 job_id=state.job_id,
             )
     elif not state.full_document:
-        state.full_document = wrap_with_preamble(body)
+        state.full_document = wrap_with_style(body, state.request.pdf_style)
     elif state.final_latex_body and state.full_document:
-        state.full_document = wrap_with_preamble(state.final_latex_body)
+        state.full_document = wrap_with_style(state.final_latex_body, state.request.pdf_style)
 
     if not state.pdf_base64 and state.latex_compilation.pdf_base64:
         state.pdf_base64 = state.latex_compilation.pdf_base64
@@ -337,6 +341,7 @@ def create_pipeline() -> StateGraph:
     graph.add_node("latex_validator", run_latex_validator)
     graph.add_node("latex_fixer", run_latex_fixer)
     graph.add_node("latex_fallback", run_latex_fallback)
+    graph.add_node("layout", run_layout)  # Track E: non-destructive layout QA
     graph.add_node("finalize", finalize)
 
     # Set entry point
@@ -369,17 +374,18 @@ def create_pipeline() -> StateGraph:
         {
             "latex_fixer": "latex_fixer",
             "latex_fallback": "latex_fallback",
-            "finalize": "finalize",
+            "finalize": "layout",
         },
     )
 
     # LaTeX fixer goes back to validation
     graph.add_edge("latex_fixer", "latex_validator")
-    
-    # Fallback goes straight to finalize
-    graph.add_edge("latex_fallback", "finalize")
 
-    # Finalize → END
+    # Fallback runs layout QA too, then finalize
+    graph.add_edge("latex_fallback", "layout")
+
+    # Layout QA → finalize → END
+    graph.add_edge("layout", "finalize")
     graph.add_edge("finalize", END)
 
     return graph
@@ -389,9 +395,20 @@ def create_pipeline() -> StateGraph:
 # Convenience runner
 # ---------------------------------------------------------------------------
 
+def _coerce_state(value: object) -> PipelineState:
+    """LangGraph may yield a dict or a PipelineState — normalise to PipelineState."""
+    if isinstance(value, PipelineState):
+        return value
+    if isinstance(value, dict):
+        return PipelineState(**value)
+    raise TypeError(f"Unexpected pipeline state type: {type(value)!r}")
+
+
 def run_pipeline(
     request: GenerationRequest,
+    *,
     job_id: str | None = None,
+    owner_id: str = "",
     on_progress: "Callable[[PipelineState], None] | None" = None,
 ) -> PipelineState:
     """
@@ -399,11 +416,11 @@ def run_pipeline(
 
     Args:
         request: The generation request from the user.
-        job_id: Optional fixed job id so the result matches the id handed to
-            the client by POST /generate (otherwise progress/stream/result use
-            mismatched ids and the UI never updates).
-        on_progress: Optional callback invoked with the latest PipelineState
-            after each pipeline node, enabling live SSE progress.
+        job_id: Reuse this job id (so the API and SSE clients can track the same
+            job). When omitted a fresh id is generated.
+        owner_id: User id that owns this job (for authorization checks).
+        on_progress: Optional callback invoked with the latest state after every
+            graph super-step, enabling live SSE progress streaming.
 
     Returns:
         Final PipelineState with all outputs and observability data.
@@ -416,10 +433,12 @@ def run_pipeline(
         job_id=job_id,
     )
 
-    # Build initial state
+    # Build initial state, reusing the caller's job id so persistence and
+    # streaming all key off a single, stable id.
     state = PipelineState(
         request=request,
         status=PipelineStatus.RUNNING,
+        owner_id=owner_id,
     )
     if job_id:
         state.job_id = job_id
@@ -435,6 +454,8 @@ def run_pipeline(
             restored.job_id = state.job_id
             restored.created_at = state.created_at
             restored.from_cache = True
+            if owner_id and not restored.owner_id:
+                restored.owner_id = owner_id
             restored.status = (
                 PipelineStatus.COMPLETED_WITH_WARNINGS
                 if (
@@ -450,23 +471,35 @@ def run_pipeline(
     except Exception as e:
         logger.warning("pipeline_cache_restore_failed", error=str(e))
 
-    # Create and compile the graph
     graph = create_pipeline()
     compiled = graph.compile()
 
     # Run, streaming intermediate state so the SSE endpoint sees live progress.
     final_state = state
     try:
+        # stream_mode="values" yields the full accumulated state after each
+        # node, so we can publish incremental progress to SSE clients.
         for chunk in compiled.stream(state, stream_mode="values"):
-            if isinstance(chunk, dict):
-                chunk = PipelineState(**chunk)
+            if job_id and is_cancelled(job_id):
+                final_state = _coerce_state(chunk)
+                if job_id:
+                    final_state.job_id = job_id
+                final_state.status = PipelineStatus.FAILED
+                final_state.error_message = _ABORT_MESSAGE
+                logger.info("pipeline_cancelled", job_id=job_id)
+                clear_cancel(job_id)
+                return final_state
+
+            final_state = _coerce_state(chunk)
+            # job_id/owner_id are not mutated by nodes, but re-assert to be safe.
             if job_id:
-                chunk.job_id = job_id
-            final_state = chunk
-            if on_progress:
+                final_state.job_id = job_id
+            if owner_id and not final_state.owner_id:
+                final_state.owner_id = owner_id
+            if on_progress is not None:
                 try:
-                    on_progress(chunk)
-                except Exception as cb_err:
+                    on_progress(final_state)
+                except Exception as cb_err:  # never let a callback kill the run
                     logger.warning("pipeline_progress_callback_failed", error=str(cb_err))
 
         return final_state
@@ -474,5 +507,7 @@ def run_pipeline(
     except Exception as e:
         final_state.status = PipelineStatus.FAILED
         final_state.error_message = str(e)
+        if job_id:
+            final_state.job_id = job_id
         logger.error("pipeline_failed", error=str(e), job_id=final_state.job_id)
         return final_state

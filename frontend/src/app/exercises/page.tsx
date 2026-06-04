@@ -67,6 +67,7 @@ export default function ExerciseBankPage() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -83,6 +84,7 @@ export default function ExerciseBankPage() {
   // Hint state
   const [hints, setHints] = useState<any>(null);
   const [actionLoading, setActionLoading] = useState("");
+  const [actionError, setActionError] = useState("");
   const [fetchError, setFetchError] = useState("");
 
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
@@ -99,6 +101,17 @@ export default function ExerciseBankPage() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setSearchQuery(searchInput);
+      setPage(1);
+    }, 300);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [searchInput]);
 
   const fetchExercises = useCallback(async () => {
     setLoading(true);
@@ -131,9 +144,7 @@ export default function ExerciseBankPage() {
   }, [fetchExercises]);
 
   const handleSearch = (value: string) => {
-    setSearchQuery(value);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setPage(1), 300);
+    setSearchInput(value);
   };
 
   const toggleSelect = (id: string) => {
@@ -147,9 +158,16 @@ export default function ExerciseBankPage() {
   const handleBulkExport = async (format: "pdf" | "docx") => {
     if (selected.size === 0) return;
     setActionLoading("export");
+    setActionError("");
     try {
       const res = await exportExercises(Array.from(selected), format);
-      if (res.success) downloadBase64(res.content_base64, res.filename, "application/octet-stream");
+      if (res.success) {
+        downloadBase64(res.content_base64, res.filename, "application/octet-stream");
+      } else {
+        setActionError("Eksport feilet");
+      }
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : "Eksport feilet");
     } finally {
       setActionLoading("");
     }
@@ -157,9 +175,12 @@ export default function ExerciseBankPage() {
 
   const handleGenerateVariant = async (id: string) => {
     setActionLoading("variant");
+    setActionError("");
     try {
       await generateVariant(id);
       fetchExercises();
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : "Variant feilet");
     } finally {
       setActionLoading("");
     }
@@ -167,8 +188,11 @@ export default function ExerciseBankPage() {
 
   const handlePublishToSchool = async (id: string) => {
     setActionLoading("publish");
+    setActionError("");
     try {
       await publishToSchool(id);
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : "Publisering feilet");
     } finally {
       setActionLoading("");
     }
@@ -236,7 +260,7 @@ export default function ExerciseBankPage() {
           <input
             ref={searchRef}
             type="text"
-            value={searchQuery}
+            value={searchInput}
             onChange={(e) => handleSearch(e.target.value)}
             placeholder="Søk i oppgaver... (f.eks. 'andregradsligning med diskriminant')"
             className="input !pl-11 !pr-4 !py-3.5 text-center"
@@ -245,6 +269,12 @@ export default function ExerciseBankPage() {
             ⌘E
           </kbd>
         </div>
+
+        {actionError && (
+          <p className="text-sm text-accent-red mb-3" role="alert">
+            {actionError}
+          </p>
+        )}
 
         {/* Filters + view mode */}
         <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">

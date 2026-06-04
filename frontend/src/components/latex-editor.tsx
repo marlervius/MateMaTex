@@ -32,17 +32,20 @@ export function LatexEditor({ initialContent, onSave, onClose }: LatexEditorProp
   const [showDiff, setShowDiff] = useState(false);
   const [diffContent, setDiffContent] = useState("");
   const [aiLoading, setAiLoading] = useState("");
+  const [aiError, setAiError] = useState("");
   const [mobileTab, setMobileTab] = useState<"code" | "preview">("code");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const compileGenRef = useRef(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Debounced compilation
   const triggerCompile = useCallback((latexContent: string) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
+      const gen = ++compileGenRef.current;
       setCompiling(true);
       try {
         const result = await compileLatex(latexContent);
+        if (gen !== compileGenRef.current) return;
         if (result.success) {
           setPdfBase64(result.pdf_base64);
           setErrors([]);
@@ -51,18 +54,23 @@ export function LatexEditor({ initialContent, onSave, onClose }: LatexEditorProp
         }
         setWarnings(result.warnings || []);
       } catch {
-        setErrors([{ line: 0, message: "Compilation request failed" }]);
+        if (gen === compileGenRef.current) {
+          setErrors([{ line: 0, message: "Compilation request failed" }]);
+        }
       } finally {
-        setCompiling(false);
+        if (gen === compileGenRef.current) setCompiling(false);
       }
     }, 800);
   }, []);
 
   useEffect(() => {
     triggerCompile(content);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      compileGenRef.current += 1;
+    };
   }, []);
 
-  // Cmd+S to save
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
@@ -86,12 +94,17 @@ export function LatexEditor({ initialContent, onSave, onClose }: LatexEditorProp
     if (!selection) return;
 
     setAiLoading(action);
+    setAiError("");
     try {
       const result = await editorAction(action, selection, content);
       if (result.success) {
         setDiffContent(result.replacement_latex);
         setShowDiff(true);
+      } else {
+        setAiError(result.error || "AI-handling feilet");
       }
+    } catch (e: unknown) {
+      setAiError(e instanceof Error ? e.message : "AI-handling feilet");
     } finally {
       setAiLoading("");
     }
@@ -125,9 +138,7 @@ export function LatexEditor({ initialContent, onSave, onClose }: LatexEditorProp
 
   return (
     <div className="h-full flex flex-col bg-bg">
-      {/* Toolbar */}
       <div className="flex items-center gap-1 px-3 py-2 border-b border-border bg-surface overflow-x-auto flex-shrink-0">
-        {/* LaTeX snippets */}
         <ToolbarGroup label="Sett inn">
           <ToolbarBtn label="\\frac" onClick={() => insertAtCursor("\\frac{}{}")} />
           <ToolbarBtn label="\\int" onClick={() => insertAtCursor("\\int_{a}^{b}  \\, dx")} />
@@ -137,7 +148,6 @@ export function LatexEditor({ initialContent, onSave, onClose }: LatexEditorProp
 
         <div className="w-px h-5 bg-border mx-1.5" />
 
-        {/* AI actions */}
         <ToolbarGroup label="AI">
           <ToolbarBtn icon={<Wand2 size={12} />} label="Forenkle" onClick={() => handleAiAction("simplify")} loading={aiLoading === "simplify"} />
           <ToolbarBtn icon={<Image size={12} />} label="Illustrasjon" onClick={() => handleAiAction("add-illustration")} loading={aiLoading === "add-illustration"} />
@@ -147,8 +157,12 @@ export function LatexEditor({ initialContent, onSave, onClose }: LatexEditorProp
 
         <div className="flex-1" />
 
-        {/* Status */}
         <div className="flex items-center gap-2">
+          {aiError && (
+            <span className="text-xs text-accent-red max-w-[200px] truncate" role="alert">
+              {aiError}
+            </span>
+          )}
           {compiling && (
             <span className="flex items-center gap-1 text-xs text-text-muted">
               <Loader2 size={12} className="animate-spin" />
@@ -183,7 +197,6 @@ export function LatexEditor({ initialContent, onSave, onClose }: LatexEditorProp
         )}
       </div>
 
-      {/* Mobile tabs */}
       <div className="md:hidden flex border-b border-border">
         <button
           onClick={() => setMobileTab("code")}
@@ -199,9 +212,7 @@ export function LatexEditor({ initialContent, onSave, onClose }: LatexEditorProp
         </button>
       </div>
 
-      {/* Split view */}
       <div className="flex-1 flex min-h-0">
-        {/* Left: Editor */}
         <div className={`flex flex-col border-r border-border ${mobileTab === "preview" ? "hidden md:flex" : "flex"} md:w-1/2 w-full`}>
           {errors.length > 0 && (
             <div className="px-3 py-1.5 bg-accent-red/5 border-b border-accent-red/20 text-xs text-accent-red max-h-16 overflow-y-auto">
@@ -222,7 +233,6 @@ export function LatexEditor({ initialContent, onSave, onClose }: LatexEditorProp
           />
         </div>
 
-        {/* Right: Preview */}
         <div className={`bg-white flex items-center justify-center overflow-auto ${mobileTab === "code" ? "hidden md:flex" : "flex"} md:w-1/2 w-full`}>
           {pdfBase64 ? (
             <iframe
@@ -238,7 +248,6 @@ export function LatexEditor({ initialContent, onSave, onClose }: LatexEditorProp
         </div>
       </div>
 
-      {/* AI diff overlay */}
       <AnimatePresence>
         {showDiff && (
           <motion.div
@@ -266,7 +275,6 @@ export function LatexEditor({ initialContent, onSave, onClose }: LatexEditorProp
   );
 }
 
-/* ---- Toolbar helpers ---- */
 function ToolbarGroup({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-0.5">

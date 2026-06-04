@@ -56,7 +56,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   }
   const res = await fetch(url, { ...init, headers });
   if (!res.ok) {
-    throw new Error(await readErrorMessage(res));
+    throw new Error(`${res.status}: ${await readErrorMessage(res)}`);
   }
   return res.json() as Promise<T>;
 }
@@ -87,6 +87,12 @@ export interface GenerateRequest {
   include_graphs: boolean;
   competency_goals: string[];
   extra_instructions: string;
+  pdf_style?: {
+    theme: string;
+    accessible: boolean;
+    dyslexia: boolean;
+    high_contrast: boolean;
+  };
 }
 
 export interface GenerateResponse {
@@ -103,6 +109,7 @@ export interface GenerationResultApi {
   pdf_available?: boolean;
   math_verification: Record<string, unknown>;
   latex_compilation: Record<string, unknown>;
+  layout_report?: Record<string, unknown>;
   steps: Array<Record<string, unknown>>;
   total_duration_seconds: number;
   total_tokens: number;
@@ -269,16 +276,20 @@ export async function abortGeneration(jobId: string): Promise<{ success: boolean
 
 export async function getResult(
   jobId: string,
-  maxAttempts = 15
+  maxAttempts = 15,
+  signal?: AbortSignal
 ): Promise<GenerationResultApi> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const res = await fetch(apiUrl(`generate/${jobId}/result`));
+    if (signal?.aborted) {
+      throw new Error("Henting av resultat avbrutt");
+    }
+    const res = await fetch(apiUrl(`generate/${jobId}/result`), { signal });
     if (res.status === 202) {
       await new Promise((r) => setTimeout(r, Math.min(400 * (attempt + 1), 3000)));
       continue;
     }
     if (!res.ok) {
-      throw new Error(await readErrorMessage(res));
+      throw new Error(`${res.status}: ${await readErrorMessage(res)}`);
     }
     return res.json() as Promise<GenerationResultApi>;
   }
@@ -550,6 +561,27 @@ export async function getShared(
     });
   }
   return fetchJson(apiUrl(`sharing/${token}`));
+}
+
+export async function cloneShared(
+  token: string,
+  password?: string
+): Promise<{ success: boolean; new_resource_id: string }> {
+  return fetchJson(apiUrl(`sharing/${token}/clone`), {
+    method: "POST",
+    body: JSON.stringify({ password: password || null }),
+  });
+}
+
+export async function downloadSharedLatex(content: Record<string, unknown>, filename = "delt-materiale.tex") {
+  const latex = String(content.full_document || "");
+  const blob = new Blob([latex], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ---------------------------------------------------------------------------

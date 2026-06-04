@@ -7,6 +7,7 @@ structured error messages with line numbers.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import os
@@ -26,6 +27,7 @@ from app.auth import get_current_user
 from app.config import get_config
 from app.rate_limit import limiter
 from app.latex.preamble import wrap_with_preamble
+from app.validators import ensure_latex_size
 
 logger = structlog.get_logger()
 
@@ -141,9 +143,10 @@ def _compile_latex(full_content: str, filename: str) -> tuple[str, list[dict], l
                 f.write(full_content)
 
             try:
+                pdflatex = get_config().pdflatex_path
                 proc_result = subprocess.run(
                     [
-                        "pdflatex",
+                        pdflatex,
                         "-interaction=nonstopmode",
                         "-halt-on-error",
                         f"-output-directory={tmpdir}",
@@ -197,6 +200,7 @@ async def compile_editor_latex(
     - Caches compiled PDFs by content hash
     - Returns structured errors with line numbers on failure
     """
+    ensure_latex_size(req.latex_body, field_name="latex_body")
     content = req.latex_body
     if r"\documentclass" not in content:
         content = wrap_with_preamble(content)
@@ -216,7 +220,9 @@ async def compile_editor_latex(
 
     # Compile
     safe_name = re.sub(r"[^\w\-]", "_", req.filename.strip())[:64] or "preview"
-    pdf_base64, errors, warnings = _compile_latex(content, safe_name)
+    pdf_base64, errors, warnings = await asyncio.to_thread(
+        _compile_latex, content, safe_name
+    )
 
     # Cache result
     _compile_cache[content_hash] = (pdf_base64, errors)

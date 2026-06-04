@@ -34,8 +34,7 @@ export default function SettingsPage() {
     const prefs = loadPreferences();
     setGrade(prefs.grade);
     setLanguageLevel(prefs.languageLevel);
-    setRequest({ grade: prefs.grade, languageLevel: prefs.languageLevel });
-  }, [setRequest]);
+  }, []);
 
   const toggleTheme = () => {
     const html = document.documentElement;

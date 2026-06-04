@@ -11,7 +11,7 @@ from datetime import datetime
 import structlog
 
 from app.config import get_config
-from app.latex.preamble import wrap_with_preamble
+from app.latex.preamble import wrap_with_style
 from app.models.state import AgentRole, AgentStep, PipelineState
 from app.verification.latex_checker import LatexChecker
 
@@ -64,7 +64,7 @@ For å sikre at du likevel får oppgavene og teksten, har systemet fjernet probl
         state.full_document = ""
         state.used_latex_fallback = True
 
-        full_doc = wrap_with_preamble(body)
+        full_doc = wrap_with_style(body, state.request.pdf_style)
         config = get_config()
         checker = LatexChecker(pdflatex_path=config.pdflatex_path)
         result = checker.check(full_doc)

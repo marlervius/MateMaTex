@@ -58,6 +58,14 @@ class Settings(BaseSettings):
     debug: bool = Field(default=False)
     log_level: str = Field(default="INFO")
     pdflatex_path: str = Field(default="pdflatex")
+    latex_engine: str = Field(
+        default="auto",
+        description=(
+            "LaTeX engine for final PDF compilation: 'auto' prefers lualatex "
+            "(professional OpenType fonts) and falls back to pdflatex; or force "
+            "'lualatex' | 'xelatex' | 'pdflatex'."
+        ),
+    )
     output_dir: str = Field(default="output")
     max_verification_retries: int = Field(default=2, ge=1, le=10)
     skip_editor: bool = Field(
@@ -148,6 +156,7 @@ class AppConfig:
         self.debug = s.debug
         self.log_level = s.log_level
         self.pdflatex_path = s.pdflatex_path
+        self.latex_engine = s.latex_engine
         self.output_dir = s.output_dir
         self.max_verification_retries = s.max_verification_retries
         self.verification_fail_open = s.verification_fail_open
