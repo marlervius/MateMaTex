@@ -136,9 +136,13 @@ def build_preamble(
     if theme not in THEMES:
         theme = DEFAULT_THEME
 
-    # `\DocumentMetadata` must be the very first token in the file. It enables
-    # the modern PDF management layer (tagging-ready) on recent TeX Live.
-    doc_meta = r"\DocumentMetadata{lang=nb-NO}" + "\n" if accessible else ""
+    # NOTE: full PDF/UA tagging via \DocumentMetadata needs pdfmanagement
+    # (TeX Live 2023+ with pdfmanagement-testphase). That package is not
+    # guaranteed to be present, and \DocumentMetadata must precede
+    # \documentclass so it cannot be guarded with \IfFileExists. We therefore
+    # deliver the accessibility win that actually matters for screen readers —
+    # the document language — via hyperref's pdflang (set below) instead.
+    doc_meta = ""
 
     leading = r"\linespread{1.5}" if dyslexia else r"\linespread{1.08}"
     parskip = "1.0em" if dyslexia else "0.8em"

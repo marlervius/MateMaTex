@@ -84,8 +84,14 @@ async def lifespan(app: FastAPI):
 
     _executor.shutdown(wait=False, cancel_futures=True)
 
-    from app.db import close_pool
-    await close_pool()
+    # The Postgres pool only exists when a DATABASE_URL was configured, and the
+    # asyncpg driver is an optional dependency — never fail shutdown over it.
+    if settings.database_url:
+        try:
+            from app.db import close_pool
+            await close_pool()
+        except ModuleNotFoundError:
+            logger.warning("shutdown_db_driver_missing", msg="asyncpg not installed")
     logger.info("shutdown_complete")
 
 
