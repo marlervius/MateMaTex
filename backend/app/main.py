@@ -70,8 +70,21 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("startup_no_database", msg="DATABASE_URL not set — running without DB")
 
-    if settings.environment == "production" and not settings.mate_api_key:
-        raise RuntimeError("MATE_API_KEY must be set in production")
+    # Do NOT hard-crash the process on missing auth config: a raise here means
+    # uvicorn never binds the port, so the platform (Render) reports "no open
+    # ports detected" and the deploy times out with an opaque error. The auth
+    # layer already fails closed at request time (503 when no key is configured
+    # in production), so we only warn loudly here and let the service boot.
+    if settings.environment == "production" and not (
+        settings.mate_api_key or settings.supabase_jwt_secret
+    ):
+        logger.critical(
+            "startup_no_auth_configured",
+            msg=(
+                "Running in production without MATE_API_KEY or SUPABASE_JWT_SECRET. "
+                "Protected endpoints will reject all requests with 503 until one is set."
+            ),
+        )
 
     cleanup_old_snapshots(max_age_days=7)
     evict_terminal_jobs(get_job_memory())
