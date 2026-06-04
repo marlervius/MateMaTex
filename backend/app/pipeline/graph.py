@@ -282,12 +282,19 @@ def finalize(state: PipelineState) -> PipelineState:
         state.warning_reason = ""
         state.status = PipelineStatus.COMPLETED
 
-    try:
-        from app.cache import get_cache
+    # Only cache a full result that actually carries a usable PDF. Caching a
+    # PDF-less "completed" state would make later cache hits return a document
+    # the UI can never render (the result view just spins), which looks like a
+    # hang to the user.
+    if state.pdf_base64:
+        try:
+            from app.cache import get_cache
 
-        get_cache().set_full_result(state.request, state.model_dump_json())
-    except Exception as e:
-        logger.warning("cache_full_result_failed", error=str(e), job_id=state.job_id)
+            get_cache().set_full_result(state.request, state.model_dump_json())
+        except Exception as e:
+            logger.warning("cache_full_result_failed", error=str(e), job_id=state.job_id)
+    else:
+        logger.info("cache_full_result_skipped_no_pdf", job_id=state.job_id)
 
     logger.info(
         "pipeline_complete",
@@ -448,8 +455,13 @@ def run_pipeline(
         from app.cache import get_cache
 
         cached_json = get_cache().get_full_result(request)
-        if cached_json:
-            data = json.loads(cached_json)
+        data = json.loads(cached_json) if cached_json else None
+        # Ignore legacy/stale entries with no embedded PDF — serving them would
+        # hand the UI a "completed" result it can never render (looks like a hang).
+        if data is not None and not data.get("pdf_base64"):
+            logger.info("pipeline_cache_ignored_no_pdf", job_id=state.job_id)
+            data = None
+        if data is not None:
             restored = PipelineState(**data)
             restored.job_id = state.job_id
             restored.created_at = state.created_at
