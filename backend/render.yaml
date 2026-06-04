@@ -28,3 +28,9 @@ services:
         value: /tmp/matematex_out
       - key: ENVIRONMENT
         value: production
+      # LuaLaTeX (the "auto" default) needs more RAM than the free plan's 512 MB
+      # and gets OOM-killed mid-compile. pdfLaTeX is far lighter and stable here.
+      # Switch to "auto" (LuaLaTeX) once on a paid plan with >=1 GB RAM for the
+      # nicer Libertinus typography.
+      - key: LATEX_ENGINE
+        value: pdflatex
