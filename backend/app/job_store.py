@@ -23,6 +23,16 @@ logger = structlog.get_logger()
 _memory_jobs: dict[str, PipelineState] = {}
 _shared_resources: dict[str, dict] = {}
 
+# A job is "terminal" once it has finished — including when it finished with
+# warnings (e.g. unparseable math). Terminal jobs must be persisted so results
+# survive a process restart / Render free-plan spin-down; otherwise the client
+# polling /result after the instance recycles gets a 404 and appears to hang.
+TERMINAL_STATUSES = (
+    PipelineStatus.COMPLETED,
+    PipelineStatus.COMPLETED_WITH_WARNINGS,
+    PipelineStatus.FAILED,
+)
+
 # Job IDs are uuid4().hex (32 hex chars). Anything else is rejected before any
 # filesystem access to prevent path traversal via crafted IDs (e.g. "../../x").
 _JOB_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
@@ -45,8 +55,8 @@ def _snapshots_dir() -> Path:
 
 
 def persist_terminal_job(state: PipelineState) -> None:
-    """Write COMPLETED or FAILED jobs to disk (no-op for other statuses)."""
-    if state.status not in (PipelineStatus.COMPLETED, PipelineStatus.FAILED):
+    """Write terminal jobs (completed / completed-with-warnings / failed) to disk."""
+    if state.status not in TERMINAL_STATUSES:
         return
     try:
         path = _snapshots_dir() / f"{state.job_id}.json"
@@ -133,7 +143,7 @@ def evict_terminal_jobs(
     terminal = [
         (jid, st)
         for jid, st in store.items()
-        if st.status in (PipelineStatus.COMPLETED, PipelineStatus.FAILED)
+        if st.status in TERMINAL_STATUSES
     ]
     terminal.sort(key=lambda x: x[1].created_at)
 
