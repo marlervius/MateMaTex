@@ -12,6 +12,7 @@ import {
   estimateCost,
   closeActiveStream,
   isTerminalGenerateStatus,
+  watchGenerationJob,
   type CostEstimateResponse,
 } from "@/lib/api";
 import { mapApiResultToGenerationResult, isSuccessfulStatus } from "@/lib/map-api-result";
@@ -317,7 +318,29 @@ export function GenerationWizard() {
         }
       }
 
-      streamCloseRef.current = streamProgress(job_id, {
+      let resultLoaded = false;
+      const loadResultOnce = async () => {
+        if (resultLoaded || activeJobRef.current !== job_id) return;
+        resultLoaded = true;
+        streamCloseRef.current?.();
+        closeActiveStream();
+        try {
+          await finishWithResult();
+        } catch (e: unknown) {
+          resultLoaded = false;
+          const msg = e instanceof Error ? e.message : "Kunne ikke hente resultat";
+          setError(msg, snapshot);
+        }
+      };
+
+      const pollSignal = { cancelled: false };
+
+      streamCloseRef.current = () => {
+        pollSignal.cancelled = true;
+        closeActiveStream();
+      };
+
+      streamProgress(job_id, {
         onStep: (s) =>
           addStep({
             agent: s.agent,
@@ -335,12 +358,7 @@ export function GenerationWizard() {
             setError(data.error || "Generering feilet", snapshot);
             return;
           }
-          try {
-            await finishWithResult();
-          } catch (e: unknown) {
-            const msg = e instanceof Error ? e.message : "Kunne ikke hente resultat";
-            setError(msg, snapshot);
-          }
+          await loadResultOnce();
         },
         onError: (err) => {
           if (activeJobRef.current === job_id) {
@@ -348,6 +366,9 @@ export function GenerationWizard() {
           }
         },
       });
+
+      // Independent poll — never rely on SSE alone (Vercel/Render often stalls).
+      void watchGenerationJob(job_id, loadResultOnce, pollSignal);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Noe gikk galt";
       setError(msg, snapshot);

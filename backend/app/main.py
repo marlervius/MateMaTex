@@ -385,7 +385,11 @@ async def abort_generation(job_id: str, user_id: str = Depends(get_current_user)
         return {"success": False, "message": "Job already finished"}
 
 @app.get("/generate/{job_id}/result")
-async def get_result(job_id: str, user_id: str = Depends(get_current_user)):
+async def get_result(
+    job_id: str,
+    include_pdf_base64: bool = False,
+    user_id: str = Depends(get_current_user),
+):
     """Get the result of a completed generation job."""
 
     state = resolve_job(job_id, _jobs)
@@ -397,6 +401,8 @@ async def get_result(job_id: str, user_id: str = Depends(get_current_user)):
         raise HTTPException(status_code=202, detail="Job still running")
 
     pdf_available = bool(state.pdf_path) and os.path.isfile(state.pdf_path)
+    if not pdf_available and state.pdf_base64:
+        pdf_available = True
 
     return {
         "job_id": state.job_id,
@@ -404,7 +410,10 @@ async def get_result(job_id: str, user_id: str = Depends(get_current_user)):
         "full_document": state.full_document,
         "pdf_path": state.pdf_path,
         "pdf_available": pdf_available,
-        "pdf_base64": state.pdf_base64,
+        # PDF bytes are large (~300KB+ base64). Clients should use GET
+        # /generate/{id}/pdf for preview/download; omit by default so /result
+        # stays small and reliable through Vercel's serverless proxy.
+        "pdf_base64": state.pdf_base64 if include_pdf_base64 else "",
         "used_latex_fallback": state.used_latex_fallback,
         "from_cache": state.from_cache,
         "differentiated_basic": state.differentiated_basic,

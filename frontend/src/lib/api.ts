@@ -271,7 +271,6 @@ export function streamProgress(
   // already finished. We poll /result in parallel so completion is never missed.
   // SSE still drives live step progress; `finished` de-dupes whichever wins.
   void (async () => {
-    await sleep(1000); // brief head start for SSE live progress
     if (finished || signal.cancelled) return;
     await pollJobUntilTerminal(jobId, (data) => finish(data), signal);
   })();
@@ -301,7 +300,14 @@ export async function getResult(
     if (signal?.aborted) {
       throw new Error("Henting av resultat avbrutt");
     }
-    const res = await fetch(apiUrl(`generate/${jobId}/result`), { signal });
+    const timeout = AbortSignal.timeout(45_000);
+    const combined =
+      signal && typeof AbortSignal.any === "function"
+        ? AbortSignal.any([signal, timeout])
+        : timeout;
+    const res = await fetch(apiUrl(`generate/${jobId}/result`), {
+      signal: combined,
+    });
     if (res.status === 202) {
       await new Promise((r) => setTimeout(r, Math.min(400 * (attempt + 1), 3000)));
       continue;
@@ -312,6 +318,39 @@ export async function getResult(
     return res.json() as Promise<GenerationResultApi>;
   }
   throw new Error("Resultat ikke klart ennå — prøv igjen om litt");
+}
+
+/**
+ * Poll /result until the job reaches a terminal status, then invoke onReady.
+ * Runs in parallel with SSE so completion is never missed when the stream stalls.
+ */
+export async function watchGenerationJob(
+  jobId: string,
+  onReady: () => void | Promise<void>,
+  signal: { cancelled: boolean }
+): Promise<boolean> {
+  for (let i = 0; i < 120; i++) {
+    if (signal.cancelled) return false;
+    if (i > 0) {
+      await sleep(1500);
+      if (signal.cancelled) return false;
+    }
+    try {
+      const res = await fetch(apiUrl(`generate/${jobId}/result`), {
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (res.status === 202) continue;
+      if (!res.ok) continue;
+      const raw = (await res.json()) as Record<string, unknown>;
+      const status = String(raw.status ?? "");
+      if (!TERMINAL_GENERATE_STATUSES.has(status)) continue;
+      await onReady();
+      return true;
+    } catch {
+      /* transient — keep polling */
+    }
+  }
+  return false;
 }
 
 export async function fetchJobPdfObjectUrl(jobId: string): Promise<string> {
