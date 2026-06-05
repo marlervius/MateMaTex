@@ -328,7 +328,13 @@ async def stream_progress(
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            # Disable proxy buffering (nginx/Render) so events flush immediately
+            # instead of being held until the connection closes.
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

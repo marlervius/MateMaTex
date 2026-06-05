@@ -258,6 +258,17 @@ export function streamProgress(
     })();
   });
 
+  // Backstop polling: SSE delivery is unreliable through serverless proxies and
+  // free-tier hosts — the connection can stay "open" while the `complete` event
+  // is buffered or dropped, leaving the UI waiting forever even though the job
+  // already finished. We poll /result in parallel so completion is never missed.
+  // SSE still drives live step progress; `finished` de-dupes whichever wins.
+  void (async () => {
+    await sleep(8000); // give SSE a head start for live progress
+    if (finished || signal.cancelled) return;
+    await pollJobUntilTerminal(jobId, (data) => finish(data), signal);
+  })();
+
   const close = () => {
     signal.cancelled = true;
     eventSource.close();
