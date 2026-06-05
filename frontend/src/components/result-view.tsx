@@ -80,6 +80,11 @@ export function ResultView() {
   const [diffError, setDiffError] = useState("");
   const [diffLoading, setDiffLoading] = useState(false);
   const [activeLevel, setActiveLevel] = useState<"basic" | "standard" | "advanced">("standard");
+  const [diffShowLatex, setDiffShowLatex] = useState(false);
+  // PDF preview per differentiation level (object URLs)
+  const [diffPdfUrls, setDiffPdfUrls] = useState<Record<string, string>>({});
+  const [diffPdfLoading, setDiffPdfLoading] = useState<string>("");
+  const [diffPdfError, setDiffPdfError] = useState("");
 
   // Export
   const [exportLoading, setExportLoading] = useState("");
@@ -143,6 +148,56 @@ export function ResultView() {
       if (revoke) URL.revokeObjectURL(revoke);
     };
   }, [result?.jobId, result?.status, result?.latexCompiled, result?.fullDocument]);
+
+  // Auto-compile a PDF preview for the active differentiation level on demand.
+  useEffect(() => {
+    if (!diffData?.success) return;
+    if (diffPdfUrls[activeLevel] || diffPdfLoading) return;
+    const latex =
+      activeLevel === "basic"
+        ? diffData.basic_latex
+        : activeLevel === "standard"
+        ? diffData.standard_latex
+        : diffData.advanced_latex;
+    if (!latex) return;
+
+    let cancelled = false;
+    setDiffPdfError("");
+    setDiffPdfLoading(activeLevel);
+    exportPdf({ latex_content: latex })
+      .then((res) => {
+        if (cancelled) return;
+        if (!res.success || !res.content_base64) {
+          setDiffPdfError(
+            (res.errors || []).join("\n").trim() || "Kunne ikke lage PDF for dette nivået."
+          );
+          return;
+        }
+        const bytes = Uint8Array.from(atob(res.content_base64), (c) => c.charCodeAt(0));
+        const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+        setDiffPdfUrls((prev) => ({ ...prev, [activeLevel]: url }));
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setDiffPdfError(e instanceof Error ? e.message : "Kunne ikke lage PDF.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setDiffPdfLoading("");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [diffData, activeLevel, diffPdfUrls, diffPdfLoading]);
+
+  // Revoke differentiation PDF object URLs on unmount to avoid leaks.
+  useEffect(() => {
+    return () => {
+      Object.values(diffPdfUrls).forEach((u) => URL.revokeObjectURL(u));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!result) return null;
 
@@ -220,6 +275,57 @@ export function ResultView() {
     } finally {
       setDiffLoading(false);
     }
+  };
+
+  const diffLevelLatex = (level: "basic" | "standard" | "advanced"): string =>
+    (level === "basic"
+      ? diffData?.basic_latex
+      : level === "standard"
+      ? diffData?.standard_latex
+      : diffData?.advanced_latex) || "";
+
+  const ensureDiffPdf = async (
+    level: "basic" | "standard" | "advanced"
+  ): Promise<string | null> => {
+    if (diffPdfUrls[level]) return diffPdfUrls[level];
+    const latex = diffLevelLatex(level);
+    if (!latex) {
+      setDiffPdfError("Mangler innhold for dette nivået.");
+      return null;
+    }
+    setDiffPdfError("");
+    setDiffPdfLoading(level);
+    try {
+      const res = await exportPdf({ latex_content: latex });
+      if (!res.success || !res.content_base64) {
+        setDiffPdfError(
+          (res.errors || []).join("\n").trim() || "Kunne ikke lage PDF for dette nivået."
+        );
+        return null;
+      }
+      const bytes = Uint8Array.from(atob(res.content_base64), (c) => c.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+      setDiffPdfUrls((prev) => ({ ...prev, [level]: url }));
+      return url;
+    } catch (e: unknown) {
+      setDiffPdfError(e instanceof Error ? e.message : "Kunne ikke lage PDF.");
+      return null;
+    } finally {
+      setDiffPdfLoading("");
+    }
+  };
+
+  const handleDiffDownloadPdf = async (
+    level: "basic" | "standard" | "advanced"
+  ) => {
+    const url = await ensureDiffPdf(level);
+    if (!url) return;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `oppgaver_${level}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
 
   const handleIngest = async () => {
@@ -676,35 +782,78 @@ export function ResultView() {
                       ))}
                     </div>
 
-                    {/* Content */}
-                    <div className="card !p-0">
-                      <pre className="p-4 text-xs font-mono text-text-secondary overflow-x-auto max-h-96 overflow-y-auto">
-                        {activeLevel === "basic"
-                          ? diffData.basic_latex
-                          : activeLevel === "standard"
-                          ? diffData.standard_latex
-                          : diffData.advanced_latex}
-                      </pre>
+                    {diffPdfError && (
+                      <p className="text-sm text-accent-red" role="alert">
+                        {diffPdfError}
+                      </p>
+                    )}
+
+                    {/* PDF preview / LaTeX toggle for the active level */}
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-medium">
+                        Forhåndsvisning ({activeLevel === "basic" ? "Grunnleggende" : activeLevel === "standard" ? "Standard" : "Avansert"})
+                      </h4>
+                      <button
+                        onClick={() => setDiffShowLatex((v) => !v)}
+                        className="btn-ghost text-xs"
+                      >
+                        {diffShowLatex ? "Vis PDF" : "Vis LaTeX"}
+                      </button>
                     </div>
 
-                    {/* Download per level */}
-                    <div className="flex gap-2">
-                      {(["basic", "standard", "advanced"] as const).map((level) => (
-                        <button
-                          key={level}
-                          onClick={() => {
-                            const c =
-                              level === "basic" ? diffData.basic_latex
-                              : level === "standard" ? diffData.standard_latex
-                              : diffData.advanced_latex;
-                            if (c) downloadText(c, `oppgaver_${level}.tex`);
-                          }}
-                          className="btn-secondary text-xs flex-1"
-                        >
-                          <Download size={12} />
-                          {level === "basic" ? "Grunnleggende" : level === "standard" ? "Standard" : "Avansert"}
-                        </button>
-                      ))}
+                    <div className="card !p-0 overflow-hidden">
+                      {diffShowLatex ? (
+                        <pre className="p-4 text-xs font-mono text-text-secondary overflow-x-auto max-h-[32rem] overflow-y-auto">
+                          {diffLevelLatex(activeLevel)}
+                        </pre>
+                      ) : diffPdfLoading === activeLevel && !diffPdfUrls[activeLevel] ? (
+                        <div className="text-center py-12">
+                          <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+                            className="w-8 h-8 border-2 border-accent-blue border-t-transparent rounded-full mx-auto mb-3"
+                          />
+                          <p className="text-sm text-text-secondary">Lager PDF...</p>
+                        </div>
+                      ) : diffPdfUrls[activeLevel] ? (
+                        <iframe
+                          src={diffPdfUrls[activeLevel]}
+                          title={`PDF ${activeLevel}`}
+                          className="w-full h-[32rem] bg-white"
+                        />
+                      ) : (
+                        <div className="text-center py-12">
+                          <button
+                            onClick={() => ensureDiffPdf(activeLevel)}
+                            className="btn-secondary text-sm"
+                          >
+                            <FileText size={14} />
+                            Lag PDF-forhåndsvisning
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Download per level (PDF + LaTeX) */}
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => handleDiffDownloadPdf(activeLevel)}
+                        disabled={diffPdfLoading === activeLevel}
+                        className="btn-primary text-xs flex-1 min-w-[10rem] disabled:opacity-60"
+                      >
+                        <Download size={12} />
+                        {diffPdfLoading === activeLevel ? "Lager PDF..." : "Last ned PDF (dette nivået)"}
+                      </button>
+                      <button
+                        onClick={() => {
+                          const c = diffLevelLatex(activeLevel);
+                          if (c) downloadText(c, `oppgaver_${activeLevel}.tex`);
+                        }}
+                        className="btn-secondary text-xs flex-1 min-w-[10rem]"
+                      >
+                        <Download size={12} />
+                        Last ned LaTeX (.tex)
+                      </button>
                     </div>
                   </div>
                 ) : null}
