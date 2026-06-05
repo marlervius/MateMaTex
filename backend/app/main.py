@@ -384,6 +384,39 @@ async def abort_generation(job_id: str, user_id: str = Depends(get_current_user)
     else:
         return {"success": False, "message": "Job already finished"}
 
+@app.get("/generate/{job_id}/status")
+async def get_job_status(job_id: str, user_id: str = Depends(get_current_user)):
+    """
+    Lightweight job status for client polling.
+
+    Returns a tiny JSON payload so the frontend can detect completion without
+    downloading the full LaTeX body on every poll (which stalled some proxies).
+    """
+    state = resolve_job(job_id, _jobs)
+    if state is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _authorize_job(state, user_id)
+
+    if state.status in (PipelineStatus.RUNNING, PipelineStatus.PENDING):
+        return {
+            "job_id": state.job_id,
+            "status": state.status.value,
+            "ready": False,
+            "latex_compiled": state.latex_compilation.success,
+            "total_duration_seconds": state.total_duration_seconds,
+            "error": "",
+        }
+
+    return {
+        "job_id": state.job_id,
+        "status": state.status.value,
+        "ready": True,
+        "latex_compiled": state.latex_compilation.success,
+        "total_duration_seconds": state.total_duration_seconds,
+        "error": state.error_message,
+    }
+
+
 @app.get("/generate/{job_id}/result")
 async def get_result(
     job_id: str,

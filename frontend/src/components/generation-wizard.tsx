@@ -14,6 +14,7 @@ import {
   isTerminalGenerateStatus,
   watchGenerationJob,
   type CostEstimateResponse,
+  type JobStatusResponse,
 } from "@/lib/api";
 import { mapApiResultToGenerationResult, isSuccessfulStatus } from "@/lib/map-api-result";
 import { appendHistory } from "@/lib/generation-history";
@@ -319,17 +320,59 @@ export function GenerationWizard() {
       }
 
       let resultLoaded = false;
-      const loadResultOnce = async () => {
-        if (resultLoaded || activeJobRef.current !== job_id) return;
-        resultLoaded = true;
+      let loadingResult = false;
+
+      const showPlaceholderResult = (status: string) => {
+        const currentSteps = useAppStore.getState().steps;
+        setResult(
+          mapApiResultToGenerationResult(
+            {
+              job_id,
+              status,
+              full_document: "",
+              pdf_available: true,
+              latex_compilation: { success: true },
+              math_verification: {
+                claims_checked: 0,
+                claims_correct: 0,
+                claims_incorrect: 0,
+                claims_unparseable: 0,
+                all_correct: true,
+                summary: "",
+              },
+              steps: currentSteps.map((s) => ({
+                agent: s.agent,
+                started_at: s.startedAt,
+                completed_at: s.completedAt,
+                duration_seconds: s.durationSeconds,
+                output_summary: s.outputSummary,
+                error: s.error,
+                retries: s.retries,
+              })),
+              total_duration_seconds: 0,
+              error: "",
+            },
+            snapshot
+          )
+        );
+      };
+
+      const loadResultOnce = async (statusHint?: string) => {
+        if (resultLoaded || loadingResult || activeJobRef.current !== job_id) return;
+        loadingResult = true;
         streamCloseRef.current?.();
         closeActiveStream();
+        if (statusHint && statusHint !== "failed") {
+          showPlaceholderResult(statusHint);
+        }
         try {
           await finishWithResult();
+          resultLoaded = true;
         } catch (e: unknown) {
-          resultLoaded = false;
           const msg = e instanceof Error ? e.message : "Kunne ikke hente resultat";
           setError(msg, snapshot);
+        } finally {
+          loadingResult = false;
         }
       };
 
@@ -358,7 +401,7 @@ export function GenerationWizard() {
             setError(data.error || "Generering feilet", snapshot);
             return;
           }
-          await loadResultOnce();
+          await loadResultOnce(data.status);
         },
         onError: (err) => {
           if (activeJobRef.current === job_id) {
@@ -367,8 +410,14 @@ export function GenerationWizard() {
         },
       });
 
-      // Independent poll — never rely on SSE alone (Vercel/Render often stalls).
-      void watchGenerationJob(job_id, loadResultOnce, pollSignal);
+      // Independent poll on tiny /status — never rely on SSE or heavy /result.
+      void watchGenerationJob(job_id, async (st: JobStatusResponse) => {
+        if (st.status === "failed") {
+          setError(st.error || "Generering feilet", snapshot);
+          return;
+        }
+        await loadResultOnce(st.status);
+      }, pollSignal);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Noe gikk galt";
       setError(msg, snapshot);

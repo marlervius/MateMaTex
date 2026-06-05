@@ -613,6 +613,12 @@ export function ResultView() {
                   </div>
                 )}
 
+                {!result.fullDocument && result.latexCompiled && (
+                  <p className="text-sm text-text-secondary mb-2">
+                    Henter fullstendig dokument… PDF-forhåndsvisning lastes parallelt.
+                  </p>
+                )}
+
                 {/* PDF Preview */}
                 <div className="card !p-0 overflow-hidden">
                   {result.pdfBase64 ? (

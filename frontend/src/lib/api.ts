@@ -152,7 +152,40 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Poll result when SSE drops before complete (e.g. Vercel 300s proxy limit). */
+/** Fetch with timeout — works in browsers without AbortSignal.timeout. */
+function fetchWithTimeout(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs = 20_000
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const ext = init.signal;
+  if (ext) {
+    if (ext.aborted) controller.abort();
+    else ext.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+  return fetch(url, { ...init, signal: controller.signal }).finally(() =>
+    clearTimeout(timer)
+  );
+}
+
+export interface JobStatusResponse {
+  job_id: string;
+  status: string;
+  ready: boolean;
+  latex_compiled: boolean;
+  total_duration_seconds: number;
+  error: string;
+}
+
+async function fetchJobStatus(jobId: string): Promise<JobStatusResponse | null> {
+  const res = await fetchWithTimeout(apiUrl(`generate/${jobId}/status`), {}, 12_000);
+  if (!res.ok) return null;
+  return res.json() as Promise<JobStatusResponse>;
+}
+
+/** Poll lightweight /status until the job is ready. */
 async function pollJobUntilTerminal(
   jobId: string,
   onComplete: (data: StreamCompletePayload) => void,
@@ -161,26 +194,22 @@ async function pollJobUntilTerminal(
   for (let i = 0; i < 120; i++) {
     if (signal.cancelled) return false;
     if (i > 0) {
-      await sleep(1500);
+      await sleep(1200);
       if (signal.cancelled) return false;
     }
     try {
-      const res = await fetch(apiUrl(`generate/${jobId}/result`));
-      if (res.status === 202) continue;
-      if (!res.ok) continue;
-      const raw = (await res.json()) as Record<string, unknown>;
+      const raw = await fetchJobStatus(jobId);
+      if (!raw) continue;
+      if (!raw.ready) continue;
       const status = String(raw.status ?? "");
       if (!TERMINAL_GENERATE_STATUSES.has(status)) continue;
-      const mv = (raw.math_verification ?? {}) as Record<string, unknown>;
       onComplete({
         status: status as StreamCompletePayload["status"],
         total_duration: Number(raw.total_duration_seconds ?? 0),
-        total_steps: Array.isArray(raw.steps) ? raw.steps.length : 0,
-        math_checks: Number(mv.claims_checked ?? 0),
-        math_correct: Number(mv.claims_correct ?? 0),
-        latex_compiled: Boolean(
-          (raw.latex_compilation as Record<string, unknown> | undefined)?.success
-        ),
+        total_steps: 0,
+        math_checks: 0,
+        math_correct: 0,
+        latex_compiled: Boolean(raw.latex_compiled),
         error: raw.error ? String(raw.error) : null,
       });
       return true;
@@ -300,14 +329,11 @@ export async function getResult(
     if (signal?.aborted) {
       throw new Error("Henting av resultat avbrutt");
     }
-    const timeout = AbortSignal.timeout(45_000);
-    const combined =
-      signal && typeof AbortSignal.any === "function"
-        ? AbortSignal.any([signal, timeout])
-        : timeout;
-    const res = await fetch(apiUrl(`generate/${jobId}/result`), {
-      signal: combined,
-    });
+    const res = await fetchWithTimeout(
+      apiUrl(`generate/${jobId}/result`),
+      { signal },
+      45_000
+    );
     if (res.status === 202) {
       await new Promise((r) => setTimeout(r, Math.min(400 * (attempt + 1), 3000)));
       continue;
@@ -326,25 +352,20 @@ export async function getResult(
  */
 export async function watchGenerationJob(
   jobId: string,
-  onReady: () => void | Promise<void>,
+  onReady: (status: JobStatusResponse) => void | Promise<void>,
   signal: { cancelled: boolean }
 ): Promise<boolean> {
   for (let i = 0; i < 120; i++) {
     if (signal.cancelled) return false;
     if (i > 0) {
-      await sleep(1500);
+      await sleep(1200);
       if (signal.cancelled) return false;
     }
     try {
-      const res = await fetch(apiUrl(`generate/${jobId}/result`), {
-        signal: AbortSignal.timeout(20_000),
-      });
-      if (res.status === 202) continue;
-      if (!res.ok) continue;
-      const raw = (await res.json()) as Record<string, unknown>;
-      const status = String(raw.status ?? "");
-      if (!TERMINAL_GENERATE_STATUSES.has(status)) continue;
-      await onReady();
+      const raw = await fetchJobStatus(jobId);
+      if (!raw || !raw.ready) continue;
+      if (!TERMINAL_GENERATE_STATUSES.has(raw.status)) continue;
+      await onReady(raw);
       return true;
     } catch {
       /* transient — keep polling */
