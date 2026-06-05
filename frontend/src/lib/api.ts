@@ -99,7 +99,14 @@ export interface GenerateResponse {
   job_id: string;
   status: string;
   message: string;
+  from_cache?: boolean;
 }
+
+const TERMINAL_GENERATE_STATUSES = new Set([
+  "completed",
+  "completed_with_warnings",
+  "failed",
+]);
 
 export interface GenerationResultApi {
   job_id: string;
@@ -137,11 +144,9 @@ export async function startGeneration(
   return res.json();
 }
 
-const TERMINAL_JOB_STATUSES = new Set([
-  "completed",
-  "completed_with_warnings",
-  "failed",
-]);
+export function isTerminalGenerateStatus(status: string): boolean {
+  return TERMINAL_GENERATE_STATUSES.has(status);
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -155,15 +160,17 @@ async function pollJobUntilTerminal(
 ): Promise<boolean> {
   for (let i = 0; i < 120; i++) {
     if (signal.cancelled) return false;
-    await sleep(3000);
-    if (signal.cancelled) return false;
+    if (i > 0) {
+      await sleep(1500);
+      if (signal.cancelled) return false;
+    }
     try {
       const res = await fetch(apiUrl(`generate/${jobId}/result`));
       if (res.status === 202) continue;
       if (!res.ok) continue;
       const raw = (await res.json()) as Record<string, unknown>;
       const status = String(raw.status ?? "");
-      if (!TERMINAL_JOB_STATUSES.has(status)) continue;
+      if (!TERMINAL_GENERATE_STATUSES.has(status)) continue;
       const mv = (raw.math_verification ?? {}) as Record<string, unknown>;
       onComplete({
         status: status as StreamCompletePayload["status"],
@@ -264,7 +271,7 @@ export function streamProgress(
   // already finished. We poll /result in parallel so completion is never missed.
   // SSE still drives live step progress; `finished` de-dupes whichever wins.
   void (async () => {
-    await sleep(8000); // give SSE a head start for live progress
+    await sleep(1000); // brief head start for SSE live progress
     if (finished || signal.cancelled) return;
     await pollJobUntilTerminal(jobId, (data) => finish(data), signal);
   })();

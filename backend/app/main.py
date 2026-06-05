@@ -193,6 +193,7 @@ class GenerateResponse(BaseModel):
     job_id: str
     status: str
     message: str
+    from_cache: bool = False
 
 
 class CompileRequest(BaseModel):
@@ -234,11 +235,37 @@ async def start_generation(
     user_id: str = Depends(get_current_user),
 ) -> GenerateResponse:
     """Start an asynchronous generation job."""
+    from app.pipeline.graph import try_restore_cached_pipeline
+
     state = PipelineState(
         request=generation_request,
         status=PipelineStatus.PENDING,
         owner_id=user_id,
     )
+
+    # Cache hit: return immediately so the client never depends on SSE for a
+    # job that finished in milliseconds (SSE through Vercel/Render often stalls).
+    cached = try_restore_cached_pipeline(
+        generation_request,
+        job_id=state.job_id,
+        owner_id=user_id,
+        created_at=state.created_at,
+    )
+    if cached is not None:
+        _jobs[state.job_id] = cached
+        persist_terminal_job(cached)
+        logger.info(
+            "generation_cache_hit_sync",
+            job_id=state.job_id,
+            topic=generation_request.topic,
+        )
+        return GenerateResponse(
+            job_id=state.job_id,
+            status=cached.status.value,
+            from_cache=True,
+            message="Ferdig (hentet fra hurtigbuffer).",
+        )
+
     _jobs[state.job_id] = state
 
     loop = asyncio.get_event_loop()

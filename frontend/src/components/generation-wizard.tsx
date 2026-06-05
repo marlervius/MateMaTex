@@ -11,6 +11,7 @@ import {
   getResult,
   estimateCost,
   closeActiveStream,
+  isTerminalGenerateStatus,
   type CostEstimateResponse,
 } from "@/lib/api";
 import { mapApiResultToGenerationResult, isSuccessfulStatus } from "@/lib/map-api-result";
@@ -255,7 +256,7 @@ export function GenerationWizard() {
     const snapshot = { ...useAppStore.getState().request };
 
     try {
-      const { job_id } = await startGeneration({
+      const resp = await startGeneration({
         grade: request.grade,
         topic: request.topic,
         material_type: request.materialType,
@@ -277,8 +278,44 @@ export function GenerationWizard() {
         },
       });
 
+      const job_id = resp.job_id;
       activeJobRef.current = job_id;
       setJobId(job_id);
+
+      const finishWithResult = async () => {
+        const raw = await getResult(job_id);
+        if (activeJobRef.current !== job_id) return;
+        const mapped = mapApiResultToGenerationResult(raw, snapshot);
+        setResult(mapped);
+        if (isSuccessfulStatus(mapped.status)) {
+          appendHistory({
+            jobId: job_id,
+            createdAt: new Date().toISOString(),
+            topic: snapshot.topic,
+            grade: snapshot.grade,
+            materialType: snapshot.materialType,
+            favorite: false,
+            request: { ...snapshot },
+          });
+        }
+      };
+
+      // Cache hit / instant completion: backend returns terminal status in POST
+      // response — fetch result directly instead of waiting on SSE.
+      if (isTerminalGenerateStatus(resp.status)) {
+        if (resp.status === "failed") {
+          setError(resp.message || "Generering feilet", snapshot);
+          return;
+        }
+        try {
+          await finishWithResult();
+          return;
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : "Kunne ikke hente resultat";
+          setError(msg, snapshot);
+          return;
+        }
+      }
 
       streamCloseRef.current = streamProgress(job_id, {
         onStep: (s) =>
@@ -299,21 +336,7 @@ export function GenerationWizard() {
             return;
           }
           try {
-            const raw = await getResult(job_id);
-            if (activeJobRef.current !== job_id) return;
-            const mapped = mapApiResultToGenerationResult(raw, snapshot);
-            setResult(mapped);
-            if (isSuccessfulStatus(mapped.status)) {
-              appendHistory({
-                jobId: job_id,
-                createdAt: new Date().toISOString(),
-                topic: snapshot.topic,
-                grade: snapshot.grade,
-                materialType: snapshot.materialType,
-                favorite: false,
-                request: { ...snapshot },
-              });
-            }
+            await finishWithResult();
           } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : "Kunne ikke hente resultat";
             setError(msg, snapshot);

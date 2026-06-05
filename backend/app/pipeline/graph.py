@@ -53,6 +53,52 @@ logger = structlog.get_logger()
 _ABORT_MESSAGE = "Avbrutt av bruker"
 
 
+def try_restore_cached_pipeline(
+    request: GenerationRequest,
+    *,
+    job_id: str,
+    owner_id: str = "",
+    created_at: datetime | None = None,
+) -> PipelineState | None:
+    """
+    Return a completed PipelineState when an exact cache entry with a PDF exists.
+
+    Used synchronously on POST /generate (instant response for cache hits) and
+    inside run_pipeline (background thread path).
+    """
+    try:
+        from app.cache import get_cache
+
+        cached_json = get_cache().get_full_result(request)
+        data = json.loads(cached_json) if cached_json else None
+        if data is not None and not data.get("pdf_base64"):
+            logger.info("pipeline_cache_ignored_no_pdf", job_id=job_id)
+            return None
+        if data is None:
+            return None
+
+        restored = PipelineState(**data)
+        restored.job_id = job_id
+        if created_at is not None:
+            restored.created_at = created_at
+        restored.from_cache = True
+        if owner_id and not restored.owner_id:
+            restored.owner_id = owner_id
+        restored.status = (
+            PipelineStatus.COMPLETED_WITH_WARNINGS
+            if (
+                restored.math_verification.claims_incorrect > 0
+                or restored.math_verification.claims_unparseable > 0
+            )
+            else PipelineStatus.COMPLETED
+        )
+        logger.info("pipeline_cache_hit", job_id=restored.job_id)
+        return restored
+    except Exception as e:
+        logger.warning("pipeline_cache_restore_failed", error=str(e))
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Routing functions (conditional edges)
 # ---------------------------------------------------------------------------
@@ -450,38 +496,16 @@ def run_pipeline(
     if job_id:
         state.job_id = job_id
 
-    # Exact cache hit — return prior result with the active job id
-    try:
-        from app.cache import get_cache
-
-        cached_json = get_cache().get_full_result(request)
-        data = json.loads(cached_json) if cached_json else None
-        # Ignore legacy/stale entries with no embedded PDF — serving them would
-        # hand the UI a "completed" result it can never render (looks like a hang).
-        if data is not None and not data.get("pdf_base64"):
-            logger.info("pipeline_cache_ignored_no_pdf", job_id=state.job_id)
-            data = None
-        if data is not None:
-            restored = PipelineState(**data)
-            restored.job_id = state.job_id
-            restored.created_at = state.created_at
-            restored.from_cache = True
-            if owner_id and not restored.owner_id:
-                restored.owner_id = owner_id
-            restored.status = (
-                PipelineStatus.COMPLETED_WITH_WARNINGS
-                if (
-                    restored.math_verification.claims_incorrect > 0
-                    or restored.math_verification.claims_unparseable > 0
-                )
-                else PipelineStatus.COMPLETED
-            )
-            logger.info("pipeline_cache_hit", job_id=restored.job_id)
-            if on_progress:
-                on_progress(restored)
-            return restored
-    except Exception as e:
-        logger.warning("pipeline_cache_restore_failed", error=str(e))
+    restored = try_restore_cached_pipeline(
+        request,
+        job_id=state.job_id,
+        owner_id=owner_id,
+        created_at=state.created_at,
+    )
+    if restored is not None:
+        if on_progress:
+            on_progress(restored)
+        return restored
 
     graph = create_pipeline()
     compiled = graph.compile()
