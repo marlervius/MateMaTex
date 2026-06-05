@@ -58,6 +58,8 @@ def _create_google(model: str, api_key: str, temperature: float) -> BaseChatMode
         google_api_key=api_key,
         temperature=temperature,
         convert_system_message_to_human=True,
+        # Allow long, theory-rich chapters without truncating the body.
+        max_output_tokens=8192,
     )
 
 

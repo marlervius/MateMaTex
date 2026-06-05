@@ -51,6 +51,7 @@ def run_editor(state: PipelineState) -> PipelineState:
             user_prompt = build_editor_prompt(
                 latex_content=source_latex,
                 language_level=state.request.language_level,
+                material_type=state.request.material_type,
             )
 
             import re as _re
