@@ -394,6 +394,7 @@ async def get_job_status(job_id: str, user_id: str = Depends(get_current_user)):
     """
     state = resolve_job(job_id, _jobs)
     if state is None:
+        logger.warning("job_status_not_found", job_id=job_id)
         raise HTTPException(status_code=404, detail="Job not found")
     _authorize_job(state, user_id)
 
