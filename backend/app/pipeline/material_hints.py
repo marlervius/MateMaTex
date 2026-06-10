@@ -91,10 +91,10 @@ LÆREBOK-STRUKTUR (som norske lærebøker):
    Et fullverdig kapittel har typisk 4–7 seksjoner.
 4. For HVER teknikk/regel:
    * Skriv først forklarende brødtekst (intuisjon — hvorfor virker dette?).
-   * Begreper i \\begin{{definisjon}}; formler/regneregler i \\begin{{regel}}[title=...]
+   * Begreper i \\begin{{definisjon}}; formler/regneregler i \\begin{{regel}}[title={...}]
      (rød boks — det eleven skal huske); beviste resultater i \\begin{{setning}}.
    * Der det er naturlig: vis en kort begrunnelse/utledning av formelen.
-   * Gi MINST 2 fullt gjennomregnede \\begin{{eksempel}}[title=...] med align* og
+   * Gi MINST 2 fullt gjennomregnede \\begin{{eksempel}}[title={...}] med align* og
      \\forklaring{{...}} på hvert steg — ikke bare svaret.
    * Legg inn \\begin{{vanligfeil}} med en typisk misforståelse (vis den gale
      utregningen og forklar hvorfor den er feil).

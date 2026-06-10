@@ -33,15 +33,20 @@ En \\textbf{lineær funksjon} er en funksjon på formen $f(x) = ax + b$.
 
 REGLER/FORMLER (rød boks) — det eleven skal HUSKE. Bruk for alle sentrale
 formler, setninger og regneregler (som i en ekte lærebok):
-\\begin{regel}[title=Pytagoras' setning]
+\\begin{regel}[title={Pytagoras' setning}]
 I en rettvinklet trekant med kateter $a$ og $b$ og hypotenus $c$ gjelder
 \\[ a^2 + b^2 = c^2 \\]
 \\end{regel}
 (Alternativ for beviste resultater: \\begin{setning}...\\end{setning})
 
+KRITISK TITTEL-REGEL: Skriv ALLTID title-verdien i klammer: [title={...}].
+Uten klammer knekker dokumentet hvis tittelen inneholder =, komma eller matematikk.
+RIKTIG: \\begin{eksempel}[title={Løse $y' = 2xy$}]
+FEIL:   \\begin{eksempel}[title=Løse $y' = 2xy$]   ← kompileringsfeil!
+
 EKSEMPLER (grønn boks, med BESKRIVENDE tittel) — ALLTID med fullstendig
 løsning der HVERT steg begrunnes med \\forklaring{...}:
-\\begin{eksempel}[title=Løse en lineær likning]
+\\begin{eksempel}[title={Løse en lineær likning}]
 Løs likningen $2x + 3 = 11$.
 
 \\textbf{Løsning:}
@@ -590,14 +595,14 @@ Stigningstallet $a$ forteller hvor mye $y$ øker når $x$ øker med 1.
 Konstantleddet $b$ er verdien der grafen krysser $y$-aksen.
 \end{merk}
 
-\begin{regel}[title=Stigningstall fra to punkter]
+\begin{regel}[title={Stigningstall fra to punkter}]
 Når grafen går gjennom punktene $(x_1, y_1)$ og $(x_2, y_2)$, er stigningstallet
 \[
 a = \frac{y_2 - y_1}{x_2 - x_1}
 \]
 \end{regel}
 
-\begin{eksempel}[title=Finne stigningstall fra to punkter]
+\begin{eksempel}[title={Finne stigningstall fra to punkter}]
 Grafen til en lineær funksjon går gjennom $(1, 3)$ og $(4, 9)$. Finn stigningstallet.
 
 \textbf{Løsning:}
@@ -615,7 +620,7 @@ $a = \frac{y_2 - y_1}{x_1 - x_2}$ gir feil fortegn!
 Husk: samme rekkefølge oppe og nede.
 \end{vanligfeil}
 
-\begin{eksempel}[title=Tegne grafen til en lineær funksjon]
+\begin{eksempel}[title={Tegne grafen til en lineær funksjon}]
 Vi skal tegne grafen til $f(x) = 2x + 1$.
 
 Lag en verditabell:
@@ -720,7 +725,7 @@ En \textbf{brøk} skrives som $\dfrac{a}{b}$, der $a$ er \textbf{telleren} og $b
 Nevneren forteller hvor mange like deler helheten er delt i, og telleren forteller hvor mange deler vi har.
 \end{definisjon}
 
-\begin{eksempel}[title=Illustrere brøken tre fjerdedeler]
+\begin{eksempel}[title={Illustrere brøken tre fjerdedeler}]
 Vi deler en sirkel i fire like deler og fargeleg tre av dem.
 
 \begin{figure}[H]
@@ -748,7 +753,7 @@ Vi deler en sirkel i fire like deler og fargeleg tre av dem.
 \textbf{Prosent} betyr \emph{per hundre}: $1\,\% = \dfrac{1}{100} = 0{,}01$.
 \end{definisjon}
 
-\begin{eksempel}[title=Visualisere 25 prosent i et rutenett]
+\begin{eksempel}[title={Visualisere 25 prosent i et rutenett}]
 Vi fargeleg 25 av 100 ruter i et 10×10-rutenett.
 
 \begin{figure}[H]

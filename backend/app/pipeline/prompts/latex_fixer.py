@@ -15,6 +15,9 @@ REGLER:
    - Ukjente kommandoer (fjern eller erstatt med standard)
    - Manglende $ for matematikkmodus
    - Feil i TikZ/PGFPlots-syntaks (f.eks. avbrutt \\addplot — fullfør kommandoen)
+   - Ubeskyttet title-verdi: [title=Løse $y' = 2xy$] knekker pgfkeys når
+     verdien inneholder =, komma eller $. Rett til [title={Løse $y' = 2xy$}]
+     (klammer rundt hele verdien)
 3. ALDRI legg til preamble — den er allerede der
 4. ALDRI endre det matematiske innholdet
 5. Returner HELE det korrigerte dokumentet

@@ -21,8 +21,8 @@ Start innholdet med \\title{...} og innhold direkte.
 === KVALITETSKONTROLL ===
 a) MILJØER: Konvertér ren tekst → riktig LaTeX-miljø:
    - "Definisjon:" → \\begin{definisjon}...\\end{definisjon}
-   - "Regel:"/"Formel:"/"Setning:" → \\begin{regel}[title=...]...\\end{regel}
-   - "Eksempel:" → \\begin{eksempel}[title=Beskrivende]...\\end{eksempel}
+   - "Regel:"/"Formel:"/"Setning:" → \\begin{regel}[title={...}]...\\end{regel}
+   - "Eksempel:" → \\begin{eksempel}[title={Beskrivende}]...\\end{eksempel}
    - Oppgaver → \\begin{taskbox}{Oppgave N}...\\end{taskbox}
    BEVAR lærebok-miljøene uendret der de finnes: regel, setning, husk,
    vanligfeil, utforsk, laeringsmaal, oppsummering — og \\forklaring{...}

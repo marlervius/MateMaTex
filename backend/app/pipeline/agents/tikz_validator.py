@@ -43,6 +43,41 @@ def _strip_includegraphics(body: str) -> tuple[str, int]:
     return new_body, count
 
 
+_TITLED_BOX_ENVS = (
+    r'(?:eksempel|examplebox|definisjon|definitionbox|regel|setning|merk|'
+    r'tipbox|losning|vurdering|husk|vanligfeil|utforsk|laeringsmaal|oppsummering)'
+)
+
+
+def _brace_box_titles(body: str) -> tuple[str, int]:
+    r"""
+    Wrap unbraced title values in braces.
+
+    \begin{eksempel}[title=Løse $\frac{dy}{dx} = 2xy$] breaks pgfkeys: the `=`
+    inside the value splits the key/value pair and compilation fails. With
+    braces — [title={...}] — any content is safe.
+    """
+    count = 0
+    pattern = re.compile(
+        r'(\\begin\{' + _TITLED_BOX_ENVS + r'\}\[title=)([^{\]][^\]]*)(\])'
+    )
+
+    def repl(m: re.Match) -> str:
+        nonlocal count
+        value = m.group(2)
+        # Plain titles without special characters parse fine — leave them.
+        if not re.search(r'[=$\\,]', value):
+            return m.group(0)
+        # Value contains an unmatched [ — the real title extends past our
+        # match (e.g. "Intervallet [2, 5]"); too risky to rewrite.
+        if value.count('[') != value.count(']'):
+            return m.group(0)
+        count += 1
+        return f'{m.group(1)}{{{value}}}{m.group(3)}'
+
+    return pattern.sub(repl, body), count
+
+
 def _wrap_bare_tikzpicture(body: str) -> tuple[str, int]:
     """
     Wrap any \\begin{tikzpicture}...\\end{tikzpicture} that is NOT already
@@ -491,6 +526,10 @@ def sanitize_latex_body(body: str) -> tuple[str, list[str]]:
     body, n = _strip_includegraphics(body)
     if n:
         fixes.append(f"Removed {n} \\includegraphics")
+
+    body, n = _brace_box_titles(body)
+    if n:
+        fixes.append(f"Braced {n} box title(s) with special characters")
 
     body, n = _fix_quoted_math_in_tikz(body)
     if n:
