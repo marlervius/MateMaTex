@@ -181,7 +181,7 @@ app.include_router(sharing_router)
 app.include_router(collab_router)
 
 _jobs = get_job_memory()
-_executor = ThreadPoolExecutor(max_workers=4)
+_executor = ThreadPoolExecutor(max_workers=get_settings().max_concurrent_jobs)
 _ABORT_MESSAGE = "Avbrutt av bruker"
 _MAX_STREAM_SECONDS = 3600  # 1 hour — prevent infinite SSE if job stalls
 

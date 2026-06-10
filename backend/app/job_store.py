@@ -54,13 +54,25 @@ def _snapshots_dir() -> Path:
     return d
 
 
+def dump_state_compact(state: PipelineState, indent: int | None = None) -> str:
+    """
+    Serialize a PipelineState, omitting base64 PDF blobs when the PDF already
+    exists on disk. Base64 doubles snapshot size (~300KB-1MB per job) and the
+    /pdf endpoint reads from pdf_path or recompiles from full_document anyway.
+    """
+    exclude = None
+    if state.pdf_path and Path(state.pdf_path).is_file():
+        exclude = {"pdf_base64": True, "latex_compilation": {"pdf_base64"}}
+    return state.model_dump_json(indent=indent, exclude=exclude)
+
+
 def persist_terminal_job(state: PipelineState) -> None:
     """Write terminal jobs (completed / completed-with-warnings / failed) to disk."""
     if state.status not in TERMINAL_STATUSES:
         return
     try:
         path = _snapshots_dir() / f"{state.job_id}.json"
-        atomic_write_text(path, state.model_dump_json(indent=2))
+        atomic_write_text(path, dump_state_compact(state, indent=2))
         logger.debug("job_persisted", job_id=state.job_id, status=state.status.value)
     except OSError as e:
         logger.warning("job_persist_failed", job_id=state.job_id, error=str(e))

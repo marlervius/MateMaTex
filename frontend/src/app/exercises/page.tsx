@@ -31,10 +31,11 @@ import {
 
 type ViewMode = "grid" | "list";
 
-const DIFFICULTY_CONFIG: Record<string, { label: string; color: string; dots: number }> = {
-  lett: { label: "Lett", color: "accent-green", dots: 1 },
-  middels: { label: "Middels", color: "accent-orange", dots: 3 },
-  vanskelig: { label: "Vanskelig", color: "accent-red", dots: 5 },
+// Static classes — Tailwind purges dynamically built class names like `bg-${x}`.
+const DIFFICULTY_CONFIG: Record<string, { label: string; dotClass: string; dots: number }> = {
+  lett: { label: "Lett", dotClass: "bg-accent-green", dots: 1 },
+  middels: { label: "Middels", dotClass: "bg-accent-orange", dots: 3 },
+  vanskelig: { label: "Vanskelig", dotClass: "bg-accent-red", dots: 5 },
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -79,10 +80,10 @@ export default function ExerciseBankPage() {
   // Filters
   const [filterDifficulty, setFilterDifficulty] = useState("");
   const [filterType, setFilterType] = useState("");
-  const [activeFilters, setActiveFilters] = useState<string[]>([]);
 
-  // Hint state
+  // Hint / similar state (for the expanded card)
   const [hints, setHints] = useState<any>(null);
+  const [similar, setSimilar] = useState<Exercise[] | null>(null);
   const [actionLoading, setActionLoading] = useState("");
   const [actionError, setActionError] = useState("");
   const [fetchError, setFetchError] = useState("");
@@ -173,6 +174,44 @@ export default function ExerciseBankPage() {
     }
   };
 
+  const handleExamExport = async () => {
+    if (examExercises.length === 0) return;
+    setActionLoading("exam");
+    setActionError("");
+    try {
+      const res = await exportExercises(
+        examExercises.map((e) => e.id),
+        "pdf",
+        true,
+        "Eksamen"
+      );
+      if (res.success) {
+        downloadBase64(res.content_base64, res.filename, "application/pdf");
+      } else {
+        setActionError("Eksamenseksport feilet");
+      }
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : "Eksamenseksport feilet");
+    } finally {
+      setActionLoading("");
+    }
+  };
+
+  const handleFindSimilar = async (ex: Exercise) => {
+    setActionLoading("similar");
+    setActionError("");
+    try {
+      const res = await findSimilarExercises(ex.id);
+      setSimilar(res);
+      setHints(null);
+      setExpandedId(ex.id);
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : "Fant ikke lignende oppgaver");
+    } finally {
+      setActionLoading("");
+    }
+  };
+
   const handleGenerateVariant = async (id: string) => {
     setActionLoading("variant");
     setActionError("");
@@ -202,7 +241,11 @@ export default function ExerciseBankPage() {
     setActionLoading("hints");
     try {
       const res = await generateHints(ex.id, ex.latex_content, ex.solution);
-      if (res.success) setHints(res.hints);
+      if (res.success) {
+        setHints(res.hints);
+        setSimilar(null);
+        setExpandedId(ex.id);
+      }
     } finally {
       setActionLoading("");
     }
@@ -400,12 +443,14 @@ export default function ExerciseBankPage() {
                   onVariant={() => handleGenerateVariant(ex.id)}
                   onPublish={() => handlePublishToSchool(ex.id)}
                   onHints={() => handleGenerateHints(ex)}
+                  onSimilar={() => handleFindSimilar(ex)}
                   onAddToExam={() => {
                     if (!examExercises.find((e) => e.id === ex.id)) {
                       setExamExercises([...examExercises, ex]);
                     }
                   }}
                   hints={expandedId === ex.id ? hints : null}
+                  similar={expandedId === ex.id ? similar : null}
                   actionLoading={actionLoading}
                   buildMode={buildMode}
                 />
@@ -486,11 +531,12 @@ export default function ExerciseBankPage() {
                     ))}
                   </div>
                   <button
-                    onClick={() => handleBulkExport("pdf")}
-                    className="btn-primary w-full"
+                    onClick={handleExamExport}
+                    disabled={actionLoading === "exam"}
+                    className="btn-primary w-full disabled:opacity-50"
                   >
                     <FileText size={14} />
-                    Generer eksamen
+                    {actionLoading === "exam" ? "Genererer…" : "Generer eksamen"}
                   </button>
                 </>
               )}
@@ -514,8 +560,10 @@ function ExerciseCard({
   onVariant,
   onPublish,
   onHints,
+  onSimilar,
   onAddToExam,
   hints,
+  similar,
   actionLoading,
   buildMode,
 }: {
@@ -527,8 +575,10 @@ function ExerciseCard({
   onVariant: () => void;
   onPublish: () => void;
   onHints: () => void;
+  onSimilar: () => void;
   onAddToExam: () => void;
   hints: any;
+  similar: Exercise[] | null;
   actionLoading: string;
   buildMode: boolean;
 }) {
@@ -561,7 +611,7 @@ function ExerciseCard({
             <div
               key={i}
               className={`w-1.5 h-1.5 rounded-full ${
-                i < diff.dots ? `bg-${diff.color}` : "bg-border"
+                i < diff.dots ? diff.dotClass : "bg-border"
               }`}
             />
           ))}
@@ -587,7 +637,7 @@ function ExerciseCard({
 
       {/* Actions */}
       <div className="flex gap-1.5">
-        <SmallBtn label="Lignende" onClick={onExpand} />
+        <SmallBtn label="Lignende" onClick={onSimilar} loading={actionLoading === "similar"} />
         <SmallBtn label="Variant" onClick={onVariant} loading={actionLoading === "variant"} />
         <SmallBtn label="Skole" onClick={onPublish} loading={actionLoading === "publish"} />
         <SmallBtn label="Hint" onClick={onHints} loading={actionLoading === "hints"} />
@@ -595,6 +645,34 @@ function ExerciseCard({
           <SmallBtn label="+ Eksamen" onClick={onAddToExam} accent />
         )}
       </div>
+
+      {/* Expanded: similar exercises */}
+      <AnimatePresence>
+        {isExpanded && similar && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mt-3 pt-3 border-t border-border space-y-2"
+          >
+            <p className="text-[10px] font-medium text-text-muted uppercase tracking-wide">
+              Lignende oppgaver
+            </p>
+            {similar.length === 0 ? (
+              <p className="text-xs text-text-secondary">Ingen lignende oppgaver funnet.</p>
+            ) : (
+              similar.map((s) => (
+                <div key={s.id} className="text-xs p-2 bg-surface-elevated rounded-lg">
+                  <span className="font-medium text-text-primary">{s.title}</span>
+                  <p className="text-text-secondary line-clamp-2 mt-0.5">
+                    {s.latex_content.replace(/[\\{}$]/g, "").substring(0, 100)}
+                  </p>
+                </div>
+              ))
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Expanded: hints */}
       <AnimatePresence>
@@ -660,7 +738,7 @@ function ExerciseRow({
       </span>
       <div className="flex gap-0.5">
         {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className={`w-1.5 h-1.5 rounded-full ${i < diff.dots ? `bg-${diff.color}` : "bg-border"}`} />
+          <div key={i} className={`w-1.5 h-1.5 rounded-full ${i < diff.dots ? diff.dotClass : "bg-border"}`} />
         ))}
       </div>
       <span className="badge bg-surface-elevated text-text-muted">

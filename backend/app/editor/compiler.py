@@ -15,7 +15,6 @@ import re
 import subprocess
 import tempfile
 from collections import OrderedDict
-from threading import Semaphore
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -26,6 +25,7 @@ from pydantic import BaseModel
 from app.auth import get_current_user
 from app.config import get_config
 from app.rate_limit import limiter
+from app.latex.compiler import get_compile_gate
 from app.latex.preamble import wrap_with_preamble
 from app.validators import ensure_latex_size
 
@@ -34,13 +34,11 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/editor", tags=["editor"])
 
 # ---------------------------------------------------------------------------
-# Compilation cache & pool
+# Compilation cache
 # ---------------------------------------------------------------------------
-_MAX_CONCURRENT = 4
-_compile_semaphore = Semaphore(_MAX_CONCURRENT)
-
-# LRU cache: hash → (pdf_base64, errors)
-_MAX_CACHE_SIZE = 128
+# LRU cache: hash → (pdf_base64, errors). Kept small — each entry can hold a
+# multi-hundred-KB base64 PDF, and we run on a 512MB host.
+_MAX_CACHE_SIZE = 16
 _compile_cache: OrderedDict[str, tuple[str, list[dict]]] = OrderedDict()
 
 
@@ -131,9 +129,9 @@ def _parse_log_errors(log_content: str) -> tuple[list[dict], list[dict]]:
 def _compile_latex(full_content: str, filename: str) -> tuple[str, list[dict], list[dict]]:
     """
     Run pdflatex and return (pdf_base64, errors, warnings).
-    Uses a semaphore to limit concurrent compilations.
+    Uses the app-wide compile gate to limit concurrent engine processes.
     """
-    with _compile_semaphore:
+    with get_compile_gate():
         with tempfile.TemporaryDirectory() as tmpdir:
             tex_path = os.path.join(tmpdir, f"{filename}.tex")
             pdf_path = os.path.join(tmpdir, f"{filename}.pdf")

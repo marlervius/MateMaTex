@@ -34,6 +34,21 @@ export function closeActiveStream(): void {
   activeStreamClose = null;
 }
 
+// Aborted jobs + live poll signals. Abort must stop every watcher, otherwise a
+// job that finishes server-side after the user cancels would still flip the UI
+// to a success view.
+const abortedJobs = new Set<string>();
+const activeWatchSignals = new Set<{ cancelled: boolean }>();
+
+export function isJobAborted(jobId: string): boolean {
+  return abortedJobs.has(jobId);
+}
+
+function cancelAllWatchers(): void {
+  for (const s of activeWatchSignals) s.cancelled = true;
+  activeWatchSignals.clear();
+}
+
 async function readErrorMessage(res: Response): Promise<string> {
   try {
     const data = await res.json();
@@ -191,11 +206,24 @@ async function pollJobUntilTerminal(
   onComplete: (data: StreamCompletePayload) => void,
   signal: { cancelled: boolean }
 ): Promise<boolean> {
+  activeWatchSignals.add(signal);
+  try {
+    return await pollJobLoop(jobId, onComplete, signal);
+  } finally {
+    activeWatchSignals.delete(signal);
+  }
+}
+
+async function pollJobLoop(
+  jobId: string,
+  onComplete: (data: StreamCompletePayload) => void,
+  signal: { cancelled: boolean }
+): Promise<boolean> {
   for (let i = 0; i < 120; i++) {
-    if (signal.cancelled) return false;
+    if (signal.cancelled || abortedJobs.has(jobId)) return false;
     if (i > 0) {
       await sleep(1200);
-      if (signal.cancelled) return false;
+      if (signal.cancelled || abortedJobs.has(jobId)) return false;
     }
     try {
       const raw = await fetchJobStatus(jobId);
@@ -203,6 +231,7 @@ async function pollJobUntilTerminal(
       if (!raw.ready) continue;
       const status = String(raw.status ?? "");
       if (!TERMINAL_GENERATE_STATUSES.has(status)) continue;
+      if (signal.cancelled || abortedJobs.has(jobId)) return false;
       onComplete({
         status: status as StreamCompletePayload["status"],
         total_duration: Number(raw.total_duration_seconds ?? 0),
@@ -316,6 +345,8 @@ export function streamProgress(
 }
 
 export async function abortGeneration(jobId: string): Promise<{ success: boolean; message: string }> {
+  abortedJobs.add(jobId);
+  cancelAllWatchers();
   closeActiveStream();
   return fetchJson(apiUrl(`generate/${jobId}`), { method: "DELETE" });
 }
@@ -355,23 +386,29 @@ export async function watchGenerationJob(
   onReady: (status: JobStatusResponse) => void | Promise<void>,
   signal: { cancelled: boolean }
 ): Promise<boolean> {
-  for (let i = 0; i < 120; i++) {
-    if (signal.cancelled) return false;
-    if (i > 0) {
-      await sleep(1200);
-      if (signal.cancelled) return false;
+  activeWatchSignals.add(signal);
+  try {
+    for (let i = 0; i < 120; i++) {
+      if (signal.cancelled || abortedJobs.has(jobId)) return false;
+      if (i > 0) {
+        await sleep(1200);
+        if (signal.cancelled || abortedJobs.has(jobId)) return false;
+      }
+      try {
+        const raw = await fetchJobStatus(jobId);
+        if (!raw || !raw.ready) continue;
+        if (!TERMINAL_GENERATE_STATUSES.has(raw.status)) continue;
+        if (signal.cancelled || abortedJobs.has(jobId)) return false;
+        await onReady(raw);
+        return true;
+      } catch {
+        /* transient — keep polling */
+      }
     }
-    try {
-      const raw = await fetchJobStatus(jobId);
-      if (!raw || !raw.ready) continue;
-      if (!TERMINAL_GENERATE_STATUSES.has(raw.status)) continue;
-      await onReady(raw);
-      return true;
-    } catch {
-      /* transient — keep polling */
-    }
+    return false;
+  } finally {
+    activeWatchSignals.delete(signal);
   }
-  return false;
 }
 
 export async function fetchJobPdfObjectUrl(jobId: string): Promise<string> {

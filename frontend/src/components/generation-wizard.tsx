@@ -12,6 +12,7 @@ import {
   estimateCost,
   closeActiveStream,
   isTerminalGenerateStatus,
+  isJobAborted,
   watchGenerationJob,
   type CostEstimateResponse,
   type JobStatusResponse,
@@ -359,6 +360,7 @@ export function GenerationWizard() {
 
       const loadResultOnce = async (statusHint?: string) => {
         if (resultLoaded || loadingResult || activeJobRef.current !== job_id) return;
+        if (isJobAborted(job_id)) return;
         loadingResult = true;
         streamCloseRef.current?.();
         closeActiveStream();

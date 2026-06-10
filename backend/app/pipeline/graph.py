@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from pathlib import Path
 from typing import Callable, Literal
 
 import structlog
@@ -71,11 +72,13 @@ def try_restore_cached_pipeline(
 
         cached_json = get_cache().get_full_result(request)
         data = json.loads(cached_json) if cached_json else None
-        if data is not None and not data.get("pdf_base64"):
-            logger.info("pipeline_cache_ignored_no_pdf", job_id=job_id)
-            return None
         if data is None:
             return None
+        if not data.get("pdf_base64"):
+            pdf_path = data.get("pdf_path") or ""
+            if not (pdf_path and Path(pdf_path).is_file()):
+                logger.info("pipeline_cache_ignored_no_pdf", job_id=job_id)
+                return None
 
         restored = PipelineState(**data)
         restored.job_id = job_id
@@ -332,11 +335,13 @@ def finalize(state: PipelineState) -> PipelineState:
     # PDF-less "completed" state would make later cache hits return a document
     # the UI can never render (the result view just spins), which looks like a
     # hang to the user.
-    if state.pdf_base64:
+    has_pdf_file = bool(state.pdf_path) and Path(state.pdf_path).is_file()
+    if state.pdf_base64 or has_pdf_file:
         try:
             from app.cache import get_cache
+            from app.job_store import dump_state_compact
 
-            get_cache().set_full_result(state.request, state.model_dump_json())
+            get_cache().set_full_result(state.request, dump_state_compact(state))
         except Exception as e:
             logger.warning("cache_full_result_failed", error=str(e), job_id=state.job_id)
     else:

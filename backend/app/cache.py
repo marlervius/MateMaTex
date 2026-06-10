@@ -197,8 +197,17 @@ class SemanticCache:
     # Internal
     # ------------------------------------------------------------------
     def _pedagogue_key(self, request: GenerationRequest) -> str:
-        """Pedagogue cache key: grade + topic + material_type (not difficulty/exercises)."""
-        raw = f"pedagogue:{request.grade}:{request.topic}:{request.material_type}:{request.language_level}"
+        """
+        Pedagogue cache key: grade + topic + material_type + language level,
+        plus user steering (competency goals, extra instructions). Difficulty
+        and exercise count are deliberately excluded so plans can be reused,
+        but ignoring the user's explicit instructions would serve wrong plans.
+        """
+        goals = "|".join(sorted(request.competency_goals))
+        raw = (
+            f"pedagogue:{request.grade}:{request.topic}:{request.material_type}"
+            f":{request.language_level}:{goals}:{request.extra_instructions}"
+        )
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
     def _author_key(self, plan_hash: str, request: GenerationRequest) -> str:

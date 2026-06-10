@@ -104,9 +104,11 @@ export function PipelineProgress() {
     if (!currentJobId) return;
     closeActiveStream();
     cancelGeneration();
+    // Show the aborted state immediately — the DELETE below also stops all
+    // client-side polling so a late server completion can't overwrite it.
+    setError("Genereringen ble avbrutt av bruker.", request);
     try {
       await abortGeneration(currentJobId);
-      setError("Genereringen ble avbrutt av bruker.", request);
     } catch (err: unknown) {
       console.error("Failed to abort:", err);
     }

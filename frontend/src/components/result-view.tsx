@@ -259,10 +259,40 @@ export function ResultView() {
     }
   };
 
+  const countExercises = (latex: string): number =>
+    (latex.match(/\\begin\{(oppgave|taskbox|exercise)\}|\\subsection\*?\{Oppgave/g) || [])
+      .length;
+
+  // The pipeline already produces basic/advanced versions for "differensiert"
+  // materials — reuse them instead of paying for another LLM round-trip.
+  const hydrateDiffFromPipeline = (): boolean => {
+    if (!result.differentiatedBasic || !result.differentiatedAdvanced) return false;
+    const bodyMatch = result.fullDocument.match(
+      /\\begin\{document\}([\s\S]*?)\\end\{document\}/
+    );
+    const body = bodyMatch ? bodyMatch[1] : result.fullDocument;
+    const stdMatch = body.match(
+      /\\section\*\{Standard\}([\s\S]*?)(?=\\section\*\{Avansert\}|$)/
+    );
+    const standard = (stdMatch ? stdMatch[1] : body).trim();
+    setDiffData({
+      success: true,
+      basic_latex: result.differentiatedBasic,
+      standard_latex: standard,
+      advanced_latex: result.differentiatedAdvanced,
+      basic_exercise_count: countExercises(result.differentiatedBasic),
+      standard_exercise_count: countExercises(standard),
+      advanced_exercise_count: countExercises(result.differentiatedAdvanced),
+      errors: [],
+    });
+    return true;
+  };
+
   const handleDifferentiate = async () => {
-    setDiffLoading(true);
     setDiffError("");
     setActiveTab("differentiation");
+    if (!diffData && hydrateDiffFromPipeline()) return;
+    setDiffLoading(true);
     try {
       const res = await differentiate(result.fullDocument);
       if (res.success) {

@@ -8,10 +8,11 @@ replacement LaTeX using the model-agnostic LLM interface.
 from __future__ import annotations
 
 import structlog
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
 from app.auth import get_current_user
+from app.rate_limit import limiter
 
 from app.models.llm import get_llm
 
@@ -29,14 +30,17 @@ class EditorActionRequest(BaseModel):
         ...,
         description="The selected LaTeX text to transform",
         min_length=1,
+        max_length=20_000,
     )
     full_context: str = Field(
         "",
         description="The surrounding LaTeX document for context",
+        max_length=100_000,
     )
     extra_instructions: str = Field(
         "",
         description="Optional additional instructions for the AI",
+        max_length=2_000,
     )
 
     class Config:
@@ -110,7 +114,8 @@ _HINT_PROMPT = (
     response_model=EditorActionResponse,
     summary="Simplify selected text (keep math, simpler language)",
 )
-async def simplify(req: EditorActionRequest, user_id: str = Depends(get_current_user)) -> EditorActionResponse:
+@limiter.limit("10/minute")
+async def simplify(request: Request, req: EditorActionRequest, user_id: str = Depends(get_current_user)) -> EditorActionResponse:
     """Simplify the selected LaTeX text while keeping math intact."""
     return await _run_action(_SIMPLIFY_PROMPT, req)
 
@@ -120,7 +125,8 @@ async def simplify(req: EditorActionRequest, user_id: str = Depends(get_current_
     response_model=EditorActionResponse,
     summary="Generate TikZ/PGFPlots illustration for context",
 )
-async def add_illustration(req: EditorActionRequest, user_id: str = Depends(get_current_user)) -> EditorActionResponse:
+@limiter.limit("10/minute")
+async def add_illustration(request: Request, req: EditorActionRequest, user_id: str = Depends(get_current_user)) -> EditorActionResponse:
     """Generate a TikZ or PGFPlots illustration matching the selected context."""
     return await _run_action(_ILLUSTRATION_PROMPT, req)
 
@@ -130,7 +136,8 @@ async def add_illustration(req: EditorActionRequest, user_id: str = Depends(get_
     response_model=EditorActionResponse,
     summary="Generate an alternative version of an exercise",
 )
-async def create_variant(req: EditorActionRequest, user_id: str = Depends(get_current_user)) -> EditorActionResponse:
+@limiter.limit("10/minute")
+async def create_variant(request: Request, req: EditorActionRequest, user_id: str = Depends(get_current_user)) -> EditorActionResponse:
     """Create a new variant of the selected exercise with different numbers/context."""
     return await _run_action(_VARIANT_PROMPT, req)
 
@@ -140,7 +147,8 @@ async def create_variant(req: EditorActionRequest, user_id: str = Depends(get_cu
     response_model=EditorActionResponse,
     summary="Generate progressive hints for an exercise",
 )
-async def add_hint(req: EditorActionRequest, user_id: str = Depends(get_current_user)) -> EditorActionResponse:
+@limiter.limit("10/minute")
+async def add_hint(request: Request, req: EditorActionRequest, user_id: str = Depends(get_current_user)) -> EditorActionResponse:
     """Generate three progressive hints for the selected exercise."""
     return await _run_action(_HINT_PROMPT, req)
 

@@ -93,6 +93,21 @@ class Settings(BaseSettings):
         default=500_000,
         description="Maximum LaTeX body size accepted by compile/export endpoints",
     )
+    max_concurrent_compiles: int = Field(
+        default=2,
+        ge=1,
+        le=8,
+        description=(
+            "Global cap on simultaneous LaTeX engine processes. Keep low (1-2) "
+            "on memory-constrained hosts like Render free tier (512MB)."
+        ),
+    )
+    max_concurrent_jobs: int = Field(
+        default=2,
+        ge=1,
+        le=8,
+        description="Max generation pipelines running at the same time",
+    )
     database_ssl_verify: bool = Field(
         default=True,
         description="Verify TLS certificates for DATABASE_URL (disable only in local dev)",

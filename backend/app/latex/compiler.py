@@ -7,11 +7,34 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 
 import structlog
 
 logger = structlog.get_logger()
+
+# Global cap on simultaneous LaTeX engine processes — every compile in the app
+# (pipeline, editor preview, export) must go through this. Each pdflatex run
+# can use 100MB+; uncapped concurrency OOM-kills the Render free tier.
+_compile_gate: threading.BoundedSemaphore | None = None
+_gate_lock = threading.Lock()
+
+
+def get_compile_gate() -> threading.BoundedSemaphore:
+    """Lazily build the global compile semaphore from settings."""
+    global _compile_gate
+    if _compile_gate is None:
+        with _gate_lock:
+            if _compile_gate is None:
+                try:
+                    from app.config import get_settings
+
+                    limit = get_settings().max_concurrent_compiles
+                except Exception:  # pragma: no cover - config import guard
+                    limit = 2
+                _compile_gate = threading.BoundedSemaphore(limit)
+    return _compile_gate
 
 
 _DOUBLE_PASS_TRIGGERS = (
@@ -90,7 +113,7 @@ def compile_to_pdf_with_log(
     engine_name = resolve_engine(engine)
     binary = _engine_binary(engine_name, pdflatex_path)
 
-    with tempfile.TemporaryDirectory(prefix="matematex_") as tmpdir:
+    with get_compile_gate(), tempfile.TemporaryDirectory(prefix="matematex_") as tmpdir:
         tex_path = Path(tmpdir) / "document.tex"
         tex_path.write_text(latex_content, encoding="utf-8")
 
