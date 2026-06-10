@@ -194,21 +194,46 @@ export interface JobStatusResponse {
   error: string;
 }
 
-async function fetchJobStatus(jobId: string): Promise<JobStatusResponse | null> {
-  const res = await fetchWithTimeout(apiUrl(`generate/${jobId}/status`), {}, 12_000);
-  if (!res.ok) return null;
-  return res.json() as Promise<JobStatusResponse>;
+type StatusFetchResult =
+  | { kind: "ok"; data: JobStatusResponse }
+  | { kind: "not_found" }
+  | { kind: "error"; status: number };
+
+async function fetchJobStatus(jobId: string): Promise<StatusFetchResult> {
+  try {
+    const res = await fetchWithTimeout(apiUrl(`generate/${jobId}/status`), {}, 12_000);
+    if (res.status === 404) return { kind: "not_found" };
+    if (!res.ok) return { kind: "error", status: res.status };
+    const data = (await res.json()) as JobStatusResponse;
+    return { kind: "ok", data };
+  } catch {
+    return { kind: "error", status: 0 };
+  }
 }
+
+/** Poll interval: fast while the job is likely still running, slower afterwards. */
+function pollDelayMs(attempt: number): number {
+  return attempt < 90 ? 500 : 1500;
+}
+
+const JOB_GONE_MESSAGE =
+  "Serveren mistet jobben (ofte etter omstart på Render). " +
+  "Genereringen kan ha fullført — sjekk Historikk, eller prøv igjen.";
+
+const POLL_EXHAUSTED_MESSAGE =
+  "Fikk ikke bekreftet at jobben var ferdig. " +
+  "Sjekk Historikk — materialet kan ligge der hvis genereringen fullførte.";
 
 /** Poll lightweight /status until the job is ready. */
 async function pollJobUntilTerminal(
   jobId: string,
   onComplete: (data: StreamCompletePayload) => void,
-  signal: { cancelled: boolean }
+  signal: { cancelled: boolean },
+  onGiveUp?: (message: string) => void
 ): Promise<boolean> {
   activeWatchSignals.add(signal);
   try {
-    return await pollJobLoop(jobId, onComplete, signal);
+    return await pollJobLoop(jobId, onComplete, signal, onGiveUp);
   } finally {
     activeWatchSignals.delete(signal);
   }
@@ -217,35 +242,44 @@ async function pollJobUntilTerminal(
 async function pollJobLoop(
   jobId: string,
   onComplete: (data: StreamCompletePayload) => void,
-  signal: { cancelled: boolean }
+  signal: { cancelled: boolean },
+  onGiveUp?: (message: string) => void
 ): Promise<boolean> {
-  for (let i = 0; i < 120; i++) {
+  let notFoundStreak = 0;
+  for (let i = 0; i < 180; i++) {
     if (signal.cancelled || abortedJobs.has(jobId)) return false;
     if (i > 0) {
-      await sleep(1200);
+      await sleep(pollDelayMs(i));
       if (signal.cancelled || abortedJobs.has(jobId)) return false;
     }
-    try {
-      const raw = await fetchJobStatus(jobId);
-      if (!raw) continue;
-      if (!raw.ready) continue;
-      const status = String(raw.status ?? "");
-      if (!TERMINAL_GENERATE_STATUSES.has(status)) continue;
-      if (signal.cancelled || abortedJobs.has(jobId)) return false;
-      onComplete({
-        status: status as StreamCompletePayload["status"],
-        total_duration: Number(raw.total_duration_seconds ?? 0),
-        total_steps: 0,
-        math_checks: 0,
-        math_correct: 0,
-        latex_compiled: Boolean(raw.latex_compiled),
-        error: raw.error ? String(raw.error) : null,
-      });
-      return true;
-    } catch {
-      /* still running or transient network error */
+    const raw = await fetchJobStatus(jobId);
+    if (raw.kind === "not_found") {
+      notFoundStreak += 1;
+      // After a few 404s the backend likely restarted (/tmp wiped on Render).
+      if (notFoundStreak >= 4) {
+        onGiveUp?.(JOB_GONE_MESSAGE);
+        return false;
+      }
+      continue;
     }
+    notFoundStreak = 0;
+    if (raw.kind === "error") continue;
+    if (!raw.data.ready) continue;
+    const status = String(raw.data.status ?? "");
+    if (!TERMINAL_GENERATE_STATUSES.has(status)) continue;
+    if (signal.cancelled || abortedJobs.has(jobId)) return false;
+    onComplete({
+      status: status as StreamCompletePayload["status"],
+      total_duration: Number(raw.data.total_duration_seconds ?? 0),
+      total_steps: 0,
+      math_checks: 0,
+      math_correct: 0,
+      latex_compiled: Boolean(raw.data.latex_compiled),
+      error: raw.data.error ? String(raw.data.error) : null,
+    });
+    return true;
   }
+  onGiveUp?.(POLL_EXHAUSTED_MESSAGE);
   return false;
 }
 
@@ -305,32 +339,31 @@ export function streamProgress(
       return;
     }
     eventSource.close();
+    const giveUp = (msg: string) => {
+      if (finished || signal.cancelled) return;
+      finished = true;
+      callbacks.onError?.(msg);
+      closeActiveStream();
+    };
     void (async () => {
       if (finished || signal.cancelled) return;
-      const ok = await pollJobUntilTerminal(
-        jobId,
-        (data) => finish(data),
-        signal
-      );
-      if (!ok && !finished && !signal.cancelled) {
-        finished = true;
-        callbacks.onError?.(
-          "Mistet kontakt under generering (jobben kan fortsatt kjøre). " +
-            "Vent litt og åpne historikk, eller prøv igjen."
-        );
-        closeActiveStream();
-      }
+      await pollJobUntilTerminal(jobId, (data) => finish(data), signal, giveUp);
     })();
   });
 
   // Backstop polling: SSE delivery is unreliable through serverless proxies and
   // free-tier hosts — the connection can stay "open" while the `complete` event
   // is buffered or dropped, leaving the UI waiting forever even though the job
-  // already finished. We poll /result in parallel so completion is never missed.
-  // SSE still drives live step progress; `finished` de-dupes whichever wins.
+  // already finished. We poll /status in parallel so completion is never missed.
   void (async () => {
     if (finished || signal.cancelled) return;
-    await pollJobUntilTerminal(jobId, (data) => finish(data), signal);
+    const giveUp = (msg: string) => {
+      if (finished || signal.cancelled) return;
+      finished = true;
+      callbacks.onError?.(msg);
+      closeActiveStream();
+    };
+    await pollJobUntilTerminal(jobId, (data) => finish(data), signal, giveUp);
   })();
 
   const close = () => {
@@ -384,27 +417,36 @@ export async function getResult(
 export async function watchGenerationJob(
   jobId: string,
   onReady: (status: JobStatusResponse) => void | Promise<void>,
-  signal: { cancelled: boolean }
+  signal: { cancelled: boolean },
+  onGiveUp?: (message: string) => void
 ): Promise<boolean> {
   activeWatchSignals.add(signal);
   try {
-    for (let i = 0; i < 120; i++) {
+    let notFoundStreak = 0;
+    for (let i = 0; i < 180; i++) {
       if (signal.cancelled || abortedJobs.has(jobId)) return false;
       if (i > 0) {
-        await sleep(1200);
+        await sleep(pollDelayMs(i));
         if (signal.cancelled || abortedJobs.has(jobId)) return false;
       }
-      try {
-        const raw = await fetchJobStatus(jobId);
-        if (!raw || !raw.ready) continue;
-        if (!TERMINAL_GENERATE_STATUSES.has(raw.status)) continue;
-        if (signal.cancelled || abortedJobs.has(jobId)) return false;
-        await onReady(raw);
-        return true;
-      } catch {
-        /* transient — keep polling */
+      const raw = await fetchJobStatus(jobId);
+      if (raw.kind === "not_found") {
+        notFoundStreak += 1;
+        if (notFoundStreak >= 4) {
+          onGiveUp?.(JOB_GONE_MESSAGE);
+          return false;
+        }
+        continue;
       }
+      notFoundStreak = 0;
+      if (raw.kind === "error") continue;
+      if (!raw.data.ready) continue;
+      if (!TERMINAL_GENERATE_STATUSES.has(raw.data.status)) continue;
+      if (signal.cancelled || abortedJobs.has(jobId)) return false;
+      await onReady(raw.data);
+      return true;
     }
+    onGiveUp?.(POLL_EXHAUSTED_MESSAGE);
     return false;
   } finally {
     activeWatchSignals.delete(signal);

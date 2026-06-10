@@ -406,20 +406,45 @@ export function GenerationWizard() {
           await loadResultOnce(data.status);
         },
         onError: (err) => {
-          if (activeJobRef.current === job_id) {
-            setError(err, snapshot);
-          }
+          if (activeJobRef.current !== job_id || resultLoaded) return;
+          // Same recovery as poll give-up — job may exist on /result only.
+          void (async () => {
+            try {
+              await finishWithResult();
+              resultLoaded = true;
+            } catch {
+              setError(err, snapshot);
+            }
+          })();
         },
       });
 
+      const handlePollGiveUp = (msg: string) => {
+        if (activeJobRef.current !== job_id || resultLoaded) return;
+        // Last resort: /status may 404 after a Render restart while /result still works.
+        void (async () => {
+          try {
+            await finishWithResult();
+            resultLoaded = true;
+          } catch {
+            setError(msg, snapshot);
+          }
+        })();
+      };
+
       // Independent poll on tiny /status — never rely on SSE or heavy /result.
-      void watchGenerationJob(job_id, async (st: JobStatusResponse) => {
-        if (st.status === "failed") {
-          setError(st.error || "Generering feilet", snapshot);
-          return;
-        }
-        await loadResultOnce(st.status);
-      }, pollSignal);
+      void watchGenerationJob(
+        job_id,
+        async (st: JobStatusResponse) => {
+          if (st.status === "failed") {
+            setError(st.error || "Generering feilet", snapshot);
+            return;
+          }
+          await loadResultOnce(st.status);
+        },
+        pollSignal,
+        handlePollGiveUp
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Noe gikk galt";
       setError(msg, snapshot);
