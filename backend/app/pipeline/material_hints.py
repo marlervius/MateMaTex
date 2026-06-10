@@ -82,24 +82,39 @@ KAPITTEL-MODUS (lærebok-kapittel — skriv UTFYLLENDE teori!):
 Dette er det viktigste: et kapittel skal være TEORITUNGT og grundig, som en ekte
 lærebok-del. IKKE bare lister med definisjoner og bokser — skriv FORKLARENDE TEKST.
 
-OBLIGATORISK DYBDE:
-- Start med en innledning (løpende tekst) som motiverer temaet og knytter det til
-  det eleven kan fra før.
-- Bruk \\section{{...}} for hver hovedteknikk/begrep, og \\subsection{{...}} ved behov.
-  Et fullverdig kapittel har typisk 4–7 seksjoner.
-- For HVER teknikk/regel:
-  * Skriv først forklarende brødtekst (intuisjon — hvorfor virker dette?).
-  * Presenter regelen/setningen i \\begin{{definisjon}} eller en \\begin{{merk}}-boks.
-  * Der det er naturlig: vis en kort begrunnelse/utledning av formelen.
-  * Gi MINST 2 fullt gjennomregnede \\begin{{eksempel}}[title=...] med ALLE
-    mellomregninger og forklaring av hvert steg — ikke bare svaret.
-  * Legg gjerne inn en \\begin{{merk}}-boks med vanlige feil.
-- Inkluder en formel-/resultattabell (booktabs) der det passer (f.eks. standardintegraler).
-- Avslutt teoridelen med \\section*{{Oppsummering}} som samler de viktigste formlene.
-- LEGG oppgaveseksjonen (\\section{{Oppgaver}} med taskbox) HELT til slutt, etter all teori.
+LÆREBOK-STRUKTUR (som norske lærebøker):
+1. Rett etter \\maketitle: \\begin{{laeringsmaal}} med 3–5 konkrete mål
+   ("...lærer du å ...").
+2. Innledning (løpende tekst) som motiverer temaet, gjerne med et hverdagsnært
+   eksempel, og en \\begin{{husk}}-boks som aktiverer forkunnskaper.
+3. Bruk \\section{{...}} for hver hovedteknikk/begrep, og \\subsection{{...}} ved behov.
+   Et fullverdig kapittel har typisk 4–7 seksjoner.
+4. For HVER teknikk/regel:
+   * Skriv først forklarende brødtekst (intuisjon — hvorfor virker dette?).
+   * Begreper i \\begin{{definisjon}}; formler/regneregler i \\begin{{regel}}[title=...]
+     (rød boks — det eleven skal huske); beviste resultater i \\begin{{setning}}.
+   * Der det er naturlig: vis en kort begrunnelse/utledning av formelen.
+   * Gi MINST 2 fullt gjennomregnede \\begin{{eksempel}}[title=...] med align* og
+     \\forklaring{{...}} på hvert steg — ikke bare svaret.
+   * Legg inn \\begin{{vanligfeil}} med en typisk misforståelse (vis den gale
+     utregningen og forklar hvorfor den er feil).
+5. Inkluder en formel-/resultattabell (booktabs) der det passer (f.eks. standardintegraler).
+6. Gjerne en \\begin{{utforsk}}-aktivitet der eleven undersøker et mønster selv (LK20).
+7. Avslutt teoridelen med \\begin{{oppsummering}} som samler de viktigste formlene
+   og metodene (gjerne som kompakt liste eller tabell).
+8. LEGG oppgaveseksjonen (\\section{{Oppgaver}} med taskbox) HELT til slutt, etter
+   all teori, med stigende vanskelighet.
 - Bruk rikelig med figurer (PGFPlots/TikZ) for å illustrere begreper.
 
 VIKTIG: Skriv langt og grundig. Et tynt kapittel med bare noen få bokser er feil —
 mål på flere sider sammenhengende teori med mange eksempler før oppgavene.
+"""
+    if material_type == "arbeidsark":
+        return """
+ARBEIDSARK-MODUS:
+- Kort teoridel først: \\begin{husk} for forkunnskaper, \\begin{regel} for formelen
+  som arbeidsarket øver på, og ETT gjennomregnet \\begin{eksempel} med \\forklaring{...}.
+- Deretter oppgavene i taskbox med stigende vanskelighet.
+- Legg \\MMAsvarlinjer eller \\MMArutefelt etter oppgavene så eleven kan skrive.
 """
     return ""

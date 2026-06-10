@@ -27,6 +27,7 @@ THEMES: dict[str, dict[str, str]] = {
         "mainPurple": "102,51,153", "lightPurple": "245,240,255",
         "mainTeal": "0,128,128", "lightTeal": "235,250,250",
         "mainGray": "80,80,90", "lightGray": "248,248,252",
+        "mainRed": "200,55,55", "lightRed": "253,238,238",
     },
     # Softer, desaturated — calm reading experience
     "calm": {
@@ -36,6 +37,7 @@ THEMES: dict[str, dict[str, str]] = {
         "mainPurple": "120,110,160", "lightPurple": "245,243,250",
         "mainTeal": "70,135,135", "lightTeal": "239,247,247",
         "mainGray": "95,100,110", "lightGray": "247,248,250",
+        "mainRed": "170,90,90", "lightRed": "250,242,242",
     },
     # Brighter, friendlier — lower grades
     "playful": {
@@ -45,6 +47,7 @@ THEMES: dict[str, dict[str, str]] = {
         "mainPurple": "150,70,200", "lightPurple": "245,235,255",
         "mainTeal": "0,170,170", "lightTeal": "224,250,250",
         "mainGray": "90,90,100", "lightGray": "247,247,250",
+        "mainRed": "230,60,70", "lightRed": "255,235,236",
     },
     # Strong contrast for visual accessibility (WCAG-friendly)
     "highcontrast": {
@@ -54,6 +57,7 @@ THEMES: dict[str, dict[str, str]] = {
         "mainPurple": "85,0,128", "lightPurple": "255,255,255",
         "mainTeal": "0,90,90", "lightTeal": "255,255,255",
         "mainGray": "20,20,20", "lightGray": "255,255,255",
+        "mainRed": "153,0,0", "lightRed": "255,255,255",
     },
 }
 
@@ -279,6 +283,50 @@ _BOXES = r"""
   fonttitle=\bfseries\sffamily, title={Vurdering},
   boxed title style={colback=mainGray, colframe=mainGray}, #1}
 
+% ---- Textbook-style boxes (lærebok-bokser) ----
+
+% Rule / theorem / formula — the box pupils memorise. Strong red frame like
+% Norwegian textbooks use for "Regel"/"Setning".
+\newtcolorbox{regel}[1][]{matebox, colback=lightRed, colframe=mainRed,
+  fonttitle=\bfseries\sffamily, title={Regel},
+  boxed title style={colback=mainRed, colframe=mainRed}, #1}
+\newtcolorbox{setning}[1][]{matebox, colback=lightRed, colframe=mainRed,
+  fonttitle=\bfseries\sffamily, title={Setning},
+  boxed title style={colback=mainRed, colframe=mainRed}, #1}
+
+% Recall of prior knowledge — chapter openers ("Husk fra før")
+\newtcolorbox{husk}[1][]{enhanced, breakable, arc=2mm,
+  colback=lightTeal, colframe=mainTeal!70,
+  borderline west={2.5pt}{0pt}{mainTeal},
+  fonttitle=\bfseries\sffamily\color{mainTeal}, title={Husk fra før},
+  left=8pt, right=8pt, top=6pt, bottom=6pt, #1}
+
+% Common mistake / misconception — shows the wrong way and the right way
+\newtcolorbox{vanligfeil}[1][]{enhanced, breakable, arc=2mm,
+  colback=lightRed, colframe=mainRed!70,
+  borderline west={2.5pt}{0pt}{mainRed},
+  fonttitle=\bfseries\sffamily\color{mainRed}, title={Vanlig feil},
+  left=8pt, right=8pt, top=6pt, bottom=6pt, #1}
+
+% Exploration / inquiry activity ("Utforsk") — open-ended thinking task
+\newtcolorbox{utforsk}[1][]{enhanced, breakable, arc=2mm,
+  colback=lightPurple, colframe=mainPurple!70,
+  borderline west={2.5pt}{0pt}{mainPurple},
+  fonttitle=\bfseries\sffamily\color{mainPurple}, title={Utforsk},
+  left=8pt, right=8pt, top=6pt, bottom=6pt, #1}
+
+% Learning goals — chapter opener ("I dette kapittelet lærer du å ...")
+\newtcolorbox{laeringsmaal}[1][]{enhanced, breakable, arc=2mm,
+  colback=lightBlue, colframe=mainBlue!60,
+  borderline west={2.5pt}{0pt}{mainBlue},
+  fonttitle=\bfseries\sffamily\color{mainBlue}, title={I dette kapittelet lærer du å},
+  left=8pt, right=8pt, top=6pt, bottom=6pt, #1}
+
+% Chapter summary — collects the key formulas/methods
+\newtcolorbox{oppsummering}[1][]{matebox, colback=lightBlue, colframe=mainBlue,
+  fonttitle=\bfseries\sffamily, title={Sammendrag},
+  boxed title style={colback=mainBlue, colframe=mainBlue}, #1}
+
 % Theorem environments (fallback)
 \newtheorem{theorem}{Teorem}[section]
 \newtheorem{definition}[theorem]{Definisjon}
@@ -291,6 +339,28 @@ _MATH_COMMANDS = r"""
 \newcommand{\Z}{\mathbb{Z}}
 \newcommand{\Q}{\mathbb{Q}}
 \newcommand{\R}{\mathbb{R}}
+
+% Norwegian number and unit conventions (siunitx).
+% Only keys supported by both siunitx v2 and v3 — exotic keys break on
+% mixed TeX installs.
+\sisetup{
+  output-decimal-marker = {,},
+  group-separator = {\,},
+  group-minimum-digits = 5,
+}
+
+% Step justification in align-environments, textbook style:
+%   2x &= 8 && \forklaring{del begge sider på 2}
+\newcommand{\forklaring}[1]{\text{\small\color{mainGray}#1}}
+
+% Consistent display-math spacing + allow page breaks in long align-blocks
+\allowdisplaybreaks[1]
+\AtBeginDocument{%
+  \setlength{\abovedisplayskip}{0.6em plus 0.2em minus 0.2em}%
+  \setlength{\belowdisplayskip}{0.6em plus 0.2em minus 0.2em}%
+  \setlength{\abovedisplayshortskip}{0.3em}%
+  \setlength{\belowdisplayshortskip}{0.4em}%
+}
 """
 
 _SECTION_STYLING = r"""

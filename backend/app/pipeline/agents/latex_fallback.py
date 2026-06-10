@@ -49,7 +49,9 @@ def run_latex_fallback(state: PipelineState) -> PipelineState:
             body,
             flags=re.DOTALL,
         )
-        body = re.sub(r"\\textcolor\{.*?\}.*?\}", "% [Farge fjernet]", body)
+        # Unwrap simple \textcolor{color}{text} to plain text. The old greedy
+        # pattern could swallow valid content mid-paragraph.
+        body = re.sub(r"\\textcolor\{[^{}]*\}\{([^{}]*)\}", r"\1", body)
 
         fallback_warning = r"""
 \begin{tcolorbox}[colback=red!5!white,colframe=red!75!black,title=Kompileringsadvarsel]

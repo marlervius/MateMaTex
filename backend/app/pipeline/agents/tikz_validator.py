@@ -83,14 +83,14 @@ def _wrap_bare_tikzpicture(body: str) -> tuple[str, int]:
             # Already wrapped — pass through as-is
             output_parts.append(text[i:m_end.end()])
         else:
-            # Not wrapped — add figure wrapper
+            # Not wrapped — add figure wrapper. No caption: a generic
+            # "Figur"-caption looks worse than none and pollutes numbering.
             tikz_block = text[m_start.start():m_end.end()]
             wrapped = (
                 '\\begin{figure}[H]\n'
                 '\\centering\n'
                 + tikz_block
-                + '\n\\caption{Figur}\n'
-                '\\end{figure}'
+                + '\n\\end{figure}'
             )
             output_parts.append(text[i:m_start.start()])
             output_parts.append(wrapped)
@@ -139,7 +139,6 @@ def _wrap_bare_axis(body: str) -> tuple[str, int]:
                 '\\begin{tikzpicture}\n'
                 + axis_block
                 + '\n\\end{tikzpicture}\n'
-                '\\caption{Graf}\n'
                 '\\end{figure}'
             )
             output_parts.append(text[i:m_start.start()])

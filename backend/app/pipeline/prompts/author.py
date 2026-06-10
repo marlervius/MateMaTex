@@ -24,17 +24,33 @@ ALDRI skriv noe av dette — preamble legges til AUTOMATISK:
 - [INSERT FIGURE: ...] plassholdere
 - \\includegraphics (ALDRI — bruk TikZ direkte)
 
-=== OBLIGATORISKE LaTeX-MILJØER ===
+=== OBLIGATORISKE LaTeX-MILJØER (lærebok-bokser) ===
 
-DEFINISJONER (blå boks):
+DEFINISJONER (blå boks) — presist begrep med uthevet fagord:
 \\begin{definisjon}
 En \\textbf{lineær funksjon} er en funksjon på formen $f(x) = ax + b$.
 \\end{definisjon}
 
-EKSEMPLER (grønn boks, med BESKRIVENDE tittel):
-\\begin{eksempel}[title=Finne stigningstall fra to punkter]
-Vi har punktene $(1, 3)$ og $(4, 9)$.
-Stigningstallet er $a = \\frac{9-3}{4-1} = \\frac{6}{3} = 2$.
+REGLER/FORMLER (rød boks) — det eleven skal HUSKE. Bruk for alle sentrale
+formler, setninger og regneregler (som i en ekte lærebok):
+\\begin{regel}[title=Pytagoras' setning]
+I en rettvinklet trekant med kateter $a$ og $b$ og hypotenus $c$ gjelder
+\\[ a^2 + b^2 = c^2 \\]
+\\end{regel}
+(Alternativ for beviste resultater: \\begin{setning}...\\end{setning})
+
+EKSEMPLER (grønn boks, med BESKRIVENDE tittel) — ALLTID med fullstendig
+løsning der HVERT steg begrunnes med \\forklaring{...}:
+\\begin{eksempel}[title=Løse en lineær likning]
+Løs likningen $2x + 3 = 11$.
+
+\\textbf{Løsning:}
+\\begin{align*}
+2x + 3 &= 11 && \\forklaring{trekk 3 fra begge sider} \\\\
+2x &= 8 && \\forklaring{del begge sider på 2} \\\\
+x &= 4
+\\end{align*}
+Vi kontrollerer: $2 \\cdot 4 + 3 = 11$. \\checkmark
 \\end{eksempel}
 
 OPPGAVER (lilla boks):
@@ -46,8 +62,29 @@ Finn stigningstallet til linjen som går gjennom $(2, 5)$ og $(6, 13)$.
 \\end{enumerate}
 \\end{taskbox}
 
+ANDRE LÆREBOK-BOKSER (bruk aktivt der de passer):
+\\begin{husk}...\\end{husk}                → Aktiver forkunnskaper ("Husk fra før")
+\\begin{vanligfeil}...\\end{vanligfeil}    → Typisk misforståelse: vis FEIL utregning
+                                             med begrunnelse for hvorfor den er gal,
+                                             og riktig måte
+\\begin{utforsk}...\\end{utforsk}          → Utforskende oppgave/aktivitet (LK20!)
+\\begin{laeringsmaal}\\begin{itemize}...\\end{itemize}\\end{laeringsmaal}
+                                           → Læringsmål øverst i kapittel
+\\begin{oppsummering}...\\end{oppsummering} → Sammendrag av formler/metoder til slutt
 TIPS: \\begin{merk}Husk at stigningstallet...\\end{merk}
 LØSNING: \\begin{losning}...\\end{losning}
+
+=== STEG-FOR-STEG-LØSNINGER (KRITISK for lærebok-kvalitet) ===
+ALLE utregninger over én linje skrives i align* med ETT regneskritt per linje,
+justert på relasjonstegnet, og med \\forklaring{...} som begrunner steget:
+\\begin{align*}
+\\int x e^{x} \\,dx &= x e^{x} - \\int e^{x} \\,dx && \\forklaring{delvis integrasjon: $u = x$, $v' = e^x$} \\\\
+&= x e^{x} - e^{x} + C && \\forklaring{integrer $e^x$} \\\\
+&= e^{x}(x - 1) + C && \\forklaring{faktoriser}
+\\end{align*}
+- ALDRI hopp over mellomregninger i eksempler — eleven skal kunne følge hvert steg.
+- Bruk && \\forklaring{...} på stegene som trenger begrunnelse (ikke nødvendigvis alle).
+- Avslutt gjerne eksempler med kontroll/innsetting av svaret.
 
 === TABELLER — KRITISKE REGLER ===
 ALLTID booktabs. ALDRI | eller \\hline.
@@ -465,7 +502,8 @@ Gjennomsnittlig endringsrate $= \\frac{\\Delta y}{\\Delta x} = \\frac{8}{2} = 4$
 
 === TikZ-REGLER ===
 Tilgjengelige farger: mainBlue, lightBlue, mainGreen, lightGreen, mainOrange,
-lightOrange, mainPurple, lightPurple, mainTeal, lightTeal, mainGray, lightGray.
+lightOrange, mainPurple, lightPurple, mainTeal, lightTeal, mainGray, lightGray,
+mainRed, lightRed.
 TikZ-biblioteker (allerede lastet): arrows.meta, calc, patterns, positioning,
 shapes.geometric, decorations.pathreplacing, decorations.pathmorphing,
 decorations.markings, angles, quotes, intersections, through,
@@ -496,6 +534,9 @@ NODE-LABELS I PGFPlots — UNNGÅ OVERLAPP:
 - \\cdot for multiplikasjon, ALDRI *
 - \\sqrt{} for kvadratrot
 - Norsk desimalkomma: $1{,}35$ (med klammeparenteser)
+- Enheter med tynn mellomrom og upright tekst: $5{,}2\\,\\text{cm}$, $12\\,\\text{m}^2$
+- Differensialet i integraler med tynn mellomrom: $\\int f(x)\\,dx$
+- Intervaller på norsk form: $[2, 5]$, $\\langle 2, 5\\rangle$ for åpne intervaller
 
 === LØSNINGSFORSLAG ===
 Plasser ALLTID på slutten. Bruk multicols KUN hvis det er 4+ oppgaver — ellers løpende tekst:
@@ -526,6 +567,14 @@ FEW_SHOT_EXAMPLES = [
 \date{\today}
 \maketitle
 
+\begin{laeringsmaal}
+\begin{itemize}
+\item kjenne igjen en lineær funksjon på formen $f(x) = ax + b$
+\item finne stigningstall og konstantledd fra graf og funksjonsuttrykk
+\item tegne grafen til en lineær funksjon
+\end{itemize}
+\end{laeringsmaal}
+
 \section{Hva er en lineær funksjon?}
 
 \begin{definisjon}
@@ -540,6 +589,31 @@ der $a$ er \textbf{stigningstallet} og $b$ er \textbf{konstantleddet}.
 Stigningstallet $a$ forteller hvor mye $y$ øker når $x$ øker med 1.
 Konstantleddet $b$ er verdien der grafen krysser $y$-aksen.
 \end{merk}
+
+\begin{regel}[title=Stigningstall fra to punkter]
+Når grafen går gjennom punktene $(x_1, y_1)$ og $(x_2, y_2)$, er stigningstallet
+\[
+a = \frac{y_2 - y_1}{x_2 - x_1}
+\]
+\end{regel}
+
+\begin{eksempel}[title=Finne stigningstall fra to punkter]
+Grafen til en lineær funksjon går gjennom $(1, 3)$ og $(4, 9)$. Finn stigningstallet.
+
+\textbf{Løsning:}
+\begin{align*}
+a &= \frac{y_2 - y_1}{x_2 - x_1} && \forklaring{sett inn punktene} \\
+  &= \frac{9 - 3}{4 - 1} = \frac{6}{3} && \forklaring{regn ut teller og nevner} \\
+  &= 2
+\end{align*}
+Stigningstallet er $a = 2$: grafen stiger 2 enheter når $x$ øker med 1.
+\end{eksempel}
+
+\begin{vanligfeil}
+Mange blander rekkefølgen i telleren og nevneren:
+$a = \frac{y_2 - y_1}{x_1 - x_2}$ gir feil fortegn!
+Husk: samme rekkefølge oppe og nede.
+\end{vanligfeil}
 
 \begin{eksempel}[title=Tegne grafen til en lineær funksjon]
 Vi skal tegne grafen til $f(x) = 2x + 1$.
