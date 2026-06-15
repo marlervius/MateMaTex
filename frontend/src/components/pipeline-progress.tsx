@@ -73,11 +73,23 @@ const AGENT_INFO: Record<
     description: "Retter kompileringsfeil...",
     color: "accent-red",
   },
+  content_quality: {
+    name: "Innholdskontroll",
+    icon: <CheckCircle2 size={18} />,
+    description: "Sjekker pensumdekning og kapitteldybde...",
+    color: "accent-teal",
+  },
   latex_fallback: {
     name: "Forenkling (Fallback)",
     icon: <Wrench size={18} />,
     description: "Fjerner avansert grafikk for å redde dokumentet...",
     color: "accent-red",
+  },
+  layout: {
+    name: "Layout-kontroll",
+    icon: <CheckCircle2 size={18} />,
+    description: "Vurderer sideoppsett og lesbarhet...",
+    color: "accent-teal",
   },
 };
 
@@ -86,9 +98,11 @@ const BASE_PIPELINE_ORDER = [
   "author",
   "math_verifier",
   "editor",
+  "content_quality",
   "tikz_validator",
   "table_validator",
   "latex_validator",
+  "layout",
 ];
 
 export function PipelineProgress() {

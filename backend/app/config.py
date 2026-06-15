@@ -83,13 +83,19 @@ class Settings(BaseSettings):
         description="Comma-separated material types that skip the LLM editor (faster)",
     )
     pipeline_max_seconds: int = Field(
-        default=240,
+        default=420,
         ge=30,
         le=3600,
         description=(
             "Soft wall-clock budget for a job. When exceeded, the pipeline stops "
             "retrying and delivers the best document it has (fallback if needed)."
         ),
+    )
+    max_author_runs: int = Field(
+        default=5,
+        ge=2,
+        le=15,
+        description="Hard cap on author LLM invocations per job (prevents retry loops)",
     )
     verification_fail_open: bool = Field(
         default=False,
@@ -186,6 +192,7 @@ class AppConfig:
         self.skip_editor = s.skip_editor
         self.skip_editor_material_types = s.skip_editor_material_types
         self.pipeline_max_seconds = s.pipeline_max_seconds
+        self.max_author_runs = s.max_author_runs
         self.llm = LLMProviderConfig()
 
 

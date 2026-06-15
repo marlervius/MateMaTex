@@ -199,6 +199,8 @@ class TestContentQualityRouting:
             content_quality_attempts=0,
         )
         assert should_retry_content(state) == "author"
+        assert state.author_retry_reason == "quality"
+        assert state.skip_editor_once is True
 
     def test_proceed_when_passed(self):
         from app.models.state import ContentQualityReport, PipelineState

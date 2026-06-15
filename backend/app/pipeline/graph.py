@@ -34,6 +34,7 @@ from langgraph.graph import END, StateGraph
 from app.config import get_config
 from app.latex.preamble import wrap_with_style
 from app.models.state import (
+    AgentRole,
     GenerationRequest,
     PipelineState,
     PipelineStatus,
@@ -153,6 +154,17 @@ def _should_skip_editor(state: PipelineState) -> bool:
     return state.request.material_type in fast_types
 
 
+def _author_run_count(state: PipelineState) -> int:
+    return sum(1 for s in state.steps if s.agent == AgentRole.AUTHOR)
+
+
+def _max_author_runs() -> int:
+    try:
+        return get_config().max_author_runs
+    except Exception:
+        return 5
+
+
 def should_retry_content(
     state: PipelineState,
 ) -> Literal["author", "tikz_validator"]:
@@ -171,7 +183,10 @@ def should_retry_content(
     if (
         state.content_quality_attempts < max_retries
         and not _over_time_budget(state)
+        and _author_run_count(state) < _max_author_runs()
     ):
+        state.author_retry_reason = "quality"
+        state.skip_editor_once = True
         logger.info(
             "content_quality_retry",
             job_id=state.job_id,
@@ -211,7 +226,9 @@ def should_retry_math(
         and state.math_verification_attempts < max_retries
         and _math_errors_worth_author_retry(state)
         and not _over_time_budget(state)
+        and _author_run_count(state) < _max_author_runs()
     ):
+        state.author_retry_reason = "math"
         logger.info(
             "math_retry_decision",
             decision="retry",
@@ -228,7 +245,9 @@ def should_retry_math(
             errors=state.math_verification.claims_incorrect,
         )
 
-    if _should_skip_editor(state):
+    if _should_skip_editor(state) or state.skip_editor_once:
+        if state.skip_editor_once:
+            state.skip_editor_once = False
         logger.info(
             "editor_skip_decision",
             material_type=state.request.material_type,

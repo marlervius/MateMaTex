@@ -233,6 +233,14 @@ class PipelineState(BaseModel):
     layout_report: LayoutReport = Field(default_factory=LayoutReport)
     content_quality: ContentQualityReport = Field(default_factory=ContentQualityReport)
     content_quality_attempts: int = 0
+    author_retry_reason: str = Field(
+        default="",
+        description="Set by graph routers before author: 'math' | 'quality'",
+    )
+    skip_editor_once: bool = Field(
+        default=False,
+        description="Skip the LLM editor pass once (after a quality retry author run)",
+    )
 
     # --- Observability ---
     steps: list[AgentStep] = Field(default_factory=list)

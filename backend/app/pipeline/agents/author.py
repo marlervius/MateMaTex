@@ -3,7 +3,7 @@ Author agent node — Writes LaTeX body content with TikZ illustrations.
 
 This is the second agent. It takes the pedagogical plan and produces
 complete LaTeX body content. It may be called multiple times if
-the math verifier finds errors (retry loop).
+the math verifier or content-quality gate requests fixes.
 """
 
 from __future__ import annotations
@@ -31,8 +31,8 @@ def run_author(state: PipelineState) -> PipelineState:
     """
     Execute the author agent: write LaTeX body content.
 
-    If this is a retry (math_verification_attempts > 0), the author receives
-    the error report and current content to fix.
+    Retry mode is driven by ``state.author_retry_reason`` (set by graph routers),
+    not by math_verification_attempts (which counts verifier runs, not failures).
 
     Reads: state.pedagogical_plan, state.math_verification, state.raw_latex_body
     Writes: state.raw_latex_body, state.steps
@@ -40,13 +40,11 @@ def run_author(state: PipelineState) -> PipelineState:
     step = AgentStep(agent=AgentRole.AUTHOR)
     state.current_agent = AgentRole.AUTHOR
 
-    is_math_retry = state.math_verification_attempts > 0
-    is_quality_retry = (
-        not is_math_retry
-        and state.request.material_type == "kapittel"
-        and not state.content_quality.passed
-        and bool(state.content_quality.issues)
-    )
+    reason = (state.author_retry_reason or "").strip().lower()
+    state.author_retry_reason = ""
+
+    is_math_retry = reason == "math"
+    is_quality_retry = reason == "quality"
     if is_quality_retry:
         state.content_quality_attempts += 1
 
@@ -55,7 +53,7 @@ def run_author(state: PipelineState) -> PipelineState:
         job_id=state.job_id,
         is_math_retry=is_math_retry,
         is_quality_retry=is_quality_retry,
-        math_attempt=state.math_verification_attempts,
+        math_verifier_runs=state.math_verification_attempts,
         quality_attempt=state.content_quality_attempts,
     )
 
@@ -71,7 +69,6 @@ def run_author(state: PipelineState) -> PipelineState:
         full_system = "\n".join(system_parts)
 
         if is_math_retry:
-            # Retry mode: fix errors found by math verifier
             from app.verification.math_checker import format_errors_for_agent
 
             error_report = format_errors_for_agent(state.math_verification)
@@ -80,8 +77,7 @@ def run_author(state: PipelineState) -> PipelineState:
                 error_report=error_report,
             )
             step.input_summary = (
-                f"MATH RETRY #{state.math_verification_attempts}: "
-                f"fixing {state.math_verification.claims_incorrect} errors"
+                f"MATH RETRY: fixing {state.math_verification.claims_incorrect} errors"
             )
         elif is_quality_retry:
             from app.verification.content_quality import format_quality_report_for_author
@@ -99,7 +95,6 @@ def run_author(state: PipelineState) -> PipelineState:
                 f"score {state.content_quality.score}/100"
             )
         else:
-            # First run: generate from plan
             grade_context = state.curriculum_context or format_boundaries_for_prompt(
                 state.request.grade
             )
@@ -116,27 +111,20 @@ def run_author(state: PipelineState) -> PipelineState:
             )
             step.input_summary = f"Plan: {state.pedagogical_plan[:100]}..."
 
-        # Call LLM
         response = llm.invoke(full_system, user_prompt)
         body = response.strip()
 
-        # Clean LLM output: strip markdown code fences
         import re as _re
+
         body = _re.sub(r'^```(?:latex|tex)?\s*\n?', '', body)
         body = _re.sub(r'\n?```\s*$', '', body)
-
-        # Strip preamble if AI ignored instructions and generated a full document.
-        # Remove everything from \documentclass up to and including \begin{document}.
         body = _re.sub(
             r'\\documentclass.*?\\begin\{document\}\s*',
             '',
             body,
             flags=_re.DOTALL,
         )
-        # Remove \end{document} and anything after it
         body = _re.sub(r'\\end\{document\}.*$', '', body, flags=_re.DOTALL)
-
-        # Remove any \includegraphics lines — images must be TikZ only
         body = _re.sub(r'\\includegraphics\s*(?:\[.*?\])?\s*\{.*?\}', '', body)
 
         state.raw_latex_body = body.strip()
@@ -158,7 +146,7 @@ def run_author(state: PipelineState) -> PipelineState:
     finally:
         step.completed_at = datetime.now()
         step.duration_seconds = (step.completed_at - step.started_at).total_seconds()
-        step.retries = state.math_verification_attempts
+        step.retries = state.content_quality_attempts if is_quality_retry else state.math_verification_attempts
         state.steps.append(step)
 
     return state

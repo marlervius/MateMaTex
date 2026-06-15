@@ -163,10 +163,10 @@ def get_topic_coverage_spec(
 
     if subtopics:
         n = len(subtopics)
-        spec.min_theory_sections = max(5, min(n + 1, 8))
-        spec.min_examples = max(8, n)
-        spec.min_graphs = max(4, min(n, 6))
-        spec.min_body_chars = max(10_000, n * 1200)
+        spec.min_theory_sections = max(5, min(n, 7))
+        spec.min_examples = max(6, min(n, 8))
+        spec.min_graphs = max(3, min(n, 5))
+        spec.min_body_chars = max(6000, min(n * 900, 12000))
 
     if category:
         spec.forbidden_section_patterns = list(OFF_TOPIC_SECTION_PATTERNS.get(category, []))
