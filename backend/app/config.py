@@ -68,6 +68,12 @@ class Settings(BaseSettings):
     )
     output_dir: str = Field(default="output")
     max_verification_retries: int = Field(default=2, ge=1, le=10)
+    max_content_quality_retries: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        description="Author retries when kapittel fails the content-quality gate",
+    )
     skip_editor: bool = Field(
         default=False,
         description="If True, skip the LLM editor pass for all material types",
@@ -174,6 +180,7 @@ class AppConfig:
         self.latex_engine = s.latex_engine
         self.output_dir = s.output_dir
         self.max_verification_retries = s.max_verification_retries
+        self.max_content_quality_retries = s.max_content_quality_retries
         self.verification_fail_open = s.verification_fail_open
         self.max_latex_chars = s.max_latex_chars
         self.skip_editor = s.skip_editor

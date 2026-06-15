@@ -109,6 +109,61 @@ Ingen teori (arbeidsark). Gå rett på oppgaver.
 ## Tidsestimat: 30-40 min
 """,
     },
+    {
+        "input": "Klassetrinn: VG1 1T | Tema: Funksjoner | Type: kapittel | 10 oppgaver",
+        "output": """\
+# Pedagogisk plan: Funksjoner (VG1 1T, kapittel)
+
+## LK20-kompetansemål
+- «utforske, analysere og tegne ulike typer funksjoner»
+- Kobling mellom tabell, graf og formel
+
+## VIKTIG: Kun funksjoner — IKKE vektorer, trigonometri eller kombinatorikk i dette kapittelet.
+
+## Seksjon 1: Funksjonsbegrepet og representasjoner (15 min)
+**Læringsmål:** Forstå funksjon, definisjonsmengde og verdimengde; koble tabell, graf og formel.
+**Nøkkelbegreper:** funksjon, definisjonsmengde, verdimengde, koordinatsystem
+**Illustrasjon (NØDVENDIG):** Samme lineære funksjon som tabell, graf og formel side om side
+**Eksempler:** 2 — les av graf; lag tabell fra f(x)=2x-1
+**Utforsk:** Endre stigningstall i GeoGebra — hva skjer med grafen?
+
+## Seksjon 2: Lineære funksjoner (15 min)
+**Læringsmål:** Finne stigningstall og konstantledd; tegne graf.
+**Eksempler:** 2 — fra to punkter; praktisk modell (mobilabonnement)
+**Illustrasjon (NØDVENDIG):** To lineære grafer med ulikt a og b
+
+## Seksjon 3: Andregradsfunksjoner (20 min)
+**Læringsmål:** Nullpunkter, toppunkt, symmetri.
+**Eksempler:** 2 — faktorisering; abc-formel
+**Illustrasjon (NØDVENDIG):** Parabel med toppunkt markert
+
+## Seksjon 4: Polynomfunksjoner (15 min)
+**Læringsmål:** Grad, nullpunkter, grov grafisk skisse.
+**Eksempler:** 2 — tredjegrads med ett nullpunkt; sammenligne grafer
+
+## Seksjon 5: Rasjonale funksjoner (15 min)
+**Læringsmål:** Vertikale og horisontale asymptoter.
+**Eksempler:** 2 — tegn graf med hull; finn asymptoter
+**Vanlig feil:** Tro at horisontal asymptote aldri kan krysses
+
+## Seksjon 6: Eksponentialfunksjoner og logaritmer (20 min)
+**Læringsmål:** Vekst/forfall; logaritmeregler; løse b^x=c.
+**Eksempler:** 2 — prosentvekst modell; lg-likning
+**Illustrasjon (NØDVENDIG):** Eksponentialkurve
+
+## Oppsummering
+Tabell med alle funksjonstyper og metoder.
+
+## Oppgaver (10 stk, stigende vanskelighet, KUN funksjoner)
+1–2: Lett — les av lineær graf
+3–4: Middels — andregrads nullpunkter
+5–6: Middels — asymptoter / eksponentiallikning
+7–8: Middels — modellering
+9–10: Vanskelig — sammensatte funksjonsproblemer
+
+## Tidsestimat totalt: 90-120 min
+""",
+    },
 ]
 
 
@@ -147,6 +202,16 @@ def build_pedagogue_prompt(
     if material_type == "differensiert" or content_options.get("differentiation_mode"):
         diff_text = "DIFFERENSIERING: Planlegg tre nivåer (Grunnleggende / Standard / Avansert) i samme dokument"
 
+    from app.curriculum.topic_coverage import format_coverage_for_prompt
+
+    coverage_text = format_coverage_for_prompt(
+        grade,
+        topic,
+        material_type=material_type,
+        num_exercises=num_exercises,
+        competency_goals=goals,
+    )
+
     return f"""\
 Lag en pedagogisk plan for:
 
@@ -162,6 +227,7 @@ Vanskelighetsgrad: {content_options.get('difficulty', 'Middels')}
 {goals_text}
 {diff_text}
 {material_extra}
+{coverage_text}
 {language_instructions}
 
 Følg formatet fra eksemplene. Alt på norsk (Bokmål).

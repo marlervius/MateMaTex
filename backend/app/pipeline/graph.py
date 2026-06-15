@@ -37,6 +37,7 @@ from app.models.state import (
     PipelineState,
     PipelineStatus,
 )
+from app.pipeline.agents.content_quality import run_content_quality
 from app.pipeline.agents.author import run_author
 from app.pipeline.agents.editor import run_editor
 from app.pipeline.agents.latex_fixer import run_latex_fixer
@@ -151,9 +152,52 @@ def _should_skip_editor(state: PipelineState) -> bool:
     return state.request.material_type in fast_types
 
 
+def should_retry_content(
+    state: PipelineState,
+) -> Literal["author", "tikz_validator"]:
+    """
+    After content quality gate: retry author if kapittel fails standards.
+    """
+    if state.request.material_type != "kapittel":
+        return "tikz_validator"
+
+    if state.content_quality.passed:
+        return "tikz_validator"
+
+    config = get_config()
+    max_retries = config.max_content_quality_retries
+
+    if (
+        state.content_quality_attempts < max_retries
+        and not _over_time_budget(state)
+    ):
+        logger.info(
+            "content_quality_retry",
+            job_id=state.job_id,
+            attempt=state.content_quality_attempts + 1,
+            score=state.content_quality.score,
+            issues=len(state.content_quality.issues),
+        )
+        return "author"
+
+    logger.warning(
+        "content_quality_proceed_with_gaps",
+        job_id=state.job_id,
+        score=state.content_quality.score,
+        issues=len(state.content_quality.issues),
+    )
+    if state.content_quality.score < 70:
+        state.warning_reason = (
+            (state.warning_reason + ",content_quality")
+            if state.warning_reason
+            else "content_quality"
+        )
+    return "tikz_validator"
+
+
 def should_retry_math(
     state: PipelineState,
-) -> Literal["author", "editor", "tikz_validator"]:
+) -> Literal["author", "editor", "content_quality"]:
     """
     After math verification: retry author if errors found and retries remain.
     Otherwise proceed to editor or skip straight to validators.
@@ -190,7 +234,7 @@ def should_retry_math(
             job_id=state.job_id,
         )
         state.edited_latex_body = state.verified_latex_body
-        return "tikz_validator"
+        return "content_quality"
 
     return "editor"
 
@@ -394,6 +438,7 @@ def create_pipeline() -> StateGraph:
     graph.add_node("author", run_author)
     graph.add_node("math_verifier", run_math_verifier)
     graph.add_node("editor", run_editor)
+    graph.add_node("content_quality", run_content_quality)
     graph.add_node("tikz_validator", run_tikz_validator)    # Rule-based figure fixer
     graph.add_node("table_validator", run_table_validator)  # Rule-based table fixer
     graph.add_node("latex_validator", run_latex_validator)
@@ -409,19 +454,29 @@ def create_pipeline() -> StateGraph:
     graph.add_edge("pedagogue", "author")
     graph.add_edge("author", "math_verifier")
 
-    # Conditional: math verification → retry author OR proceed to editor
+    # Conditional: math verification → retry author OR content quality OR skip editor
     graph.add_conditional_edges(
         "math_verifier",
         should_retry_math,
         {
             "author": "author",
             "editor": "editor",
+            "content_quality": "content_quality",
+        },
+    )
+
+    graph.add_edge("editor", "content_quality")
+
+    graph.add_conditional_edges(
+        "content_quality",
+        should_retry_content,
+        {
+            "author": "author",
             "tikz_validator": "tikz_validator",
         },
     )
 
-    # Linear: editor → tikz_validator → table_validator → latex validation
-    graph.add_edge("editor", "tikz_validator")
+    # Linear: tikz → table → latex validation
     graph.add_edge("tikz_validator", "table_validator")
     graph.add_edge("table_validator", "latex_validator")
 
