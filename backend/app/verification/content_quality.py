@@ -219,6 +219,8 @@ def evaluate_content_quality(
         )
 
     # --- Score ---
+    critical_codes = {"missing_subtopic", "off_topic_section", "off_topic_content"}
+    critical_issues = [i for i in issues if i.code in critical_codes]
     error_count = sum(1 for i in issues if i.severity == "error")
     max_checks = max(
         12,
@@ -227,7 +229,8 @@ def evaluate_content_quality(
     penalty = min(100, error_count * (100 // max_checks))
     report.score = max(0, 100 - penalty)
     report.issues = issues
-    report.passed = error_count == 0 and report.score >= 90
+    # Pass when pensum is covered and score is good — minor style gaps are OK.
+    report.passed = len(critical_issues) == 0 and report.score >= 75
     return report
 
 

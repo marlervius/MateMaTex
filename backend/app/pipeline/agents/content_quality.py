@@ -11,6 +11,7 @@ from datetime import datetime
 import structlog
 
 from app.models.state import AgentRole, AgentStep, PipelineState
+from app.pipeline.routing_helpers import can_retry_content_quality
 from app.verification.content_quality import evaluate_content_quality
 
 logger = structlog.get_logger()
@@ -21,7 +22,7 @@ def run_content_quality(state: PipelineState) -> PipelineState:
     Evaluate edited (or verified) LaTeX against curriculum + kapittel standards.
 
     Reads: state.edited_latex_body / verified / raw
-    Writes: state.content_quality, state.steps
+    Writes: state.content_quality, state.steps, author_retry_reason (when retrying)
     """
     step = AgentStep(agent=AgentRole.CONTENT_QUALITY)
     state.current_agent = AgentRole.CONTENT_QUALITY
@@ -56,6 +57,14 @@ def run_content_quality(state: PipelineState) -> PipelineState:
                 issues=n_issues,
                 missing=report.missing_subtopics,
             )
+            if can_retry_content_quality(state, report):
+                state.author_retry_reason = "quality"
+                state.skip_editor_once = True
+                logger.info(
+                    "content_quality_scheduled_retry",
+                    job_id=state.job_id,
+                    next_attempt=state.content_quality_attempts + 1,
+                )
 
     except Exception as e:
         step.error = str(e)

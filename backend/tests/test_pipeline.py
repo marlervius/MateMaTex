@@ -42,7 +42,7 @@ class TestMathRetryRouting:
         assert should_retry_math(state) == "author"
 
     def test_proceed_when_correct(self):
-        """Should proceed to editor when all math is correct (kapittel uses editor)."""
+        """Kapittel skips LLM editor and goes to content quality."""
         state = PipelineState(
             request=GenerationRequest(
                 grade="8. trinn", topic="Algebra", material_type="kapittel"
@@ -55,10 +55,10 @@ class TestMathRetryRouting:
             ),
             math_verification_attempts=1,
         )
-        assert should_retry_math(state) == "editor"
+        assert should_retry_math(state) == "content_quality"
 
     def test_proceed_after_max_retries(self):
-        """Should proceed to editor after max retries even with errors."""
+        """Should proceed after max retries even with errors (kapittel skips editor)."""
         state = PipelineState(
             request=GenerationRequest(
                 grade="8. trinn", topic="Algebra", material_type="kapittel"
@@ -70,7 +70,7 @@ class TestMathRetryRouting:
             ),
             math_verification_attempts=3,  # At max
         )
-        assert should_retry_math(state) == "editor"
+        assert should_retry_math(state) == "content_quality"
 
     def test_skip_editor_for_arbeidsark(self):
         """Worksheets skip the slow LLM editor and go straight to validators."""

@@ -34,7 +34,6 @@ from langgraph.graph import END, StateGraph
 from app.config import get_config
 from app.latex.preamble import wrap_with_style
 from app.models.state import (
-    AgentRole,
     GenerationRequest,
     PipelineState,
     PipelineStatus,
@@ -50,7 +49,11 @@ from app.pipeline.agents.math_verifier import run_math_verifier
 from app.pipeline.agents.pedagogue import run_pedagogue
 from app.pipeline.agents.table_validator import run_table_validator
 from app.pipeline.agents.tikz_validator import run_tikz_validator
-from app.pipeline.cancel import clear_cancel, is_cancelled
+from app.pipeline.routing_helpers import (
+    can_retry_content_quality,
+    can_retry_math,
+    over_time_budget,
+)
 
 logger = structlog.get_logger()
 
@@ -109,36 +112,7 @@ def try_restore_cached_pipeline(
 # Routing functions (conditional edges)
 # ---------------------------------------------------------------------------
 
-def _over_time_budget(state: PipelineState) -> bool:
-    """True when the job has used more than its wall-clock budget."""
-    try:
-        budget = get_config().pipeline_max_seconds
-    except Exception:
-        return False
-    elapsed = (datetime.now() - state.created_at).total_seconds()
-    if elapsed > budget:
-        logger.warning(
-            "pipeline_time_budget_exceeded",
-            job_id=state.job_id,
-            elapsed=round(elapsed, 1),
-            budget=budget,
-        )
-        return True
-    return False
-
-
-def _math_errors_worth_author_retry(state: PipelineState) -> bool:
-    """Skip author retry when SymPy mostly could not parse (false positives)."""
-    mv = state.math_verification
-    incorrect = mv.claims_incorrect
-    if incorrect <= 0:
-        return False
-    if mv.claims_unparseable >= incorrect * 10:
-        return False
-    verified = max(0, mv.claims_checked - mv.claims_unparseable)
-    if incorrect <= 3 and verified < 10 and mv.claims_unparseable > verified:
-        return False
-    return True
+from app.pipeline.cancel import clear_cancel, is_cancelled
 
 
 def _should_skip_editor(state: PipelineState) -> bool:
@@ -154,17 +128,6 @@ def _should_skip_editor(state: PipelineState) -> bool:
     return state.request.material_type in fast_types
 
 
-def _author_run_count(state: PipelineState) -> int:
-    return sum(1 for s in state.steps if s.agent == AgentRole.AUTHOR)
-
-
-def _max_author_runs() -> int:
-    try:
-        return get_config().max_author_runs
-    except Exception:
-        return 5
-
-
 def should_retry_content(
     state: PipelineState,
 ) -> Literal["author", "tikz_validator"]:
@@ -177,24 +140,24 @@ def should_retry_content(
     if state.content_quality.passed:
         return "tikz_validator"
 
-    config = get_config()
-    max_retries = config.max_content_quality_retries
-
-    if (
-        state.content_quality_attempts < max_retries
-        and not _over_time_budget(state)
-        and _author_run_count(state) < _max_author_runs()
-    ):
-        state.author_retry_reason = "quality"
-        state.skip_editor_once = True
+    if can_retry_content_quality(state, state.content_quality):
         logger.info(
             "content_quality_retry",
             job_id=state.job_id,
             attempt=state.content_quality_attempts + 1,
             score=state.content_quality.score,
             issues=len(state.content_quality.issues),
+            author_retry_reason=state.author_retry_reason,
         )
         return "author"
+
+    if over_time_budget(state):
+        logger.warning(
+            "pipeline_time_budget_exceeded",
+            job_id=state.job_id,
+            elapsed=round((datetime.now() - state.created_at).total_seconds(), 1),
+            budget=get_config().pipeline_max_seconds,
+        )
 
     logger.warning(
         "content_quality_proceed_with_gaps",
@@ -218,23 +181,13 @@ def should_retry_math(
     After math verification: retry author if errors found and retries remain.
     Otherwise proceed to editor or skip straight to validators.
     """
-    config = get_config()
-    max_retries = config.max_verification_retries
-
-    if (
-        not state.math_verification.all_correct
-        and state.math_verification_attempts < max_retries
-        and _math_errors_worth_author_retry(state)
-        and not _over_time_budget(state)
-        and _author_run_count(state) < _max_author_runs()
-    ):
-        state.author_retry_reason = "math"
+    if can_retry_math(state):
         logger.info(
             "math_retry_decision",
             decision="retry",
             attempt=state.math_verification_attempts,
-            max_retries=max_retries,
             errors=state.math_verification.claims_incorrect,
+            author_retry_reason=state.author_retry_reason,
         )
         return "author"
 
@@ -270,7 +223,7 @@ def should_retry_latex(state: PipelineState) -> Literal["latex_fixer", "latex_fa
     if state.latex_compilation.success:
         return "finalize"
 
-    if _over_time_budget(state):
+    if over_time_budget(state):
         logger.warning(
             "latex_retry_decision",
             decision="fallback",

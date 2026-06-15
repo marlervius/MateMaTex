@@ -79,7 +79,7 @@ class Settings(BaseSettings):
         description="If True, skip the LLM editor pass for all material types",
     )
     skip_editor_material_types: str = Field(
-        default="arbeidsark,prøve,differensiert",
+        default="arbeidsark,prøve,differensiert,kapittel",
         description="Comma-separated material types that skip the LLM editor (faster)",
     )
     pipeline_max_seconds: int = Field(

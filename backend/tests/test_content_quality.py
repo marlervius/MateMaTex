@@ -186,6 +186,7 @@ class TestContentQuality:
 class TestContentQualityRouting:
     def test_retry_when_failing(self):
         from app.models.state import ContentQualityIssue, ContentQualityReport, PipelineState
+        from app.pipeline.agents.content_quality import run_content_quality
 
         state = PipelineState(
             request=GenerationRequest(grade="VG1 1T", topic="Funksjoner", material_type="kapittel"),
@@ -193,14 +194,33 @@ class TestContentQualityRouting:
                 passed=False,
                 score=40,
                 issues=[
-                    ContentQualityIssue(code="few_examples", message="x"),
+                    ContentQualityIssue(code="missing_subtopic", message="x"),
                 ],
+                missing_subtopics=["Lineære funksjoner"],
             ),
+            edited_latex_body="\\section{A}",
             content_quality_attempts=0,
         )
-        assert should_retry_content(state) == "author"
+        # Re-evaluate via node (schedules retry in state)
+        state.content_quality = ContentQualityReport()
+        state.edited_latex_body = THIN_FUNKSJONER_LATEX
+        run_content_quality(state)
+        assert not state.content_quality.passed
         assert state.author_retry_reason == "quality"
         assert state.skip_editor_once is True
+        assert should_retry_content(state) == "author"
+
+    def test_passes_at_85_without_critical_gaps(self):
+        req = GenerationRequest(
+            grade="VG1 1T",
+            topic="Funksjoner",
+            material_type="kapittel",
+            num_exercises=10,
+        )
+        body = _build_passing_kapittel_latex()
+        report = evaluate_content_quality(body, req)
+        assert report.score >= 75
+        assert report.passed
 
     def test_proceed_when_passed(self):
         from app.models.state import ContentQualityReport, PipelineState
