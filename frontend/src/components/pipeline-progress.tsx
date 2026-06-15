@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { useAppStore } from "@/lib/store";
-import { abortGeneration, closeActiveStream } from "@/lib/api";
+import { abortGeneration } from "@/lib/api";
+import { startGenerationWatch, stopGenerationWatch } from "@/lib/generation-runner";
 import {
   GraduationCap,
   PenTool,
@@ -114,9 +116,16 @@ export function PipelineProgress() {
   const cancelGeneration = useAppStore((s) => s.cancelGeneration);
   const completedAgents = new Set(steps.map((s) => s.agent));
 
+  // Wizard unmounts when isGenerating flips true — re-attach the watch here so
+  // SSE/polling keep running for the full job lifetime.
+  useEffect(() => {
+    if (!currentJobId) return;
+    startGenerationWatch(currentJobId, useAppStore.getState().request);
+  }, [currentJobId]);
+
   const handleAbort = async () => {
     if (!currentJobId) return;
-    closeActiveStream();
+    stopGenerationWatch();
     cancelGeneration();
     // Show the aborted state immediately — the DELETE below also stops all
     // client-side polling so a late server completion can't overwrite it.

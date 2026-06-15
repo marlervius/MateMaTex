@@ -306,8 +306,14 @@ export function streamProgress(
   const finish = (data: StreamCompletePayload) => {
     if (finished) return;
     finished = true;
-    callbacks.onComplete?.(data);
-    closeActiveStream();
+    void Promise.resolve(callbacks.onComplete?.(data))
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : "Kunne ikke fullføre jobben";
+        callbacks.onError?.(msg);
+      })
+      .finally(() => {
+        closeActiveStream();
+      });
   };
 
   eventSource.addEventListener("step", (e: MessageEvent) => {

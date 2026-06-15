@@ -2,6 +2,8 @@ import type { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+// /result can include large LaTeX bodies; allow enough time through the proxy.
+export const maxDuration = 60;
 
 function backendBase(): string {
   return (
