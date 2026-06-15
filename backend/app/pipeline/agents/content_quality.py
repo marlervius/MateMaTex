@@ -26,11 +26,7 @@ def run_content_quality(state: PipelineState) -> PipelineState:
     step = AgentStep(agent=AgentRole.CONTENT_QUALITY)
     state.current_agent = AgentRole.CONTENT_QUALITY
 
-    body = (
-        state.edited_latex_body
-        or state.verified_latex_body
-        or state.raw_latex_body
-    )
+    body = state.edited_latex_body or state.verified_latex_body or state.raw_latex_body
 
     logger.info(
         "content_quality_start",
@@ -52,9 +48,7 @@ def run_content_quality(state: PipelineState) -> PipelineState:
             )
         else:
             n_issues = len(report.issues)
-            step.output_summary = (
-                f"Quality FAIL ({report.score}/100, {n_issues} issues)"
-            )
+            step.output_summary = f"Quality FAIL ({report.score}/100, {n_issues} issues)"
             logger.warning(
                 "content_quality_fail",
                 job_id=state.job_id,

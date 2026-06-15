@@ -169,12 +169,8 @@ def get_topic_coverage_spec(
         spec.min_body_chars = max(10_000, n * 1200)
 
     if category:
-        spec.forbidden_section_patterns = list(
-            OFF_TOPIC_SECTION_PATTERNS.get(category, [])
-        )
-        spec.forbidden_body_keywords = list(
-            OFF_TOPIC_BODY_KEYWORDS.get(category, [])
-        )
+        spec.forbidden_section_patterns = list(OFF_TOPIC_SECTION_PATTERNS.get(category, []))
+        spec.forbidden_body_keywords = list(OFF_TOPIC_BODY_KEYWORDS.get(category, []))
 
     for goal in goals:
         code = goal.split(":")[0].strip() if ":" in goal else goal.strip()
@@ -232,13 +228,13 @@ def format_coverage_for_prompt(
             f"hovedtemaer fra {grade} (f.eks. vektorer/trigonometri i et funksjonskapittel)."
         )
     else:
-        lines.append(
-            "Fokus: dekke hele temaet grundig uten å blande inn urelaterte kapitler."
-        )
+        lines.append("Fokus: dekke hele temaet grundig uten å blande inn urelaterte kapitler.")
 
     if spec.required_subtopics:
         lines.append("")
-        lines.append("OBLIGATORISKE DELTEMAER (hver med egen \\section, teori, ≥2 eksempler, ≥1 graf):")
+        lines.append(
+            "OBLIGATORISKE DELTEMAER (hver med egen \\section, teori, ≥2 eksempler, ≥1 graf):"
+        )
         for i, sub in enumerate(spec.required_subtopics, 1):
             kws = ", ".join(keywords_for_subtopic(sub)[:3])
             lines.append(f"  {i}. {sub}  [nøkkelord: {kws}]")

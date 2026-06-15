@@ -101,15 +101,9 @@ def _build_passing_kapittel_latex() -> str:
                 f"\\begin{{eksempel}}[title={{Eksempel {i+1}}}]\n"
                 f"Løs med \\forklaring{{steg}}.\n\\end{{eksempel}}"
             )
-        parts.append(
-            "\\begin{axis}[width=8cm,height=5cm]\n\\addplot {x};\n\\end{axis}"
-        )
-        parts.append(
-            "\\begin{vanligfeil}Typisk feil: glemmer definisjonsmengde.\\end{vanligfeil}"
-        )
-        parts.append(
-            "\\begin{vanligfeil}Typisk feil: blander asymptoter.\\end{vanligfeil}"
-        )
+        parts.append("\\begin{axis}[width=8cm,height=5cm]\n\\addplot {x};\n\\end{axis}")
+        parts.append("\\begin{vanligfeil}Typisk feil: glemmer definisjonsmengde.\\end{vanligfeil}")
+        parts.append("\\begin{vanligfeil}Typisk feil: blander asymptoter.\\end{vanligfeil}")
     parts.append("\\begin{oppsummering}Formler for alle funksjonstyper.\\end{oppsummering}")
     parts.append("\\section{Oppgaver}")
     for n in range(1, 11):
@@ -194,9 +188,7 @@ class TestContentQualityRouting:
         from app.models.state import ContentQualityIssue, ContentQualityReport, PipelineState
 
         state = PipelineState(
-            request=GenerationRequest(
-                grade="VG1 1T", topic="Funksjoner", material_type="kapittel"
-            ),
+            request=GenerationRequest(grade="VG1 1T", topic="Funksjoner", material_type="kapittel"),
             content_quality=ContentQualityReport(
                 passed=False,
                 score=40,
@@ -212,9 +204,7 @@ class TestContentQualityRouting:
         from app.models.state import ContentQualityReport, PipelineState
 
         state = PipelineState(
-            request=GenerationRequest(
-                grade="VG1 1T", topic="Funksjoner", material_type="kapittel"
-            ),
+            request=GenerationRequest(grade="VG1 1T", topic="Funksjoner", material_type="kapittel"),
             content_quality=ContentQualityReport(passed=True, score=100),
         )
         assert should_retry_content(state) == "tikz_validator"

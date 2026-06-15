@@ -15,6 +15,8 @@ from app.curriculum.topic_coverage import (
     keywords_for_subtopic,
 )
 from app.models.state import ContentQualityIssue, ContentQualityReport, GenerationRequest
+
+
 def _count_pattern(text: str, pattern: str) -> int:
     return len(re.findall(pattern, text, flags=re.IGNORECASE | re.MULTILINE))
 
@@ -108,8 +110,7 @@ def evaluate_content_quality(
             ContentQualityIssue(
                 code="few_sections",
                 message=(
-                    f"For få seksjoner: {section_count} "
-                    f"(krav: {spec.min_theory_sections}+)"
+                    f"For få seksjoner: {section_count} " f"(krav: {spec.min_theory_sections}+)"
                 ),
             )
         )
@@ -118,10 +119,7 @@ def evaluate_content_quality(
         issues.append(
             ContentQualityIssue(
                 code="few_examples",
-                message=(
-                    f"For få eksempler: {example_count} "
-                    f"(krav: {spec.min_examples}+)"
-                ),
+                message=(f"For få eksempler: {example_count} " f"(krav: {spec.min_examples}+)"),
             )
         )
 
@@ -129,9 +127,7 @@ def evaluate_content_quality(
         issues.append(
             ContentQualityIssue(
                 code="few_graphs",
-                message=(
-                    f"For få grafer: {graph_count} (krav: {spec.min_graphs}+)"
-                ),
+                message=(f"For få grafer: {graph_count} (krav: {spec.min_graphs}+)"),
             )
         )
 
@@ -139,10 +135,7 @@ def evaluate_content_quality(
         issues.append(
             ContentQualityIssue(
                 code="thin_content",
-                message=(
-                    f"For kort innhold: {body_chars} tegn "
-                    f"(krav: {spec.min_body_chars}+)"
-                ),
+                message=(f"For kort innhold: {body_chars} tegn " f"(krav: {spec.min_body_chars}+)"),
             )
         )
 
@@ -214,10 +207,7 @@ def evaluate_content_quality(
         issues.append(
             ContentQualityIssue(
                 code="few_exercises",
-                message=(
-                    f"For få oppgaver: {exercise_count} "
-                    f"(krav: {spec.min_exercises})"
-                ),
+                message=(f"For få oppgaver: {exercise_count} " f"(krav: {spec.min_exercises})"),
             )
         )
 
@@ -257,7 +247,9 @@ def format_quality_report_for_author(report: ContentQualityReport) -> str:
 
     if report.missing_subtopics:
         lines.append("")
-        lines.append("MANGLENDE DELTEMAER (lag egen \\section med teori + 2 eksempler + graf for hver):")
+        lines.append(
+            "MANGLENDE DELTEMAER (lag egen \\section med teori + 2 eksempler + graf for hver):"
+        )
         for sub in report.missing_subtopics:
             lines.append(f"  • {sub}")
 
