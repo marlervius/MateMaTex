@@ -21,6 +21,7 @@ from app.pipeline.prompts.author import (
     FEW_SHOT_EXAMPLES,
     build_author_prompt,
     build_author_fix_prompt,
+    build_author_quality_fix_prompt,
 )
 
 logger = structlog.get_logger()
@@ -39,13 +40,23 @@ def run_author(state: PipelineState) -> PipelineState:
     step = AgentStep(agent=AgentRole.AUTHOR)
     state.current_agent = AgentRole.AUTHOR
 
-    is_retry = state.math_verification_attempts > 0
+    is_math_retry = state.math_verification_attempts > 0
+    is_quality_retry = (
+        not is_math_retry
+        and state.request.material_type == "kapittel"
+        and not state.content_quality.passed
+        and bool(state.content_quality.issues)
+    )
+    if is_quality_retry:
+        state.content_quality_attempts += 1
 
     logger.info(
         "author_start",
         job_id=state.job_id,
-        is_retry=is_retry,
-        attempt=state.math_verification_attempts,
+        is_math_retry=is_math_retry,
+        is_quality_retry=is_quality_retry,
+        math_attempt=state.math_verification_attempts,
+        quality_attempt=state.content_quality_attempts,
     )
 
     try:
@@ -59,7 +70,7 @@ def run_author(state: PipelineState) -> PipelineState:
 
         full_system = "\n".join(system_parts)
 
-        if is_retry:
+        if is_math_retry:
             # Retry mode: fix errors found by math verifier
             from app.verification.math_checker import format_errors_for_agent
 
@@ -68,7 +79,25 @@ def run_author(state: PipelineState) -> PipelineState:
                 current_latex=state.raw_latex_body,
                 error_report=error_report,
             )
-            step.input_summary = f"RETRY #{state.math_verification_attempts}: fixing {state.math_verification.claims_incorrect} math errors"
+            step.input_summary = (
+                f"MATH RETRY #{state.math_verification_attempts}: "
+                f"fixing {state.math_verification.claims_incorrect} errors"
+            )
+        elif is_quality_retry:
+            from app.verification.content_quality import format_quality_report_for_author
+
+            quality_report = format_quality_report_for_author(state.content_quality)
+            user_prompt = build_author_quality_fix_prompt(
+                pedagogical_plan=state.pedagogical_plan,
+                current_latex=state.raw_latex_body,
+                quality_report=quality_report,
+                grade=state.request.grade,
+                content_options=state.request.model_dump(),
+            )
+            step.input_summary = (
+                f"QUALITY RETRY #{state.content_quality_attempts}: "
+                f"score {state.content_quality.score}/100"
+            )
         else:
             # First run: generate from plan
             grade_context = state.curriculum_context or format_boundaries_for_prompt(
@@ -117,7 +146,8 @@ def run_author(state: PipelineState) -> PipelineState:
             "author_complete",
             job_id=state.job_id,
             body_length=len(state.raw_latex_body),
-            is_retry=is_retry,
+            is_math_retry=is_math_retry,
+            is_quality_retry=is_quality_retry,
         )
 
     except Exception as e:

@@ -47,9 +47,15 @@ KRAV TIL STRUKTUR:
 - Oppsummering til slutt: de viktigste formlene og metodene samlet.
 - Oppgaveseksjon HELT til slutt (teori FØR oppgaver), med stigende vanskelighet.
 
-OMFANG: Et R1/R2/VG3-kapittel skal være rikt og detaljert. Hver hovedteknikk
+OMFANG: Et VG1/R1/R2-kapittel skal være rikt og detaljert. Hver hovedteknikk
 fortjener egen seksjon med forklarende tekst, ikke bare en boks. Planlegg nok
 innhold til flere sider teori.
+
+STRENGE REGLER:
+- Dekk ALLE deltemaer fra pensum-sjekklisten (hver med egen seksjon)
+- ALDRI bland inn andre hovedkapitler (f.eks. vektorer i funksjonskapittel)
+- Planlegg minst 2 eksempler og 1 graf per hovedseksjon
+- Inkluder minst én utforsk-aktivitet og analyse/drøfting
 """
     return ""
 
@@ -108,6 +114,9 @@ LÆREBOK-STRUKTUR (som norske lærebøker):
 
 VIKTIG: Skriv langt og grundig. Et tynt kapittel med bare noen få bokser er feil —
 mål på flere sider sammenhengende teori med mange eksempler før oppgavene.
+
+PENSUM: Følg pensum-sjekklisten i prompten — hvert deltema får egen \\section.
+Fjern alt innhold som ikke hører til temaet (f.eks. vektorer i funksjonskapittel).
 """
     if material_type == "arbeidsark":
         return """

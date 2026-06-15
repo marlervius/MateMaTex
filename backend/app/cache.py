@@ -205,7 +205,7 @@ class SemanticCache:
         """
         goals = "|".join(sorted(request.competency_goals))
         raw = (
-            f"pedagogue:{request.grade}:{request.topic}:{request.material_type}"
+            f"pedagogue:v2:{request.grade}:{request.topic}:{request.material_type}"
             f":{request.language_level}:{goals}:{request.extra_instructions}"
         )
         return hashlib.sha256(raw.encode()).hexdigest()[:16]

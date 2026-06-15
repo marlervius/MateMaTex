@@ -31,6 +31,7 @@ class AgentRole(str, Enum):
     """Every agent in the pipeline."""
     PEDAGOGUE = "pedagogue"
     AUTHOR = "author"
+    CONTENT_QUALITY = "content_quality"
     MATH_VERIFIER = "math_verifier"
     TIKZ_VALIDATOR = "tikz_validator"
     TABLE_VALIDATOR = "table_validator"
@@ -125,6 +126,28 @@ class LayoutIssue(BaseModel):
     page: int | None = None
 
 
+class ContentQualityIssue(BaseModel):
+    """A single pedagogical completeness problem."""
+
+    code: str
+    severity: str = Field(default="error", description="error|warning")
+    message: str
+
+
+class ContentQualityReport(BaseModel):
+    """Rule-based kapittel quality assessment before PDF compile."""
+
+    passed: bool = False
+    score: int = Field(default=0, ge=0, le=100)
+    issues: list[ContentQualityIssue] = Field(default_factory=list)
+    missing_subtopics: list[str] = Field(default_factory=list)
+    section_count: int = 0
+    example_count: int = 0
+    graph_count: int = 0
+    exercise_count: int = 0
+    body_chars: int = 0
+
+
 class LayoutReport(BaseModel):
     """Structured quality assessment of the compiled document's layout."""
     score: int = 100
@@ -208,6 +231,8 @@ class PipelineState(BaseModel):
     latex_compilation: LatexCompilationResult = Field(default_factory=LatexCompilationResult)
     latex_fix_attempts: int = 0
     layout_report: LayoutReport = Field(default_factory=LayoutReport)
+    content_quality: ContentQualityReport = Field(default_factory=ContentQualityReport)
+    content_quality_attempts: int = 0
 
     # --- Observability ---
     steps: list[AgentStep] = Field(default_factory=list)

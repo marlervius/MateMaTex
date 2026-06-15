@@ -16,6 +16,7 @@ from app.models.state import (
 from app.pipeline.graph import (
     create_pipeline,
     finalize,
+    should_retry_content,
     should_retry_latex,
     should_retry_math,
 )
@@ -83,7 +84,7 @@ class TestMathRetryRouting:
             ),
             math_verification_attempts=1,
         )
-        assert should_retry_math(state) == "tikz_validator"
+        assert should_retry_math(state) == "content_quality"
         assert state.edited_latex_body == state.verified_latex_body
 
     def test_skip_retry_when_mostly_unparseable(self):
@@ -98,7 +99,7 @@ class TestMathRetryRouting:
             ),
             math_verification_attempts=1,
         )
-        assert should_retry_math(state) == "tikz_validator"
+        assert should_retry_math(state) == "content_quality"
 
 
 class TestLatexRetryRouting:
@@ -230,6 +231,7 @@ class TestGraphStructure:
             "pedagogue",
             "author",
             "math_verifier",
+            "content_quality",
             "editor",
             "tikz_validator",
             "table_validator",
