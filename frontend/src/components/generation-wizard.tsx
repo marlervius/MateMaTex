@@ -7,18 +7,15 @@ import { useAppStore } from "@/lib/store";
 import type { PdfTheme } from "@/lib/store";
 import {
   startGeneration,
-  streamProgress,
-  getResult,
   estimateCost,
-  closeActiveStream,
   isTerminalGenerateStatus,
-  isJobAborted,
-  watchGenerationJob,
   type CostEstimateResponse,
-  type JobStatusResponse,
 } from "@/lib/api";
-import { mapApiResultToGenerationResult, isSuccessfulStatus } from "@/lib/map-api-result";
-import { appendHistory } from "@/lib/generation-history";
+import {
+  loadTerminalGeneration,
+  startGenerationWatch,
+  stopGenerationWatch,
+} from "@/lib/generation-runner";
 import { searchGoals, type CompetencyGoal } from "@/data/lk20-goals";
 import {
   loadPreferences,
@@ -143,9 +140,6 @@ export function GenerationWizard() {
   const setRequest = useAppStore((s) => s.setRequest);
   const startGen = useAppStore((s) => s.startGeneration);
   const setJobId = useAppStore((s) => s.setJobId);
-  const addStep = useAppStore((s) => s.addStep);
-  const setCurrentAgent = useAppStore((s) => s.setCurrentAgent);
-  const setResult = useAppStore((s) => s.setResult);
   const setError = useAppStore((s) => s.setError);
 
   const [step, setStep] = useState(0);
@@ -153,7 +147,6 @@ export function GenerationWizard() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [goalSearch, setGoalSearch] = useState("");
   const activeJobRef = useRef<string | null>(null);
-  const streamCloseRef = useRef<(() => void) | null>(null);
   const [costEstimate, setCostEstimate] = useState<CostEstimateResponse | null>(
     null
   );
@@ -172,13 +165,6 @@ export function GenerationWizard() {
         : materialTypeParam || prefs.materialType,
     });
   }, [setRequest]);
-
-  useEffect(() => {
-    return () => {
-      streamCloseRef.current?.();
-      closeActiveStream();
-    };
-  }, []);
 
   const totalSteps = 3;
 
@@ -253,8 +239,7 @@ export function GenerationWizard() {
   const handleGenerate = async () => {
     if (!canGenerate) return;
 
-    streamCloseRef.current?.();
-    closeActiveStream();
+    stopGenerationWatch();
     startGen();
     const snapshot = { ...useAppStore.getState().request };
 
@@ -285,167 +270,17 @@ export function GenerationWizard() {
       activeJobRef.current = job_id;
       setJobId(job_id);
 
-      const finishWithResult = async () => {
-        const raw = await getResult(job_id);
-        if (activeJobRef.current !== job_id) return;
-        const mapped = mapApiResultToGenerationResult(raw, snapshot);
-        setResult(mapped);
-        if (isSuccessfulStatus(mapped.status)) {
-          appendHistory({
-            jobId: job_id,
-            createdAt: new Date().toISOString(),
-            topic: snapshot.topic,
-            grade: snapshot.grade,
-            materialType: snapshot.materialType,
-            favorite: false,
-            request: { ...snapshot },
-          });
-        }
-      };
-
-      // Cache hit / instant completion: backend returns terminal status in POST
-      // response — fetch result directly instead of waiting on SSE.
       if (isTerminalGenerateStatus(resp.status)) {
-        if (resp.status === "failed") {
-          setError(resp.message || "Generering feilet", snapshot);
-          return;
-        }
-        try {
-          await finishWithResult();
-          return;
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : "Kunne ikke hente resultat";
-          setError(msg, snapshot);
-          return;
-        }
+        await loadTerminalGeneration(
+          job_id,
+          resp.status,
+          snapshot,
+          resp.message
+        );
+        return;
       }
 
-      let resultLoaded = false;
-      let loadingResult = false;
-
-      const showPlaceholderResult = (status: string) => {
-        const currentSteps = useAppStore.getState().steps;
-        setResult(
-          mapApiResultToGenerationResult(
-            {
-              job_id,
-              status,
-              full_document: "",
-              pdf_available: true,
-              latex_compilation: { success: true },
-              math_verification: {
-                claims_checked: 0,
-                claims_correct: 0,
-                claims_incorrect: 0,
-                claims_unparseable: 0,
-                all_correct: true,
-                summary: "",
-              },
-              steps: currentSteps.map((s) => ({
-                agent: s.agent,
-                started_at: s.startedAt,
-                completed_at: s.completedAt,
-                duration_seconds: s.durationSeconds,
-                output_summary: s.outputSummary,
-                error: s.error,
-                retries: s.retries,
-              })),
-              total_duration_seconds: 0,
-              error: "",
-            },
-            snapshot
-          )
-        );
-      };
-
-      const loadResultOnce = async (statusHint?: string) => {
-        if (resultLoaded || loadingResult || activeJobRef.current !== job_id) return;
-        if (isJobAborted(job_id)) return;
-        loadingResult = true;
-        if (statusHint && statusHint !== "failed") {
-          setCurrentAgent(null);
-          showPlaceholderResult(statusHint);
-        }
-        try {
-          await finishWithResult();
-          resultLoaded = true;
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : "Kunne ikke hente resultat";
-          setError(msg, snapshot);
-        } finally {
-          loadingResult = false;
-          streamCloseRef.current?.();
-          closeActiveStream();
-        }
-      };
-
-      const pollSignal = { cancelled: false };
-
-      streamCloseRef.current = () => {
-        pollSignal.cancelled = true;
-        closeActiveStream();
-      };
-
-      streamProgress(job_id, {
-        onStep: (s) =>
-          addStep({
-            agent: s.agent,
-            startedAt: s.started_at,
-            completedAt: s.completed_at,
-            durationSeconds: s.duration_seconds,
-            outputSummary: s.output_summary,
-            error: s.error,
-            retries: s.retries,
-          }),
-        onCurrentAgent: (a) => setCurrentAgent(a),
-        onComplete: async (data) => {
-          if (activeJobRef.current !== job_id) return;
-          if (data.status === "failed") {
-            setError(data.error || "Generering feilet", snapshot);
-            return;
-          }
-          await loadResultOnce(data.status);
-        },
-        onError: (err) => {
-          if (activeJobRef.current !== job_id || resultLoaded) return;
-          // Same recovery as poll give-up — job may exist on /result only.
-          void (async () => {
-            try {
-              await finishWithResult();
-              resultLoaded = true;
-            } catch {
-              setError(err, snapshot);
-            }
-          })();
-        },
-      });
-
-      const handlePollGiveUp = (msg: string) => {
-        if (activeJobRef.current !== job_id || resultLoaded) return;
-        // Last resort: /status may 404 after a Render restart while /result still works.
-        void (async () => {
-          try {
-            await finishWithResult();
-            resultLoaded = true;
-          } catch {
-            setError(msg, snapshot);
-          }
-        })();
-      };
-
-      // Independent poll on tiny /status — never rely on SSE or heavy /result.
-      void watchGenerationJob(
-        job_id,
-        async (st: JobStatusResponse) => {
-          if (st.status === "failed") {
-            setError(st.error || "Generering feilet", snapshot);
-            return;
-          }
-          await loadResultOnce(st.status);
-        },
-        pollSignal,
-        handlePollGiveUp
-      );
+      startGenerationWatch(job_id, snapshot);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Noe gikk galt";
       setError(msg, snapshot);
