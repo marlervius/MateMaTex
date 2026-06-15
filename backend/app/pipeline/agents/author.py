@@ -17,10 +17,10 @@ from app.curriculum import format_boundaries_for_prompt, get_language_level_inst
 from app.models.llm import LLMInterface
 from app.models.state import AgentRole, AgentStep, PipelineState
 from app.pipeline.prompts.author import (
-    SYSTEM_PROMPT,
     FEW_SHOT_EXAMPLES,
-    build_author_prompt,
+    SYSTEM_PROMPT,
     build_author_fix_prompt,
+    build_author_prompt,
     build_author_quality_fix_prompt,
 )
 

@@ -8,7 +8,6 @@ explore/analyze/draw (LK20), and off-topic guards.
 from __future__ import annotations
 
 import re
-from typing import Literal
 
 from app.curriculum.topic_coverage import (
     get_topic_coverage_spec,

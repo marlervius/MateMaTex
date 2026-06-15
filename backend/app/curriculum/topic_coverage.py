@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from app.curriculum.lk20 import COMPETENCY_GOALS, TOPIC_LIBRARY, get_topics_for_grade
+from app.curriculum.lk20 import COMPETENCY_GOALS, get_topics_for_grade
 
 # Keywords that indicate a subtopic is present in LaTeX (lowercase matching).
 SUBTOPIC_KEYWORDS: dict[str, list[str]] = {

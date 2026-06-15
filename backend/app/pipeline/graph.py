@@ -23,9 +23,10 @@ Implements the multi-agent pipeline with verification loops:
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Literal
+from typing import Literal
 
 import structlog
 from langgraph.graph import END, StateGraph
@@ -37,17 +38,17 @@ from app.models.state import (
     PipelineState,
     PipelineStatus,
 )
-from app.pipeline.agents.content_quality import run_content_quality
 from app.pipeline.agents.author import run_author
+from app.pipeline.agents.content_quality import run_content_quality
 from app.pipeline.agents.editor import run_editor
-from app.pipeline.agents.latex_fixer import run_latex_fixer
 from app.pipeline.agents.latex_fallback import run_latex_fallback
+from app.pipeline.agents.latex_fixer import run_latex_fixer
 from app.pipeline.agents.latex_validator import run_latex_validator
 from app.pipeline.agents.layout import run_layout
 from app.pipeline.agents.math_verifier import run_math_verifier
 from app.pipeline.agents.pedagogue import run_pedagogue
-from app.pipeline.agents.tikz_validator import run_tikz_validator
 from app.pipeline.agents.table_validator import run_table_validator
+from app.pipeline.agents.tikz_validator import run_tikz_validator
 from app.pipeline.cancel import clear_cancel, is_cancelled
 
 logger = structlog.get_logger()
@@ -522,7 +523,7 @@ def run_pipeline(
     *,
     job_id: str | None = None,
     owner_id: str = "",
-    on_progress: "Callable[[PipelineState], None] | None" = None,
+    on_progress: Callable[[PipelineState], None] | None = None,
 ) -> PipelineState:
     """
     Run the full pipeline synchronously.
