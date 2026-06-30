@@ -39,9 +39,22 @@ export function closeActiveStream(): void {
 // to a success view.
 const abortedJobs = new Set<string>();
 const activeWatchSignals = new Set<{ cancelled: boolean }>();
+const MAX_ABORTED_JOB_IDS = 64;
 
 export function isJobAborted(jobId: string): boolean {
   return abortedJobs.has(jobId);
+}
+
+function markJobAborted(jobId: string): void {
+  abortedJobs.add(jobId);
+  if (abortedJobs.size > MAX_ABORTED_JOB_IDS) {
+    const oldest = abortedJobs.values().next().value;
+    if (oldest) abortedJobs.delete(oldest);
+  }
+}
+
+export function clearJobAborted(jobId: string): void {
+  abortedJobs.delete(jobId);
 }
 
 function cancelAllWatchers(): void {
@@ -62,14 +75,14 @@ async function readErrorMessage(res: Response): Promise<string> {
   return res.statusText || `HTTP ${res.status}`;
 }
 
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+async function fetchJson<T>(url: string, init?: RequestInit, timeoutMs = 30_000): Promise<T> {
   const headers: Record<string, string> = {
     ...(init?.headers as Record<string, string>),
   };
   if (init?.body && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
   }
-  const res = await fetch(url, { ...init, headers });
+  const res = await fetchWithTimeout(url, { ...init, headers }, timeoutMs);
   if (!res.ok) {
     throw new Error(`${res.status}: ${await readErrorMessage(res)}`);
   }
@@ -141,11 +154,15 @@ export interface GenerationResultApi {
 export async function startGeneration(
   request: GenerateRequest
 ): Promise<GenerateResponse> {
-  const res = await fetch(apiUrl("generate"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(request),
-  });
+  const res = await fetchWithTimeout(
+    apiUrl("generate"),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    },
+    30_000
+  );
   if (!res.ok) {
     const msg = await readErrorMessage(res);
     if (res.status === 401) {
@@ -263,7 +280,13 @@ async function pollJobLoop(
       continue;
     }
     notFoundStreak = 0;
-    if (raw.kind === "error") continue;
+    if (raw.kind === "error") {
+      if (raw.status >= 500 || raw.status === 0) {
+        // Transient backend/proxy failure — keep polling but surface once via giveUp path.
+        continue;
+      }
+      continue;
+    }
     if (!raw.data.ready) continue;
     const status = String(raw.data.status ?? "");
     if (!TERMINAL_GENERATE_STATUSES.has(status)) continue;
@@ -304,8 +327,9 @@ export function streamProgress(
   let finished = false;
 
   const finish = (data: StreamCompletePayload) => {
-    if (finished) return;
+    if (finished || signal.cancelled || isJobAborted(jobId)) return;
     finished = true;
+    clearJobAborted(jobId);
     callbacks.onComplete?.(data);
     closeActiveStream();
   };
@@ -321,6 +345,15 @@ export function streamProgress(
   eventSource.addEventListener("complete", (e: MessageEvent) => {
     const data = parseStreamData<StreamCompletePayload>(e.data, "complete");
     if (data) finish(data);
+    else if (!finished) {
+      // Malformed complete payload — fall back to status polling.
+      void pollJobUntilTerminal(jobId, (data) => finish(data), signal, (msg) => {
+        if (finished || signal.cancelled) return;
+        finished = true;
+        callbacks.onError?.(msg);
+        closeActiveStream();
+      });
+    }
   });
   eventSource.addEventListener("error", (e: Event) => {
     if (finished) return;
@@ -351,14 +384,11 @@ export function streamProgress(
     })();
   });
 
-  // Backstop polling: SSE delivery is unreliable through serverless proxies and
-  // free-tier hosts — the connection can stay "open" while the `complete` event
-  // is buffered or dropped, leaving the UI waiting forever even though the job
-  // already finished. We poll /status in parallel so completion is never missed.
+  // Backstop polling: SSE delivery is unreliable through serverless proxies.
   void (async () => {
     if (finished || signal.cancelled) return;
     const giveUp = (msg: string) => {
-      if (finished || signal.cancelled) return;
+      if (finished || signal.cancelled || isJobAborted(jobId)) return;
       finished = true;
       callbacks.onError?.(msg);
       closeActiveStream();
@@ -377,11 +407,15 @@ export function streamProgress(
   return close;
 }
 
-export async function abortGeneration(jobId: string): Promise<{ success: boolean; message: string }> {
-  abortedJobs.add(jobId);
+export function signalClientAbort(jobId: string): void {
+  markJobAborted(jobId);
   cancelAllWatchers();
   closeActiveStream();
-  return fetchJson(apiUrl(`generate/${jobId}`), { method: "DELETE" });
+}
+
+export async function abortGeneration(jobId: string): Promise<{ success: boolean; message: string }> {
+  signalClientAbort(jobId);
+  return fetchJson(apiUrl(`generate/${jobId}`), { method: "DELETE" }, 15_000);
 }
 
 export async function getResult(
@@ -411,8 +445,8 @@ export async function getResult(
 }
 
 /**
- * Poll /result until the job reaches a terminal status, then invoke onReady.
- * Runs in parallel with SSE so completion is never missed when the stream stalls.
+ * Poll /status until the job reaches a terminal status, then invoke onReady.
+ * Prefer streamProgress() which includes SSE + this poll as backstop.
  */
 export async function watchGenerationJob(
   jobId: string,
@@ -422,32 +456,21 @@ export async function watchGenerationJob(
 ): Promise<boolean> {
   activeWatchSignals.add(signal);
   try {
-    let notFoundStreak = 0;
-    for (let i = 0; i < 180; i++) {
-      if (signal.cancelled || abortedJobs.has(jobId)) return false;
-      if (i > 0) {
-        await sleep(pollDelayMs(i));
-        if (signal.cancelled || abortedJobs.has(jobId)) return false;
-      }
-      const raw = await fetchJobStatus(jobId);
-      if (raw.kind === "not_found") {
-        notFoundStreak += 1;
-        if (notFoundStreak >= 4) {
-          onGiveUp?.(JOB_GONE_MESSAGE);
-          return false;
-        }
-        continue;
-      }
-      notFoundStreak = 0;
-      if (raw.kind === "error") continue;
-      if (!raw.data.ready) continue;
-      if (!TERMINAL_GENERATE_STATUSES.has(raw.data.status)) continue;
-      if (signal.cancelled || abortedJobs.has(jobId)) return false;
-      await onReady(raw.data);
-      return true;
-    }
-    onGiveUp?.(POLL_EXHAUSTED_MESSAGE);
-    return false;
+    return await pollJobLoop(
+      jobId,
+      async (data) => {
+        await onReady({
+          job_id: jobId,
+          status: data.status,
+          ready: true,
+          latex_compiled: data.latex_compiled,
+          total_duration_seconds: data.total_duration,
+          error: data.error ?? "",
+        });
+      },
+      signal,
+      onGiveUp
+    );
   } finally {
     activeWatchSignals.delete(signal);
   }
@@ -458,7 +481,7 @@ export async function fetchJobPdfObjectUrl(jobId: string): Promise<string> {
     typeof window !== "undefined"
       ? `/api/generate/${encodeURIComponent(jobId)}/pdf`
       : apiUrl(`generate/${encodeURIComponent(jobId)}/pdf`);
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url, {}, 60_000);
   if (!res.ok) {
     throw new Error(await readErrorMessage(res));
   }
@@ -787,7 +810,12 @@ export function downloadBase64(
   filename: string,
   mimeType: string = "application/octet-stream"
 ) {
-  const binary = atob(base64);
+  let binary: string;
+  try {
+    binary = atob(base64);
+  } catch {
+    throw new Error("Ugyldig base64-innhold fra serveren");
+  }
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i);

@@ -182,6 +182,8 @@ app.include_router(collab_router)
 
 _jobs = get_job_memory()
 _executor = ThreadPoolExecutor(max_workers=get_settings().max_concurrent_jobs)
+_active_job_count = 0
+_active_job_lock = asyncio.Lock()
 _ABORT_MESSAGE = "Avbrutt av bruker"
 _MAX_STREAM_SECONDS = 3600  # 1 hour — prevent infinite SSE if job stalls
 
@@ -235,53 +237,72 @@ async def start_generation(
     user_id: str = Depends(get_current_user),
 ) -> GenerateResponse:
     """Start an asynchronous generation job."""
+    global _active_job_count
     from app.pipeline.graph import try_restore_cached_pipeline
 
-    state = PipelineState(
-        request=generation_request,
-        status=PipelineStatus.PENDING,
-        owner_id=user_id,
-    )
+    max_jobs = get_settings().max_concurrent_jobs
+    async with _active_job_lock:
+        if _active_job_count >= max_jobs:
+            raise HTTPException(
+                status_code=429,
+                detail="For mange jobber kjører samtidig. Prøv igjen om litt.",
+            )
+        _active_job_count += 1
 
-    # Cache hit: return immediately so the client never depends on SSE for a
-    # job that finished in milliseconds (SSE through Vercel/Render often stalls).
-    cached = try_restore_cached_pipeline(
-        generation_request,
-        job_id=state.job_id,
-        owner_id=user_id,
-        created_at=state.created_at,
-    )
-    if cached is not None:
-        _jobs[state.job_id] = cached
-        persist_terminal_job(cached)
-        logger.info(
-            "generation_cache_hit_sync",
-            job_id=state.job_id,
-            topic=generation_request.topic,
+    try:
+        state = PipelineState(
+            request=generation_request,
+            status=PipelineStatus.PENDING,
+            owner_id=user_id,
         )
+
+        # Cache hit: return immediately so the client never depends on SSE for a
+        # job that finished in milliseconds (SSE through Vercel/Render often stalls).
+        cached = try_restore_cached_pipeline(
+            generation_request,
+            job_id=state.job_id,
+            owner_id=user_id,
+            created_at=state.created_at,
+        )
+        if cached is not None:
+            _jobs[state.job_id] = cached
+            persist_terminal_job(cached)
+            async with _active_job_lock:
+                _active_job_count = max(0, _active_job_count - 1)
+            logger.info(
+                "generation_cache_hit_sync",
+                job_id=state.job_id,
+                topic=generation_request.topic,
+            )
+            return GenerateResponse(
+                job_id=state.job_id,
+                status=cached.status.value,
+                from_cache=True,
+                message="Ferdig (hentet fra hurtigbuffer).",
+            )
+
+        _jobs[state.job_id] = state
+
+        loop = asyncio.get_running_loop()
+        loop.run_in_executor(_executor, _run_job, state.job_id, generation_request, user_id)
+
+        logger.info("generation_started", job_id=state.job_id, topic=generation_request.topic)
+
         return GenerateResponse(
             job_id=state.job_id,
-            status=cached.status.value,
-            from_cache=True,
-            message="Ferdig (hentet fra hurtigbuffer).",
+            status="pending",
+            message="Generering startet. Bruk /generate/{id}/stream for fremdrift.",
         )
-
-    _jobs[state.job_id] = state
-
-    loop = asyncio.get_event_loop()
-    loop.run_in_executor(_executor, _run_job, state.job_id, generation_request, user_id)
-
-    logger.info("generation_started", job_id=state.job_id, topic=generation_request.topic)
-
-    return GenerateResponse(
-        job_id=state.job_id,
-        status="pending",
-        message="Generering startet. Bruk /generate/{id}/stream for fremdrift.",
-    )
+    except Exception:
+        async with _active_job_lock:
+            _active_job_count = max(0, _active_job_count - 1)
+        raise
 
 
 @app.get("/generate/{job_id}/stream")
+@limiter.limit("120/minute")
 async def stream_progress(
+    request: Request,
     job_id: str,
     user_id: str = Depends(require_stream_access),
 ) -> StreamingResponse:
@@ -307,6 +328,8 @@ async def stream_progress(
             if state is None:
                 yield _sse_event("error", {"message": "Job not found"})
                 break
+
+            _authorize_job(state, user_id)
 
             while last_step_count < len(state.steps):
                 step = state.steps[last_step_count]
@@ -366,7 +389,12 @@ async def stream_progress(
 
 
 @app.delete("/generate/{job_id}")
-async def abort_generation(job_id: str, user_id: str = Depends(get_current_user)):
+@limiter.limit("60/minute")
+async def abort_generation(
+    request: Request,
+    job_id: str,
+    user_id: str = Depends(get_current_user),
+):
     """Cancel a running generation job."""
     state = resolve_job(job_id, _jobs)
     if state is None:
@@ -385,7 +413,12 @@ async def abort_generation(job_id: str, user_id: str = Depends(get_current_user)
         return {"success": False, "message": "Job already finished"}
 
 @app.get("/generate/{job_id}/status")
-async def get_job_status(job_id: str, user_id: str = Depends(get_current_user)):
+@limiter.limit("240/minute")
+async def get_job_status(
+    request: Request,
+    job_id: str,
+    user_id: str = Depends(get_current_user),
+):
     """
     Lightweight job status for client polling.
 
@@ -419,7 +452,9 @@ async def get_job_status(job_id: str, user_id: str = Depends(get_current_user)):
 
 
 @app.get("/generate/{job_id}/result")
+@limiter.limit("120/minute")
 async def get_result(
+    request: Request,
     job_id: str,
     include_pdf_base64: bool = False,
     user_id: str = Depends(get_current_user),
@@ -464,7 +499,12 @@ async def get_result(
 
 
 @app.get("/generate/{job_id}/pdf")
-async def get_job_pdf(job_id: str, user_id: str = Depends(get_current_user)):
+@limiter.limit("60/minute")
+async def get_job_pdf(
+    request: Request,
+    job_id: str,
+    user_id: str = Depends(get_current_user),
+):
     """
     Return the compiled PDF for a completed job.
 
@@ -552,7 +592,7 @@ async def compile_latex(
     )
 
     if pdf_path:
-        return CompileResponse(success=True, pdf_path=pdf_path)
+        return CompileResponse(success=True, pdf_path=Path(pdf_path).name)
     else:
         return CompileResponse(success=False, errors=["Compilation failed"])
 
@@ -613,7 +653,8 @@ async def health_ready():
                 await conn.fetchval("SELECT 1")
             checks["database"] = "ok"
         except Exception as e:
-            checks["database"] = f"error: {e}"
+            checks["database"] = "error"
+            logger.warning("health_ready_database_failed", error=str(e))
     else:
         checks["database"] = "not_configured"
 
@@ -632,6 +673,7 @@ async def health_ready():
 # ---------------------------------------------------------------------------
 def _run_job(job_id: str, request: GenerationRequest, owner_id: str = "") -> None:
     """Run a generation job in a background thread."""
+    global _active_job_count
     from app.pipeline.graph import run_pipeline
 
     def _is_aborted() -> bool:
@@ -643,14 +685,27 @@ def _run_job(job_id: str, request: GenerationRequest, owner_id: str = "") -> Non
         )
 
     def _publish(state: PipelineState) -> None:
-        # Live progress: keep the registry object SSE watches in sync after each
-        # super-step. Never resurrect a job the user already aborted.
         if _is_aborted():
             return
         _jobs[job_id] = state
 
     try:
-        _jobs[job_id].status = PipelineStatus.RUNNING
+        if _is_aborted():
+            logger.info("job_aborted_before_start", job_id=job_id)
+            return
+
+        state = _jobs.get(job_id)
+        if state is None:
+            logger.error("job_missing_at_start", job_id=job_id)
+            return
+
+        if _is_aborted():
+            logger.info("job_aborted_before_running", job_id=job_id)
+            return
+
+        state.status = PipelineStatus.RUNNING
+        _jobs[job_id] = state
+
         result = run_pipeline(
             request,
             job_id=job_id,
@@ -668,11 +723,26 @@ def _run_job(job_id: str, request: GenerationRequest, owner_id: str = "") -> Non
         clear_cancel(job_id)
     except Exception as e:
         state = _jobs.get(job_id)
-        if state:
+        if state and not _is_aborted():
             state.status = PipelineStatus.FAILED
             state.error_message = str(e)
             persist_terminal_job(state)
         logger.error("job_failed", job_id=job_id, error=str(e))
+    finally:
+        try:
+            loop = asyncio.get_running_loop()
+            loop.call_soon_threadsafe(_decrement_active_jobs)
+        except RuntimeError:
+            _decrement_active_jobs_sync()
+
+
+def _decrement_active_jobs_sync() -> None:
+    global _active_job_count
+    _active_job_count = max(0, _active_job_count - 1)
+
+
+def _decrement_active_jobs() -> None:
+    _decrement_active_jobs_sync()
 
 
 def _authorize_job(state: PipelineState, user_id: str) -> None:
