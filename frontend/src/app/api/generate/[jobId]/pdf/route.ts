@@ -3,6 +3,18 @@ import type { NextRequest } from "next/server";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+function requireServerApiKey(): Response | null {
+  const key = process.env.MATE_API_KEY?.trim();
+  if (key) return null;
+  if (process.env.NODE_ENV === "production") {
+    return new Response(
+      JSON.stringify({ detail: "Server mangler MATE_API_KEY-konfigurasjon" }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    );
+  }
+  return null;
+}
+
 /**
  * Proxies job PDF download so the browser never needs MATE_API_KEY.
  */
@@ -10,6 +22,9 @@ export async function GET(
   _req: NextRequest,
   context: { params: Promise<{ jobId: string }> | { jobId: string } },
 ) {
+  const blocked = requireServerApiKey();
+  if (blocked) return blocked;
+
   const { jobId } = await Promise.resolve(context.params);
   const backend = (
     process.env.BACKEND_INTERNAL_URL ||
@@ -17,11 +32,9 @@ export async function GET(
     "http://localhost:8000"
   ).replace(/\/$/, "");
 
-  const headers: Record<string, string> = {};
-  const key = process.env.MATE_API_KEY?.trim();
-  if (key) {
-    headers["X-API-Key"] = key;
-  }
+  const headers: Record<string, string> = {
+    "X-API-Key": process.env.MATE_API_KEY!.trim(),
+  };
 
   const url = `${backend}/generate/${encodeURIComponent(jobId)}/pdf`;
   const upstream = await fetch(url, { headers, cache: "no-store" });

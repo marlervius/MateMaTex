@@ -53,7 +53,6 @@ export function ResultView() {
   const clearLastFailedRequest = useAppStore((s) => s.clearLastFailedRequest);
   const toggleLatexEditor = useAppStore((s) => s.toggleLatexEditor);
   const setResult = useAppStore((s) => s.setResult);
-  const resetRequest = useAppStore((s) => s.resetRequest);
   const [activeTab, setActiveTab] = useState<Tab>("document");
   const [showLatex, setShowLatex] = useState(false);
   const [showDownloads, setShowDownloads] = useState(false);
@@ -98,6 +97,7 @@ export function ResultView() {
   const [shareUrl, setShareUrl] = useState("");
   const [shareLoading, setShareLoading] = useState(false);
   const [shareError, setShareError] = useState("");
+  const [shareCopied, setShareCopied] = useState(false);
 
   useEffect(() => {
     if (!result?.jobId) return;
@@ -118,10 +118,34 @@ export function ResultView() {
     if (
       !result?.jobId ||
       !isSuccessfulStatus(result.status) ||
-      !result.latexCompiled ||
-      result.pdfBase64
+      !result.latexCompiled
     ) {
       return;
+    }
+
+    const loadFromBase64 = (b64: string) => {
+      try {
+        const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+        const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        revoke = url;
+        setPdfPreviewUrl(url);
+      } catch {
+        if (!cancelled) {
+          setPdfPreviewError("Ugyldig PDF-data fra serveren");
+        }
+      }
+    };
+
+    if (result.pdfBase64) {
+      loadFromBase64(result.pdfBase64);
+      return () => {
+        cancelled = true;
+        if (revoke) URL.revokeObjectURL(revoke);
+      };
     }
 
     setPdfPreviewLoading(true);
@@ -147,7 +171,7 @@ export function ResultView() {
       cancelled = true;
       if (revoke) URL.revokeObjectURL(revoke);
     };
-  }, [result?.jobId, result?.status, result?.latexCompiled, result?.fullDocument]);
+  }, [result?.jobId, result?.status, result?.latexCompiled, result?.pdfBase64, result?.fullDocument]);
 
   // Auto-compile a PDF preview for the active differentiation level on demand.
   useEffect(() => {
@@ -241,6 +265,7 @@ export function ResultView() {
             ? "application/vnd.openxmlformats-officedocument.presentationml.presentation"
             : "application/pdf");
         downloadBase64(res.content_base64, res.filename, mime);
+        setShowDownloads(false);
       } else {
         const detail = (res.errors || []).join("\n").trim();
         setExportError(
@@ -248,14 +273,14 @@ export function ResultView() {
             "Eksport feilet. Prøv «Last ned» igjen, eller åpne editor for å se etter feil i LaTeX-en."
         );
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setExportError(
-        err?.message ||
-          "Nettverksfeil under eksport. Sjekk forbindelsen og at backend er tilgjengelig."
+        err instanceof Error
+          ? err.message
+          : "Nettverksfeil under eksport. Sjekk forbindelsen og at backend er tilgjengelig."
       );
     } finally {
       setExportLoading("");
-      setShowDownloads(false);
     }
   };
 
@@ -363,8 +388,10 @@ export function ResultView() {
     try {
       const res = await ingestExercises(result.fullDocument);
       setIngestStatus(`${res.ingested} oppgaver lagret`);
-    } catch {
-      setIngestStatus("Feil");
+    } catch (e: unknown) {
+      setIngestStatus(
+        e instanceof Error ? e.message : "Kunne ikke lagre i oppgavebanken"
+      );
     }
   };
 
@@ -387,7 +414,13 @@ export function ResultView() {
       });
       const fullUrl = `${window.location.origin}${res.share_url}`;
       setShareUrl(fullUrl);
-      await navigator.clipboard.writeText(fullUrl);
+      try {
+        await navigator.clipboard.writeText(fullUrl);
+        setShareCopied(true);
+      } catch {
+        setShareCopied(false);
+        setShareError("Lenke opprettet — kopier den manuelt fra feltet under.");
+      }
     } catch (e: unknown) {
       setShareError(e instanceof Error ? e.message : "Kunne ikke opprette delingslenke");
     } finally {
@@ -457,7 +490,7 @@ export function ResultView() {
             <button
               onClick={() => {
                 setResult(null);
-                resetRequest();
+                clearLastFailedRequest();
               }}
               className="btn-ghost"
             >
@@ -651,13 +684,7 @@ export function ResultView() {
 
                 {/* PDF Preview */}
                 <div className="card !p-0 overflow-hidden">
-                  {result.pdfBase64 ? (
-                    <iframe
-                      title="PDF-forhåndsvisning"
-                      src={`data:application/pdf;base64,${result.pdfBase64}`}
-                      className="w-full min-h-[520px] border-0 bg-white"
-                    />
-                  ) : pdfPreviewUrl ? (
+                  {pdfPreviewUrl ? (
                     <iframe
                       src={pdfPreviewUrl}
                       title="PDF-forhåndsvisning"
@@ -727,9 +754,9 @@ export function ResultView() {
                 <div className="card">
                   <h3 className="text-sm font-medium mb-3">Pipeline-detaljer</h3>
                   <div className="space-y-1">
-                    {result.steps.map((step: any, i: number) => (
+                    {result.steps.map((step, i) => (
                       <div
-                        key={i}
+                        key={`${step.agent}-${i}`}
                         className="flex items-center justify-between text-sm py-2 border-b border-border last:border-0"
                       >
                         <span className="text-text-secondary">{step.agent}</span>
@@ -1010,6 +1037,12 @@ export function ResultView() {
               {shareError && (
                 <p className="text-xs text-accent-red w-full mt-1" role="alert">
                   {shareError}
+                </p>
+              )}
+              {shareUrl && !shareError && (
+                <p className="text-xs text-text-muted w-full mt-1 truncate" title={shareUrl}>
+                  {shareCopied ? "Lenke kopiert: " : "Delingslenke: "}
+                  {shareUrl}
                 </p>
               )}
 

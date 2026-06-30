@@ -199,7 +199,9 @@ async def access_shared(
 
 
 @router.post("/{token}/clone", response_model=CloneResponse)
+@limiter.limit("20/minute")
 async def clone_shared(
+    request: Request,
     token: str,
     req: CloneRequest | None = None,
     user_id: str = Depends(get_current_user),

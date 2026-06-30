@@ -212,6 +212,7 @@ export const useAppStore = create<AppStore>((set) => ({
       currentJobId: null,
       currentAgent: null,
       steps: [],
+      // Keep steps/result unset — abort handler calls setError with context.
     }),
   addStep: (step) =>
     set((state) => ({ steps: [...state.steps, step] })),
@@ -241,11 +242,9 @@ export const useAppStore = create<AppStore>((set) => ({
         latexCompiled: false,
         totalDuration: 0,
         error,
-        errorCategory: categorizeError(
-          error,
-          false,
-          !error.toLowerCase().includes("avbrutt")
-        ),
+        errorCategory: error.toLowerCase().includes("avbrutt")
+          ? "aborted"
+          : categorizeError(error, false, true),
       },
       isGenerating: false,
       lastFailedRequest:
