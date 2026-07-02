@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { useAppStore } from "@/lib/store";
-import { abortGeneration, closeActiveStream } from "@/lib/api";
+import { abortGeneration, signalClientAbort } from "@/lib/api";
 import {
   GraduationCap,
   PenTool,
@@ -113,18 +114,26 @@ export function PipelineProgress() {
   const setError = useAppStore((s) => s.setError);
   const cancelGeneration = useAppStore((s) => s.cancelGeneration);
   const completedAgents = new Set(steps.map((s) => s.agent));
+  const [abortWarning, setAbortWarning] = useState("");
 
   const handleAbort = async () => {
     if (!currentJobId) return;
-    closeActiveStream();
+    setAbortWarning("");
+    const jobId = currentJobId;
+    signalClientAbort(jobId);
     cancelGeneration();
-    // Show the aborted state immediately — the DELETE below also stops all
-    // client-side polling so a late server completion can't overwrite it.
     setError("Genereringen ble avbrutt av bruker.", request);
     try {
-      await abortGeneration(currentJobId);
-    } catch (err: unknown) {
-      console.error("Failed to abort:", err);
+      const res = await abortGeneration(jobId);
+      if (!res.success) {
+        setAbortWarning(
+          "Avbrudd registrert lokalt, men serveren bekreftet ikke — jobben kan fortsatt kjøre."
+        );
+      }
+    } catch {
+      setAbortWarning(
+        "Avbrudd registrert lokalt, men serveren svarte ikke — jobben kan fortsatt kjøre."
+      );
     }
   };
 
@@ -305,7 +314,12 @@ export function PipelineProgress() {
       )}
 
       {/* Abort Button */}
-      <div className="flex justify-center mt-8">
+      <div className="flex flex-col items-center mt-8 gap-2">
+        {abortWarning && (
+          <p className="text-xs text-accent-orange max-w-md text-center" role="alert">
+            {abortWarning}
+          </p>
+        )}
         <button
           onClick={handleAbort}
           className="btn-ghost text-accent-red hover:bg-accent-red/10 flex items-center gap-2"

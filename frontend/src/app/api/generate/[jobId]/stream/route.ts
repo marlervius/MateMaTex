@@ -5,6 +5,18 @@ export const runtime = "nodejs";
 // Vercel Hobby: max 300s. Longer jobs rely on client polling /result after SSE ends.
 export const maxDuration = 300;
 
+function requireServerApiKey(): Response | null {
+  const key = process.env.MATE_API_KEY?.trim();
+  if (key) return null;
+  if (process.env.NODE_ENV === "production") {
+    return new Response(
+      JSON.stringify({ detail: "Server mangler MATE_API_KEY-konfigurasjon" }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    );
+  }
+  return null;
+}
+
 /**
  * Proxies SSE from the FastAPI backend so the browser never needs MATE_API_KEY.
  * Set BACKEND_INTERNAL_URL on Vercel if the API URL must differ from NEXT_PUBLIC_API_URL.
@@ -13,6 +25,9 @@ export async function GET(
   _req: NextRequest,
   context: { params: Promise<{ jobId: string }> | { jobId: string } },
 ) {
+  const blocked = requireServerApiKey();
+  if (blocked) return blocked;
+
   const params = await Promise.resolve(context.params);
   const jobId = params.jobId;
   const backend = (
@@ -21,13 +36,11 @@ export async function GET(
     "http://localhost:8000"
   ).replace(/\/$/, "");
 
-  const key = process.env.MATE_API_KEY?.trim() || "";
+  const key = process.env.MATE_API_KEY!.trim();
   const headers: Record<string, string> = {
     Accept: "text/event-stream",
+    "X-API-Key": key,
   };
-  if (key) {
-    headers["X-API-Key"] = key;
-  }
 
   const url = `${backend}/generate/${encodeURIComponent(jobId)}/stream`;
   let upstream: Response;
