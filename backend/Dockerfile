@@ -1,5 +1,6 @@
 # =============================================================================
 # MateMaTeX 2.0 — Backend Dockerfile (optimized for Render)
+# Build context: repository root (see render.yaml dockerContext)
 # =============================================================================
 
 # Stage 1: TeX Live (cached layer — changes rarely)
@@ -27,13 +28,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 FROM texlive AS dependencies
 
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/requirements.txt ./requirements.txt
+COPY shared /shared
+RUN pip install --no-cache-dir -e /shared \
+    && pip install --no-cache-dir -r requirements.txt
 
 # Stage 3: Application code (changes frequently)
 FROM dependencies AS app
 
-COPY . .
+COPY backend /app
 
 # Render uses PORT env var
 ENV PORT=10000

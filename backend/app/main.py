@@ -35,7 +35,7 @@ from pydantic import BaseModel, Field
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.auth import get_current_user, require_stream_access
+from app.auth import get_current_user, is_shared_identity, require_stream_access
 from app.config import get_config, get_settings
 from app.job_store import cleanup_old_snapshots, evict_terminal_jobs, get_job_memory, persist_terminal_job, resolve_job
 from app.pipeline.cancel import cancel_job, clear_cancel
@@ -87,6 +87,9 @@ async def lifespan(app: FastAPI):
         )
 
     cleanup_old_snapshots(max_age_days=7)
+    from app.pipeline.cancel import cleanup_old_cancel_flags
+
+    cleanup_old_cancel_flags(max_age_days=7)
     evict_terminal_jobs(get_job_memory())
     from app.stores import collaboration_store, exercise_store
     from app.stores import sharing_store
@@ -679,18 +682,26 @@ def _authorize_job(state: PipelineState, user_id: str) -> None:
     """
     Raise 403 if the job belongs to a different user.
 
-    Legacy jobs without an owner (owner_id == "") stay accessible, as does any
-    job in the no-auth or shared-key modes where every caller resolves to the
-    same identity ("anonymous" / "api-user").
+    Legacy jobs without an owner stay accessible. Shared identities
+    (anonymous / api-user without client scope) may access each other's jobs;
+    UUID-scoped owners are isolated per browser.
     """
-    if state.owner_id and user_id and state.owner_id != user_id:
-        logger.warning(
-            "job_access_denied",
-            job_id=state.job_id,
-            owner=state.owner_id,
-            requester=user_id,
-        )
+    owner = state.owner_id or ""
+    if not owner:
+        return
+    if not user_id:
         raise HTTPException(status_code=403, detail="Not authorized for this job")
+    if owner == user_id:
+        return
+    if is_shared_identity(owner) and is_shared_identity(user_id):
+        return
+    logger.warning(
+        "job_access_denied",
+        job_id=state.job_id,
+        owner=owner,
+        requester=user_id,
+    )
+    raise HTTPException(status_code=403, detail="Not authorized for this job")
 
 
 def _safe_filename(name: str) -> str:

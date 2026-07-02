@@ -11,3 +11,6 @@ python-pptx>=0.6.23
 
 # QR code generation (optional)
 qrcode[pil]>=7.4.0
+
+# Shared curriculum / LaTeX data (Streamlit + backend)
+-e ./shared

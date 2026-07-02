@@ -1,8 +1,2 @@
-"""
-LK20 curriculum data for Streamlit demo.
-
-Canonical data lives in ``matematex_core`` (shared with FastAPI backend).
-"""
-
 from matematex_core.curriculum.lk20 import *  # noqa: F403
 from matematex_core.curriculum.streamlit_extras import *  # noqa: F403
