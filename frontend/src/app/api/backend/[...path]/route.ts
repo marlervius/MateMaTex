@@ -57,6 +57,10 @@ async function proxyRequest(req: NextRequest, pathSegments: string[]) {
   if (auth) {
     headers.set("Authorization", auth);
   }
+  const clientUser = req.headers.get("x-client-user-id");
+  if (clientUser) {
+    headers.set("X-Client-User-Id", clientUser);
+  }
   const contentType = req.headers.get("content-type");
   if (contentType) {
     headers.set("Content-Type", contentType);

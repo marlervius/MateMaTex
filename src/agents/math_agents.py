@@ -6,54 +6,12 @@ Temperature lowered to 0.3 for mathematical accuracy.
 
 import os
 from crewai import Agent, LLM
-from src.curriculum import format_boundaries_for_prompt, get_grade_boundaries
-
-
-# Language level configurations for simplified Norwegian
-LANGUAGE_LEVELS = {
-    "standard": {
-        "name": "Standard norsk",
-        "code": "C1-C2",
-        "description": "Vanlig akademisk norsk",
-        "instructions": "",
-    },
-    "b2": {
-        "name": "Forenklet norsk (B2)",
-        "code": "B2",
-        "description": "For elever med norsk som andrespråk - øvre mellomnivå",
-        "instructions": """
-=== SPRÅKNIVÅ: B2 (Øvre mellomnivå) ===
-Skriv for elever som lærer norsk:
-- Korte setninger (15-20 ord maks), én idé per setning
-- Vanlige, konkrete ord - unngå idiomer
-- Forklar fagbegreper første gang de brukes
-- Bruk samme ord for samme begrep konsekvent
-- Enkle oppgavetekster med klar struktur
-VIKTIG: Matematisk nivå er UENDRET - bare språket er enklere.
-""",
-    },
-    "b1": {
-        "name": "Enklere norsk (B1)",
-        "code": "B1",
-        "description": "For elever med norsk som andrespråk - nedre mellomnivå",
-        "instructions": """
-=== SPRÅKNIVÅ: B1 (Mellomnivå) ===
-Skriv for elever som lærer norsk:
-- Veldig korte setninger (10-15 ord maks)
-- De 3000 vanligste norske ordene
-- Forklar ALLE fagbegreper som om eleven hører det første gang
-- Bruk konkrete eksempler med tall
-- Del ALLTID komplekse oppgaver i steg: "Steg 1:", "Steg 2:"
-- Legg til "Tips:" der det hjelper
-VIKTIG: Matematisk nivå er UENDRET - bare språket er enklere.
-""",
-    },
-}
-
-
-def get_language_level_instructions(language_level: str) -> str:
-    """Get language simplification instructions for the given level."""
-    return LANGUAGE_LEVELS.get(language_level, {}).get("instructions", "")
+from matematex_core.curriculum.lk20 import (
+    LANGUAGE_LEVELS,
+    format_boundaries_for_prompt,
+    get_grade_boundaries,
+    get_language_level_instructions,
+)
 
 
 class MathBookAgents:

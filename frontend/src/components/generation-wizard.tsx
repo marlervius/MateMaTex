@@ -13,15 +13,14 @@ import {
   closeActiveStream,
   isTerminalGenerateStatus,
   isJobAborted,
-  watchGenerationJob,
   type CostEstimateResponse,
-  type JobStatusResponse,
 } from "@/lib/api";
 import { mapApiResultToGenerationResult, isSuccessfulStatus } from "@/lib/map-api-result";
 import { appendHistory } from "@/lib/generation-history";
 import { searchGoals, type CompetencyGoal } from "@/data/lk20-goals";
 import {
   loadPreferences,
+  savePreferences,
   materialTypeFromTemplate,
 } from "@/lib/user-preferences";
 
@@ -154,10 +153,13 @@ export function GenerationWizard() {
   const [goalSearch, setGoalSearch] = useState("");
   const activeJobRef = useRef<string | null>(null);
   const streamCloseRef = useRef<(() => void) | null>(null);
+  const submitLockRef = useRef(false);
   const [costEstimate, setCostEstimate] = useState<CostEstimateResponse | null>(
     null
   );
   const [estimateLoading, setEstimateLoading] = useState(false);
+  const [estimateError, setEstimateError] = useState(false);
+  const [topicHint, setTopicHint] = useState("");
 
   useEffect(() => {
     const prefs = loadPreferences();
@@ -188,6 +190,11 @@ export function GenerationWizard() {
   );
 
   const goNext = () => {
+    if (step === 1 && !request.topic.trim()) {
+      setTopicHint("Skriv inn et tema før du går videre.");
+      return;
+    }
+    setTopicHint("");
     if (step < totalSteps - 1) {
       setDirection(1);
       setStep(step + 1);
@@ -240,7 +247,10 @@ export function GenerationWizard() {
         if (!cancelled) setCostEstimate(data);
       })
       .catch(() => {
-        if (!cancelled) setCostEstimate(null);
+        if (!cancelled) {
+          setCostEstimate(null);
+          setEstimateError(true);
+        }
       })
       .finally(() => {
         if (!cancelled) setEstimateLoading(false);
@@ -251,11 +261,18 @@ export function GenerationWizard() {
   }, [step, canGenerate, request]);
 
   const handleGenerate = async () => {
-    if (!canGenerate) return;
+    if (!canGenerate || submitLockRef.current) return;
 
+    submitLockRef.current = true;
     streamCloseRef.current?.();
     closeActiveStream();
+    activeJobRef.current = null;
     startGen();
+    savePreferences({
+      grade: request.grade,
+      languageLevel: request.languageLevel,
+      materialType: request.materialType,
+    });
     const snapshot = { ...useAppStore.getState().request };
 
     try {
@@ -286,10 +303,13 @@ export function GenerationWizard() {
       setJobId(job_id);
 
       const finishWithResult = async () => {
+        if (isJobAborted(job_id) || activeJobRef.current !== job_id) return;
         const raw = await getResult(job_id);
-        if (activeJobRef.current !== job_id) return;
+        if (isJobAborted(job_id) || activeJobRef.current !== job_id) return;
         const mapped = mapApiResultToGenerationResult(raw, snapshot);
         setResult(mapped);
+        activeJobRef.current = null;
+        submitLockRef.current = false;
         if (isSuccessfulStatus(mapped.status)) {
           appendHistory({
             jobId: job_id,
@@ -303,11 +323,18 @@ export function GenerationWizard() {
         }
       };
 
+      const failWithError = (msg: string) => {
+        if (isJobAborted(job_id)) return;
+        activeJobRef.current = null;
+        submitLockRef.current = false;
+        setError(msg, snapshot);
+      };
+
       // Cache hit / instant completion: backend returns terminal status in POST
       // response — fetch result directly instead of waiting on SSE.
       if (isTerminalGenerateStatus(resp.status)) {
         if (resp.status === "failed") {
-          setError(resp.message || "Generering feilet", snapshot);
+          failWithError(resp.message || "Generering feilet");
           return;
         }
         try {
@@ -315,65 +342,36 @@ export function GenerationWizard() {
           return;
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : "Kunne ikke hente resultat";
-          setError(msg, snapshot);
+          failWithError(msg);
           return;
         }
       }
 
-      let resultLoaded = false;
-      let loadingResult = false;
-
-      const showPlaceholderResult = (status: string) => {
-        const currentSteps = useAppStore.getState().steps;
-        setResult(
-          mapApiResultToGenerationResult(
-            {
-              job_id,
-              status,
-              full_document: "",
-              pdf_available: true,
-              latex_compilation: { success: true },
-              math_verification: {
-                claims_checked: 0,
-                claims_correct: 0,
-                claims_incorrect: 0,
-                claims_unparseable: 0,
-                all_correct: true,
-                summary: "",
-              },
-              steps: currentSteps.map((s) => ({
-                agent: s.agent,
-                started_at: s.startedAt,
-                completed_at: s.completedAt,
-                duration_seconds: s.durationSeconds,
-                output_summary: s.outputSummary,
-                error: s.error,
-                retries: s.retries,
-              })),
-              total_duration_seconds: 0,
-              error: "",
-            },
-            snapshot
-          )
-        );
-      };
+      const resultLoadedRef = { current: false };
+      const loadingResultRef = { current: false };
 
       const loadResultOnce = async (statusHint?: string) => {
-        if (resultLoaded || loadingResult || activeJobRef.current !== job_id) return;
-        if (isJobAborted(job_id)) return;
-        loadingResult = true;
-        if (statusHint && statusHint !== "failed") {
-          setCurrentAgent(null);
-          showPlaceholderResult(statusHint);
+        if (
+          resultLoadedRef.current ||
+          loadingResultRef.current ||
+          activeJobRef.current !== job_id ||
+          isJobAborted(job_id)
+        ) {
+          return;
         }
+        if (statusHint === "failed") {
+          failWithError("Generering feilet");
+          return;
+        }
+        loadingResultRef.current = true;
         try {
           await finishWithResult();
-          resultLoaded = true;
+          resultLoadedRef.current = true;
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : "Kunne ikke hente resultat";
-          setError(msg, snapshot);
+          failWithError(msg);
         } finally {
-          loadingResult = false;
+          loadingResultRef.current = false;
           streamCloseRef.current?.();
           closeActiveStream();
         }
@@ -399,54 +397,35 @@ export function GenerationWizard() {
           }),
         onCurrentAgent: (a) => setCurrentAgent(a),
         onComplete: async (data) => {
-          if (activeJobRef.current !== job_id) return;
+          if (activeJobRef.current !== job_id || isJobAborted(job_id)) return;
           if (data.status === "failed") {
-            setError(data.error || "Generering feilet", snapshot);
+            failWithError(data.error || "Generering feilet");
             return;
           }
+          setCurrentAgent(null);
           await loadResultOnce(data.status);
         },
         onError: (err) => {
-          if (activeJobRef.current !== job_id || resultLoaded) return;
-          // Same recovery as poll give-up — job may exist on /result only.
+          if (
+            activeJobRef.current !== job_id ||
+            resultLoadedRef.current ||
+            isJobAborted(job_id)
+          ) {
+            return;
+          }
           void (async () => {
             try {
               await finishWithResult();
-              resultLoaded = true;
+              resultLoadedRef.current = true;
             } catch {
-              setError(err, snapshot);
+              failWithError(err);
             }
           })();
         },
       });
-
-      const handlePollGiveUp = (msg: string) => {
-        if (activeJobRef.current !== job_id || resultLoaded) return;
-        // Last resort: /status may 404 after a Render restart while /result still works.
-        void (async () => {
-          try {
-            await finishWithResult();
-            resultLoaded = true;
-          } catch {
-            setError(msg, snapshot);
-          }
-        })();
-      };
-
-      // Independent poll on tiny /status — never rely on SSE or heavy /result.
-      void watchGenerationJob(
-        job_id,
-        async (st: JobStatusResponse) => {
-          if (st.status === "failed") {
-            setError(st.error || "Generering feilet", snapshot);
-            return;
-          }
-          await loadResultOnce(st.status);
-        },
-        pollSignal,
-        handlePollGiveUp
-      );
     } catch (err: unknown) {
+      submitLockRef.current = false;
+      activeJobRef.current = null;
       const msg = err instanceof Error ? err.message : "Noe gikk galt";
       setError(msg, snapshot);
     }
@@ -581,12 +560,21 @@ export function GenerationWizard() {
                 <input
                   type="text"
                   value={request.topic}
-                  onChange={(e) => setRequest({ topic: e.target.value })}
+                  onChange={(e) => {
+                    setRequest({ topic: e.target.value });
+                    if (e.target.value.trim()) setTopicHint("");
+                  }}
                   placeholder="F.eks. «Proporsjonalitet i hverdagsøkonomi» eller «Pytagoras i bygg»"
                   className="input text-center w-full"
                   autoFocus
                   aria-label="Skriv matematisk tema"
+                  aria-invalid={topicHint ? true : undefined}
                 />
+                {topicHint && (
+                  <p className="text-xs text-accent-red mt-2 text-center" role="alert">
+                    {topicHint}
+                  </p>
+                )}
               </div>
 
               <p className="text-center text-xs text-text-muted mb-3">
@@ -932,6 +920,9 @@ export function GenerationWizard() {
           <div className="flex flex-col items-end gap-2">
             {estimateLoading && (
               <p className="text-xs text-text-muted">Estimerer kostnad…</p>
+            )}
+            {estimateError && !estimateLoading && (
+              <p className="text-xs text-text-muted">Kunne ikke estimere kostnad</p>
             )}
             {costEstimate && !estimateLoading && (
               <p className="text-xs text-text-muted text-right max-w-xs">

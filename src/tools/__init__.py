@@ -121,19 +121,6 @@ from .lk20_coverage import (
     LK20_GOALS,
 )
 
-from .differentiation import (
-    DifferentiatedContent,
-    DifferentiatedSet,
-    LEVEL_CONFIG,
-    get_level_prompt,
-    adjust_content_difficulty,
-    create_level_header,
-    create_differentiated_set,
-    get_differentiation_summary,
-    merge_differentiated_pdf,
-    get_level_recommendations,
-)
-
 from .favorites import (
     Favorite,
     load_favorites,
@@ -279,15 +266,6 @@ from .usage_dashboard import (
     render_achievements_html,
 )
 
-from .pptx_exporter import (
-    is_pptx_available,
-    SlideContent,
-    parse_latex_to_slides,
-    create_pptx,
-    latex_to_pptx,
-    get_pptx_preview,
-)
-
 from .watermark import (
     WatermarkConfig,
     add_watermark_to_latex,
@@ -296,18 +274,6 @@ from .watermark import (
     SCHOOL_TEMPLATES,
     apply_template as apply_watermark_template,
     render_watermark_preview_html,
-)
-
-from .graph_templates import (
-    GraphTemplate,
-    ALL_TEMPLATES as ALL_GRAPH_TEMPLATES,
-    TEMPLATES_BY_CATEGORY as GRAPH_TEMPLATES_BY_CATEGORY,
-    TEMPLATES_BY_GRADE as GRAPH_TEMPLATES_BY_GRADE,
-    get_templates_for_grade,
-    get_templates_for_category,
-    get_template_by_id,
-    get_all_categories as get_graph_categories,
-    get_template_summary_for_prompt,
 )
 
 from .cover_page import (
@@ -413,17 +379,6 @@ __all__ = [
     "format_coverage_report",
     "get_coverage_badge",
     "LK20_GOALS",
-    # Differentiation
-    "DifferentiatedContent",
-    "DifferentiatedSet",
-    "LEVEL_CONFIG",
-    "get_level_prompt",
-    "adjust_content_difficulty",
-    "create_level_header",
-    "create_differentiated_set",
-    "get_differentiation_summary",
-    "merge_differentiated_pdf",
-    "get_level_recommendations",
     # Favorites
     "Favorite",
     "load_favorites",
@@ -549,13 +504,6 @@ __all__ = [
     "get_activity_chart_data",
     "get_achievements",
     "render_achievements_html",
-    # PowerPoint export
-    "is_pptx_available",
-    "SlideContent",
-    "parse_latex_to_slides",
-    "create_pptx",
-    "latex_to_pptx",
-    "get_pptx_preview",
     # Watermark
     "WatermarkConfig",
     "add_watermark_to_latex",
@@ -564,16 +512,6 @@ __all__ = [
     "SCHOOL_TEMPLATES",
     "apply_watermark_template",
     "render_watermark_preview_html",
-    # Graph templates
-    "GraphTemplate",
-    "ALL_GRAPH_TEMPLATES",
-    "GRAPH_TEMPLATES_BY_CATEGORY",
-    "GRAPH_TEMPLATES_BY_GRADE",
-    "get_templates_for_grade",
-    "get_templates_for_category",
-    "get_template_by_id",
-    "get_graph_categories",
-    "get_template_summary_for_prompt",
     # Cover page
     "CoverPageConfig",
     "COVER_STYLES",
