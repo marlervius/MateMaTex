@@ -19,13 +19,14 @@ function requireServerApiKey(): Response | null {
  * Proxies job PDF download so the browser never needs MATE_API_KEY.
  */
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   context: { params: Promise<{ jobId: string }> | { jobId: string } },
 ) {
   const blocked = requireServerApiKey();
   if (blocked) return blocked;
 
   const { jobId } = await Promise.resolve(context.params);
+  const clientUserId = req.nextUrl.searchParams.get("client_user_id")?.trim() || "";
   const backend = (
     process.env.BACKEND_INTERNAL_URL ||
     process.env.NEXT_PUBLIC_API_URL ||
@@ -35,8 +36,14 @@ export async function GET(
   const headers: Record<string, string> = {
     "X-API-Key": process.env.MATE_API_KEY!.trim(),
   };
+  if (clientUserId) {
+    headers["X-Client-User-Id"] = clientUserId;
+  }
 
-  const url = `${backend}/generate/${encodeURIComponent(jobId)}/pdf`;
+  const pdfQs = clientUserId
+    ? `?client_user_id=${encodeURIComponent(clientUserId)}`
+    : "";
+  const url = `${backend}/generate/${encodeURIComponent(jobId)}/pdf${pdfQs}`;
   const upstream = await fetch(url, { headers, cache: "no-store" });
 
   if (!upstream.ok) {

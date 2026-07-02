@@ -10,6 +10,8 @@ AI-drevet generator for **matematikkundervisningsmateriell på norsk** (LK20), m
 | Frontend | **Next.js 14** (App Router), TypeScript, Tailwind, Zustand |
 | Eldre demo | **Streamlit** (`app.py`, `src/`) — valgfritt |
 
+Delte moduler i `shared/matematex_core/` brukes av backend og Streamlit for LK20-data og grafmaler.
+
 ## Kjør lokalt
 
 ### Backend
@@ -44,6 +46,7 @@ npm run dev
 | `GOOGLE_API_KEY` | Gemini (standardleverandør) |
 | `PRIMARY_MODEL` / `FALLBACK_MODEL` | f.eks. `gemini-3-flash-preview` |
 | `MATE_API_KEY` | Valgfritt: krever `X-API-Key` eller `Authorization: Bearer` på API |
+| `X-Client-User-Id` | Valgfritt (frontend): per-nettleser UUID for jobb-isolasjon når alle deler samme API-nøkkel |
 | `DATABASE_URL` | Valgfritt: PostgreSQL for oppgavebank / samarbeid |
 | `FRONTEND_URL` | CORS-opprinnelse i produksjon |
 | `OUTPUT_DIR` | Mappe for PDF-er og `job_snapshots/` (persistente jobber) |

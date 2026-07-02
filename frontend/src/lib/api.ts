@@ -10,6 +10,7 @@ import type {
   StreamCurrentAgentPayload,
   StreamStepPayload,
 } from "@/types/generation";
+import { clientUserHeaders, getClientUserId } from "@/lib/client-user";
 
 function getApiBase(): string {
   if (typeof window !== "undefined") {
@@ -77,6 +78,7 @@ async function readErrorMessage(res: Response): Promise<string> {
 
 async function fetchJson<T>(url: string, init?: RequestInit, timeoutMs = 30_000): Promise<T> {
   const headers: Record<string, string> = {
+    ...clientUserHeaders(),
     ...(init?.headers as Record<string, string>),
   };
   if (init?.body && !headers["Content-Type"]) {
@@ -158,7 +160,7 @@ export async function startGeneration(
     apiUrl("generate"),
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...clientUserHeaders() },
       body: JSON.stringify(request),
     },
     30_000
@@ -317,10 +319,18 @@ export function streamProgress(
 ): () => void {
   closeActiveStream();
 
+  const clientQs = (() => {
+    const id = getClientUserId();
+    return id ? `?client_user_id=${encodeURIComponent(id)}` : "";
+  })();
+
   const url =
     typeof window !== "undefined"
-      ? `/api/generate/${encodeURIComponent(jobId)}/stream`
-      : apiUrl(`generate/${encodeURIComponent(jobId)}/stream`);
+      ? `/api/generate/${encodeURIComponent(jobId)}/stream${clientQs}`
+      : apiUrl(`generate/${encodeURIComponent(jobId)}/stream`) +
+        (getClientUserId()
+          ? `?client_user_id=${encodeURIComponent(getClientUserId())}`
+          : "");
 
   const eventSource = new EventSource(url);
   const signal = { cancelled: false };
@@ -477,11 +487,13 @@ export async function watchGenerationJob(
 }
 
 export async function fetchJobPdfObjectUrl(jobId: string): Promise<string> {
+  const clientId = getClientUserId();
+  const clientQs = clientId ? `?client_user_id=${encodeURIComponent(clientId)}` : "";
   const url =
     typeof window !== "undefined"
-      ? `/api/generate/${encodeURIComponent(jobId)}/pdf`
-      : apiUrl(`generate/${encodeURIComponent(jobId)}/pdf`);
-  const res = await fetchWithTimeout(url, {}, 60_000);
+      ? `/api/generate/${encodeURIComponent(jobId)}/pdf${clientQs}`
+      : apiUrl(`generate/${encodeURIComponent(jobId)}/pdf`) + clientQs;
+  const res = await fetchWithTimeout(url, { headers: clientUserHeaders() }, 60_000);
   if (!res.ok) {
     throw new Error(await readErrorMessage(res));
   }

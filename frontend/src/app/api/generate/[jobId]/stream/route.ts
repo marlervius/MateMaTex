@@ -22,7 +22,7 @@ function requireServerApiKey(): Response | null {
  * Set BACKEND_INTERNAL_URL on Vercel if the API URL must differ from NEXT_PUBLIC_API_URL.
  */
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   context: { params: Promise<{ jobId: string }> | { jobId: string } },
 ) {
   const blocked = requireServerApiKey();
@@ -30,6 +30,7 @@ export async function GET(
 
   const params = await Promise.resolve(context.params);
   const jobId = params.jobId;
+  const clientUserId = req.nextUrl.searchParams.get("client_user_id")?.trim() || "";
   const backend = (
     process.env.BACKEND_INTERNAL_URL ||
     process.env.NEXT_PUBLIC_API_URL ||
@@ -41,8 +42,14 @@ export async function GET(
     Accept: "text/event-stream",
     "X-API-Key": key,
   };
+  if (clientUserId) {
+    headers["X-Client-User-Id"] = clientUserId;
+  }
 
-  const url = `${backend}/generate/${encodeURIComponent(jobId)}/stream`;
+  const streamQs = clientUserId
+    ? `?client_user_id=${encodeURIComponent(clientUserId)}`
+    : "";
+  const url = `${backend}/generate/${encodeURIComponent(jobId)}/stream${streamQs}`;
   let upstream: Response;
   try {
     upstream = await fetch(url, {

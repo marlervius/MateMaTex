@@ -14,9 +14,27 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.auth import get_current_user
+from app.auth import get_current_user, is_shared_identity
+from app.job_store import get_job_memory, resolve_job
 
 logger = structlog.get_logger()
+
+
+def _authorize_generation_access(generation_id: str, user_id: str) -> None:
+    """Ensure the caller may access comments/versions for a pipeline job."""
+    state = resolve_job(generation_id, get_job_memory())
+    if state is None:
+        return
+    owner = state.owner_id or ""
+    if not owner:
+        return
+    if not user_id:
+        raise HTTPException(status_code=403, detail="Not authorized for this generation")
+    if owner == user_id:
+        return
+    if is_shared_identity(owner) and is_shared_identity(user_id):
+        return
+    raise HTTPException(status_code=403, detail="Not authorized for this generation")
 
 router = APIRouter(tags=["collaboration"])
 
@@ -180,6 +198,7 @@ comments_router = APIRouter(prefix="/generations", tags=["collaboration"])
 )
 async def list_comments(generation_id: str, user_id: str = Depends(get_current_user)) -> CommentListResponse:
     """Get all comments for a generation, threaded by parent_id."""
+    _authorize_generation_access(generation_id, user_id)
     all_comments = collab.all_comments(generation_id)
 
     # Build threaded structure
@@ -213,6 +232,7 @@ async def list_comments(generation_id: str, user_id: str = Depends(get_current_u
 )
 async def add_comment(generation_id: str, req: CommentCreate, user_id: str = Depends(get_current_user)) -> CommentOut:
     """Add a comment (optionally threaded) to a generation."""
+    _authorize_generation_access(generation_id, user_id)
     if req.parent_id:
         parent = next(
             (c for c in collab.all_comments(generation_id) if c.get("id") == req.parent_id),
@@ -251,6 +271,7 @@ versions_router = APIRouter(prefix="/generations", tags=["collaboration"])
 )
 async def list_versions(generation_id: str, user_id: str = Depends(get_current_user)) -> VersionListResponse:
     """Get the version history of a generation."""
+    _authorize_generation_access(generation_id, user_id)
     versions = collab.all_versions(generation_id)
     return VersionListResponse(
         versions=[VersionOut(**v) for v in versions],
@@ -269,6 +290,7 @@ async def create_version(
     user_id: str = Depends(get_current_user),
 ) -> VersionOut:
     """Save a new version of the generation's LaTeX content."""
+    _authorize_generation_access(generation_id, user_id)
     version_number = len(collab.all_versions(generation_id)) + 1
 
     version = {
@@ -295,6 +317,7 @@ async def create_version(
 )
 async def restore_version(generation_id: str, version_id: str, user_id: str = Depends(get_current_user)):
     """Restore a previous version, creating a new version entry."""
+    _authorize_generation_access(generation_id, user_id)
     versions = collab.all_versions(generation_id)
     target = next((v for v in versions if v["id"] == version_id), None)
 
