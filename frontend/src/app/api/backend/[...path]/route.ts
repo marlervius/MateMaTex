@@ -23,6 +23,7 @@ const ALLOWED_PREFIXES = new Set([
   "export",
   "sharing",
   "school",
+  "m1",
 ]);
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024; // 2MB — largest legit payload is a LaTeX doc
