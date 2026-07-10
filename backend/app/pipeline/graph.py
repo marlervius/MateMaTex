@@ -23,9 +23,10 @@ Implements the multi-agent pipeline with verification loops:
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Literal
+from typing import Literal
 
 import structlog
 from langgraph.graph import END, StateGraph
@@ -38,16 +39,21 @@ from app.models.state import (
     PipelineStatus,
 )
 from app.pipeline.agents.author import run_author
+from app.pipeline.agents.content_quality import run_content_quality
 from app.pipeline.agents.editor import run_editor
-from app.pipeline.agents.latex_fixer import run_latex_fixer
 from app.pipeline.agents.latex_fallback import run_latex_fallback
+from app.pipeline.agents.latex_fixer import run_latex_fixer
 from app.pipeline.agents.latex_validator import run_latex_validator
 from app.pipeline.agents.layout import run_layout
 from app.pipeline.agents.math_verifier import run_math_verifier
 from app.pipeline.agents.pedagogue import run_pedagogue
-from app.pipeline.agents.tikz_validator import run_tikz_validator
 from app.pipeline.agents.table_validator import run_table_validator
-from app.pipeline.cancel import clear_cancel, is_cancelled
+from app.pipeline.agents.tikz_validator import run_tikz_validator
+from app.pipeline.routing_helpers import (
+    can_retry_content_quality,
+    can_retry_math,
+    over_time_budget,
+)
 
 logger = structlog.get_logger()
 
@@ -119,36 +125,7 @@ def try_restore_cached_pipeline(
 # Routing functions (conditional edges)
 # ---------------------------------------------------------------------------
 
-def _over_time_budget(state: PipelineState) -> bool:
-    """True when the job has used more than its wall-clock budget."""
-    try:
-        budget = get_config().pipeline_max_seconds
-    except Exception:
-        return False
-    elapsed = (datetime.now() - state.created_at).total_seconds()
-    if elapsed > budget:
-        logger.warning(
-            "pipeline_time_budget_exceeded",
-            job_id=state.job_id,
-            elapsed=round(elapsed, 1),
-            budget=budget,
-        )
-        return True
-    return False
-
-
-def _math_errors_worth_author_retry(state: PipelineState) -> bool:
-    """Skip author retry when SymPy mostly could not parse (false positives)."""
-    mv = state.math_verification
-    incorrect = mv.claims_incorrect
-    if incorrect <= 0:
-        return False
-    if mv.claims_unparseable >= incorrect * 10:
-        return False
-    verified = max(0, mv.claims_checked - mv.claims_unparseable)
-    if incorrect <= 3 and verified < 10 and mv.claims_unparseable > verified:
-        return False
-    return True
+from app.pipeline.cancel import clear_cancel, is_cancelled
 
 
 def _should_skip_editor(state: PipelineState) -> bool:
@@ -164,9 +141,55 @@ def _should_skip_editor(state: PipelineState) -> bool:
     return state.request.material_type in fast_types
 
 
+def should_retry_content(
+    state: PipelineState,
+) -> Literal["author", "tikz_validator"]:
+    """
+    After content quality gate: retry author if kapittel fails standards.
+    """
+    if state.request.material_type != "kapittel":
+        return "tikz_validator"
+
+    if state.content_quality.passed:
+        return "tikz_validator"
+
+    if can_retry_content_quality(state, state.content_quality):
+        logger.info(
+            "content_quality_retry",
+            job_id=state.job_id,
+            attempt=state.content_quality_attempts + 1,
+            score=state.content_quality.score,
+            issues=len(state.content_quality.issues),
+            author_retry_reason=state.author_retry_reason,
+        )
+        return "author"
+
+    if over_time_budget(state):
+        logger.warning(
+            "pipeline_time_budget_exceeded",
+            job_id=state.job_id,
+            elapsed=round((datetime.now() - state.created_at).total_seconds(), 1),
+            budget=get_config().pipeline_max_seconds,
+        )
+
+    logger.warning(
+        "content_quality_proceed_with_gaps",
+        job_id=state.job_id,
+        score=state.content_quality.score,
+        issues=len(state.content_quality.issues),
+    )
+    if state.content_quality.score < 70:
+        state.warning_reason = (
+            (state.warning_reason + ",content_quality")
+            if state.warning_reason
+            else "content_quality"
+        )
+    return "tikz_validator"
+
+
 def should_retry_math(
     state: PipelineState,
-) -> Literal["author", "editor", "tikz_validator", "math_blocked"]:
+) -> Literal["author", "editor", "content_quality", "math_blocked"]:
     """
     After math verification: retry author if errors found and retries remain.
     SymPy-confirmed incorrect fasit blocks delivery (grunnlov §1) unless
@@ -174,21 +197,16 @@ def should_retry_math(
     a «lærer kontroll anbefales» marker in finalize.
     """
     config = get_config()
-    max_retries = config.max_verification_retries
     incorrect = state.math_verification.claims_incorrect
 
-    if (
-        not state.math_verification.all_correct
-        and state.math_verification_attempts < max_retries
-        and _math_errors_worth_author_retry(state)
-        and not _over_time_budget(state)
-    ):
+    if can_retry_math(state):
         logger.info(
             "math_retry_decision",
             decision="retry",
             attempt=state.math_verification_attempts,
-            max_retries=max_retries,
+            max_retries=config.max_verification_retries,
             errors=incorrect,
+            author_retry_reason=state.author_retry_reason,
         )
         return "author"
 
@@ -208,14 +226,16 @@ def should_retry_math(
             unparseable=state.math_verification.claims_unparseable,
         )
 
-    if _should_skip_editor(state):
+    if _should_skip_editor(state) or state.skip_editor_once:
+        if state.skip_editor_once:
+            state.skip_editor_once = False
         logger.info(
             "editor_skip_decision",
             material_type=state.request.material_type,
             job_id=state.job_id,
         )
         state.edited_latex_body = state.verified_latex_body
-        return "tikz_validator"
+        return "content_quality"
 
     return "editor"
 
@@ -255,7 +275,7 @@ def should_retry_latex(state: PipelineState) -> Literal["latex_fixer", "latex_fa
     if state.latex_compilation.success:
         return "finalize"
 
-    if _over_time_budget(state):
+    if over_time_budget(state):
         logger.warning(
             "latex_retry_decision",
             decision="fallback",
@@ -481,6 +501,7 @@ def create_pipeline() -> StateGraph:
     graph.add_node("author", run_author)
     graph.add_node("math_verifier", run_math_verifier)
     graph.add_node("editor", run_editor)
+    graph.add_node("content_quality", run_content_quality)
     graph.add_node("tikz_validator", run_tikz_validator)    # Rule-based figure fixer
     graph.add_node("table_validator", run_table_validator)  # Rule-based table fixer
     graph.add_node("latex_validator", run_latex_validator)
@@ -497,22 +518,32 @@ def create_pipeline() -> StateGraph:
     graph.add_edge("pedagogue", "author")
     graph.add_edge("author", "math_verifier")
 
-    # Conditional: math verification → retry author OR proceed to editor
+    # Conditional: math verification → retry author OR content quality OR skip editor
     graph.add_conditional_edges(
         "math_verifier",
         should_retry_math,
         {
             "author": "author",
             "editor": "editor",
-            "tikz_validator": "tikz_validator",
+            "content_quality": "content_quality",
             "math_blocked": "math_blocked",
+        },
+    )
+
+    graph.add_edge("editor", "content_quality")
+
+    graph.add_conditional_edges(
+        "content_quality",
+        should_retry_content,
+        {
+            "author": "author",
+            "tikz_validator": "tikz_validator",
         },
     )
 
     graph.add_edge("math_blocked", END)
 
-    # Linear: editor → tikz_validator → table_validator → latex validation
-    graph.add_edge("editor", "tikz_validator")
+    # Linear: tikz → table → latex validation
     graph.add_edge("tikz_validator", "table_validator")
     graph.add_edge("table_validator", "latex_validator")
 
@@ -558,7 +589,7 @@ def run_pipeline(
     *,
     job_id: str | None = None,
     owner_id: str = "",
-    on_progress: "Callable[[PipelineState], None] | None" = None,
+    on_progress: Callable[[PipelineState], None] | None = None,
 ) -> PipelineState:
     """
     Run the full pipeline synchronously.

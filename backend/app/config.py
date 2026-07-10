@@ -68,22 +68,34 @@ class Settings(BaseSettings):
     )
     output_dir: str = Field(default="output")
     max_verification_retries: int = Field(default=2, ge=1, le=10)
+    max_content_quality_retries: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        description="Author retries when kapittel fails the content-quality gate",
+    )
     skip_editor: bool = Field(
         default=False,
         description="If True, skip the LLM editor pass for all material types",
     )
     skip_editor_material_types: str = Field(
-        default="arbeidsark,prøve,differensiert",
+        default="arbeidsark,prøve,differensiert,kapittel",
         description="Comma-separated material types that skip the LLM editor (faster)",
     )
     pipeline_max_seconds: int = Field(
-        default=240,
+        default=420,
         ge=30,
         le=3600,
         description=(
             "Soft wall-clock budget for a job. When exceeded, the pipeline stops "
             "retrying and delivers the best document it has (fallback if needed)."
         ),
+    )
+    max_author_runs: int = Field(
+        default=5,
+        ge=2,
+        le=15,
+        description="Hard cap on author LLM invocations per job (prevents retry loops)",
     )
     verification_fail_open: bool = Field(
         default=False,
@@ -184,12 +196,14 @@ class AppConfig:
         self.latex_engine = s.latex_engine
         self.output_dir = s.output_dir
         self.max_verification_retries = s.max_verification_retries
+        self.max_content_quality_retries = s.max_content_quality_retries
         self.verification_fail_open = s.verification_fail_open
         self.launch_grades = s.launch_grades
         self.max_latex_chars = s.max_latex_chars
         self.skip_editor = s.skip_editor
         self.skip_editor_material_types = s.skip_editor_material_types
         self.pipeline_max_seconds = s.pipeline_max_seconds
+        self.max_author_runs = s.max_author_runs
         self.llm = LLMProviderConfig()
 
 

@@ -851,6 +851,7 @@ def build_author_prompt(
     content_options: dict,
 ) -> str:
     """Build the user prompt for the author agent."""
+    from app.curriculum.topic_coverage import format_coverage_for_prompt
     from app.pipeline.material_hints import author_material_instructions
 
     template_examples = _get_templates_for_grade(grade)
@@ -859,6 +860,16 @@ def build_author_prompt(
         material_type,
         content_options.get("include_solutions", True),
     )
+    coverage_text = format_coverage_for_prompt(
+        grade,
+        content_options.get("topic", ""),
+        material_type=material_type,
+        num_exercises=content_options.get("num_exercises", 10),
+        competency_goals=content_options.get("competency_goals", []),
+    )
+    topic_line = ""
+    if coverage_text:
+        topic_line = f"\n{coverage_text}\n"
 
     return f"""\
 Skriv KOMPLETT LaTeX body-innhold basert på denne pedagogiske planen:
@@ -867,6 +878,7 @@ Skriv KOMPLETT LaTeX body-innhold basert på denne pedagogiske planen:
 
 Klassetrinn: {grade}
 {grade_context}
+{topic_line}
 {language_instructions}
 {material_extra}
 
@@ -886,6 +898,46 @@ FIGURER — lag de BESTE figurene overhodet mulig:
 - ALLE tabeller: booktabs (\\toprule/\\midrule/\\bottomrule), ALDRI | eller \\hline (unntatt posisjonsskjema)
 - ALLE beregninger og løsningsforslag MÅ være matematisk korrekte
 - INGEN preamble (\\documentclass, \\usepackage osv.)
+"""
+
+
+def build_author_quality_fix_prompt(
+    pedagogical_plan: str,
+    current_latex: str,
+    quality_report: str,
+    grade: str,
+    content_options: dict,
+) -> str:
+    """Build a prompt for the author to fix content-quality gate failures."""
+    from app.pipeline.material_hints import author_material_instructions
+
+    material_type = content_options.get("material_type", "kapittel")
+    material_extra = author_material_instructions(
+        material_type,
+        content_options.get("include_solutions", True),
+    )
+
+    return f"""\
+Ditt forrige kapittel ble AVVIST av kvalitetskontrollen. Du MÅ utvide og rette innholdet.
+
+{quality_report}
+
+PEDAGOGISK PLAN (følg denne):
+{pedagogical_plan}
+
+NÅVÆRENDE INNHOLD (utvid — ikke forkort):
+{current_latex}
+
+Klassetrinn: {grade}
+{material_extra}
+
+OPPGAVE: Returner HELE det forbedrede LaTeX body-innholdet som oppfyller ALLE krav.
+- Legg til manglende \\section med full teori for hvert deltema
+- Minst 2 \\begin{{eksempel}} per hovedteknikk med \\forklaring{{}}
+- Flere PGFPlots-grafer (\\begin{{axis}})
+- Fjern vektorer/trigonometri hvis temaet er funksjoner
+- Behold korrekt matematikk fra eksisterende tekst
+- INGEN preamble
 """
 
 

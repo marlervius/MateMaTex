@@ -382,9 +382,8 @@ export function GenerationWizard() {
         if (resultLoaded || loadingResult || activeJobRef.current !== job_id) return;
         if (isJobAborted(job_id)) return;
         loadingResult = true;
-        streamCloseRef.current?.();
-        closeActiveStream();
         if (statusHint && statusHint !== "failed") {
+          setCurrentAgent(null);
           showPlaceholderResult(statusHint);
         }
         try {
@@ -395,6 +394,8 @@ export function GenerationWizard() {
           setError(msg, snapshot);
         } finally {
           loadingResult = false;
+          streamCloseRef.current?.();
+          closeActiveStream();
         }
       };
 

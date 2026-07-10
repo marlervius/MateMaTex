@@ -16,6 +16,7 @@ from app.models.state import (
 from app.pipeline.graph import (
     create_pipeline,
     finalize,
+    should_retry_content,
     should_retry_latex,
     should_retry_math,
 )
@@ -41,7 +42,7 @@ class TestMathRetryRouting:
         assert should_retry_math(state) == "author"
 
     def test_proceed_when_correct(self):
-        """Should proceed to editor when all math is correct (kapittel uses editor)."""
+        """Kapittel skips LLM editor and goes to content quality."""
         state = PipelineState(
             request=GenerationRequest(
                 grade="8. trinn", topic="Algebra", material_type="kapittel"
@@ -54,7 +55,7 @@ class TestMathRetryRouting:
             ),
             math_verification_attempts=1,
         )
-        assert should_retry_math(state) == "editor"
+        assert should_retry_math(state) == "content_quality"
 
     def test_blocked_after_max_retries(self):
         """SymPy-confirmed errors block delivery after retries (grunnlov §1)."""
@@ -83,7 +84,7 @@ class TestMathRetryRouting:
             ),
             math_verification_attempts=1,
         )
-        assert should_retry_math(state) == "tikz_validator"
+        assert should_retry_math(state) == "content_quality"
         assert state.edited_latex_body == state.verified_latex_body
 
     def test_blocked_when_mostly_unparseable_but_some_incorrect(self):
@@ -246,6 +247,7 @@ class TestGraphStructure:
             "pedagogue",
             "author",
             "math_verifier",
+            "content_quality",
             "editor",
             "tikz_validator",
             "table_validator",

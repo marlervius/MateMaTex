@@ -56,6 +56,10 @@ def run_math_verifier(state: PipelineState) -> PipelineState:
                 total=result.claims_checked,
                 attempt=state.math_verification_attempts,
             )
+            from app.pipeline.routing_helpers import can_retry_math
+
+            if can_retry_math(state):
+                state.author_retry_reason = "math"
 
         step.output_summary = result.summary
 

@@ -44,7 +44,7 @@ class TestEquationVerification:
 
     def test_incorrect_fraction(self, checker: MathChecker):
         """Fraction error: 6/4 = 2."""
-        latex = r"Vi forenkler: $\frac{6}{4} = 2$."
+        latex = r"Vi forenkler: $6/4 = 2$."
         result = checker.verify(latex)
         assert result.claims_incorrect > 0
 
