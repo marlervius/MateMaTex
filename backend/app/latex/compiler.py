@@ -113,6 +113,10 @@ def compile_to_pdf_with_log(
     engine_name = resolve_engine(engine)
     binary = _engine_binary(engine_name, pdflatex_path)
 
+    from app.latex.text_sanitize import sanitize_latex_body
+
+    latex_content = sanitize_latex_body(latex_content)
+
     with get_compile_gate(), tempfile.TemporaryDirectory(prefix="matematex_") as tmpdir:
         tex_path = Path(tmpdir) / "document.tex"
         tex_path.write_text(latex_content, encoding="utf-8")

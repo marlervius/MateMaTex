@@ -130,7 +130,7 @@ def build_preamble(
 
     Args:
         theme: Color palette name (see THEMES).
-        student_mode: Reserved for layout tweaks favouring writing space.
+        student_mode: Reserved — adds answer lines in task boxes for student copies.
         accessible: Emit PDF language metadata and opt into tagged-PDF mode.
         dyslexia: Sans-serif body + generous leading and spacing.
         high_contrast: Force the high-contrast palette regardless of `theme`.
@@ -153,6 +153,17 @@ def build_preamble(
 
     pdflang = r"pdflang=nb-NO, " if accessible else ""
 
+    student_block = ""
+    if student_mode:
+        student_block = r"""
+% ---- Elevkopi: plass til svar under oppgaver ----
+\tcbset{
+  taskbox/.append style={
+    after upper={\par\vspace{1.6cm}\noindent\textcolor{gray!55}{\rule{0.42\textwidth}{0.35pt}}}
+  }
+}
+"""
+
     return (
         doc_meta
         + r"\documentclass[a4paper,11pt]{article}" + "\n"
@@ -172,6 +183,7 @@ def build_preamble(
         + _FIGURE_MACROS
         + _PEDAGOGICAL_MACROS
         + _HEADER_FOOTER
+        + student_block
         + f"\n% ---- Spacing ----\n{leading}\n"
         + rf"\setlength{{\parskip}}{{{parskip}}}" + "\n"
         + r"\setlength{\parindent}{0pt}" + "\n"

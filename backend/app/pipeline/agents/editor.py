@@ -72,7 +72,9 @@ def run_editor(state: PipelineState) -> PipelineState:
             )
             body = _re.sub(r'\\end\{document\}.*$', '', body, flags=_re.DOTALL)
 
-            state.edited_latex_body = body.strip() or source_latex
+            from app.latex.text_sanitize import sanitize_latex_body
+
+            state.edited_latex_body = sanitize_latex_body(body.strip()) or source_latex
 
             step.output_summary = f"Edited LaTeX ({len(state.edited_latex_body)} chars)"
             logger.info(

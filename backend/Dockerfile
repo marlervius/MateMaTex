@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     texlive-luatex \
     texlive-xetex \
     fonts-lato \
+    fonts-libertinus \
     latexmk \
     cm-super \
     lmodern \

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Clock, Sparkles, Star, Trash2, Copy, FolderOpen } from "lucide-react";
 import { listHistory, removeHistoryEntry, updateHistoryFavorite, type HistoryEntry } from "@/lib/generation-history";
+import { warningReasonLabel } from "@/lib/map-api-result";
 import { useAppStore } from "@/lib/store";
 import { getResult } from "@/lib/api";
 import { mapApiResultToGenerationResult } from "@/lib/map-api-result";
@@ -79,6 +80,11 @@ export default function HistoryPage() {
                         ? "Advarsel"
                         : "Feilet"}
                   </span>
+                )}
+                {entry.status === "completed_with_warnings" && entry.warningReason && (
+                  <p className="text-[11px] text-text-muted mt-1 max-w-md">
+                    {warningReasonLabel(entry.warningReason)}
+                  </p>
                 )}
                 {entry.request.competencyGoals.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-2">

@@ -127,7 +127,9 @@ def run_author(state: PipelineState) -> PipelineState:
         body = _re.sub(r'\\end\{document\}.*$', '', body, flags=_re.DOTALL)
         body = _re.sub(r'\\includegraphics\s*(?:\[.*?\])?\s*\{.*?\}', '', body)
 
-        state.raw_latex_body = body.strip()
+        from app.latex.text_sanitize import sanitize_latex_body
+
+        state.raw_latex_body = sanitize_latex_body(body.strip())
 
         step.output_summary = f"LaTeX body ({len(state.raw_latex_body)} chars)"
         logger.info(

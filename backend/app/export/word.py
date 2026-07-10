@@ -1,9 +1,8 @@
 """
 LaTeX → Word (DOCX) conversion.
 
-Uses python-docx for programmatic construction.
-Strips LaTeX commands and renders math as plain text for now;
-a future version can use OMML for proper equation rendering.
+Uses python-docx; inline math is rendered as native Word OMML when possible,
+with Cambria Math fallback.
 """
 
 from __future__ import annotations
@@ -129,8 +128,27 @@ def _latex_inline_to_readable(expr: str) -> str:
         return expr.replace("\\", "")
 
 
+def _append_omml_inline(paragraph, latex_expr: str) -> bool:
+    """Insert Office Math (OMML) for inline LaTeX; return False on failure."""
+    try:
+        from docx.oxml import parse_xml
+        from latex2mathml.converter import convert as latex_to_mathml
+        from mathml2omml import convert as mathml_to_omml
+
+        omml = mathml_to_omml(latex_to_mathml(latex_expr.strip()))
+        if not omml.strip().startswith("<m:oMath"):
+            omml = (
+                '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">'
+                f"{omml}</m:oMath>"
+            )
+        paragraph._p.append(parse_xml(omml))
+        return True
+    except Exception:
+        return False
+
+
 def _add_word_paragraph(doc, line: str) -> None:
-    """Paragraph with Cambria Math runs for $...$ segments."""
+    """Paragraph with OMML (or Cambria Math fallback) for $...$ segments."""
     from docx.shared import Pt
 
     if line.startswith("• "):
@@ -147,10 +165,11 @@ def _add_word_paragraph(doc, line: str) -> None:
         if not part:
             continue
         if idx % 2 == 1:
-            run = p.add_run(_latex_inline_to_readable(part))
-            run.italic = True
-            run.font.name = "Cambria Math"
-            run.font.size = Pt(11)
+            if not _append_omml_inline(p, part):
+                run = p.add_run(_latex_inline_to_readable(part))
+                run.italic = True
+                run.font.name = "Cambria Math"
+                run.font.size = Pt(11)
         else:
             p.add_run(part)
 

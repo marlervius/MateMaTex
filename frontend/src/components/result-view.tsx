@@ -79,6 +79,27 @@ export function ResultView() {
     basic_exercise_count?: number;
     standard_exercise_count?: number;
     advanced_exercise_count?: number;
+    basic_quality?: {
+      score: number;
+      passed: boolean;
+      math_verified: boolean;
+      issue_count: number;
+      summary: string;
+    } | null;
+    standard_quality?: {
+      score: number;
+      passed: boolean;
+      math_verified: boolean;
+      issue_count: number;
+      summary: string;
+    } | null;
+    advanced_quality?: {
+      score: number;
+      passed: boolean;
+      math_verified: boolean;
+      issue_count: number;
+      summary: string;
+    } | null;
     errors?: string[];
   } | null>(null);
   const [diffError, setDiffError] = useState("");
@@ -311,7 +332,11 @@ export function ResultView() {
     if (!diffData && hydrateDiffFromPipeline()) return;
     setDiffLoading(true);
     try {
-      const res = await differentiate(result.fullDocument);
+      const res = await differentiate(
+        result.fullDocument,
+        request?.topic ?? "",
+        request?.grade ?? ""
+      );
       if (res.success) {
         setDiffData(res);
       } else {
@@ -323,6 +348,13 @@ export function ResultView() {
       setDiffLoading(false);
     }
   };
+
+  const diffLevelQuality = (level: "basic" | "standard" | "advanced") =>
+    level === "basic"
+      ? diffData?.basic_quality
+      : level === "standard"
+      ? diffData?.standard_quality
+      : diffData?.advanced_quality;
 
   const diffLevelLatex = (level: "basic" | "standard" | "advanced"): string =>
     (level === "basic"
@@ -921,6 +953,36 @@ export function ResultView() {
                         {diffPdfError}
                       </p>
                     )}
+
+                    {/* Quality badges per level */}
+                    {(["basic", "standard", "advanced"] as const).map((level) => {
+                      const q = diffLevelQuality(level);
+                      if (!q) return null;
+                      return (
+                        <div
+                          key={level}
+                          className={`text-xs px-3 py-2 rounded-lg border ${
+                            q.passed
+                              ? "border-accent-green/30 bg-accent-green/5 text-accent-green"
+                              : "border-accent-orange/30 bg-accent-orange/5 text-accent-orange"
+                          } ${activeLevel !== level ? "opacity-60" : ""}`}
+                        >
+                          <span className="font-medium">
+                            {level === "basic"
+                              ? "Grunnleggende"
+                              : level === "standard"
+                              ? "Standard"
+                              : "Avansert"}
+                            {": "}
+                            {q.passed ? "OK" : "Kontroller"}
+                          </span>
+                          <span className="text-text-muted ml-2">
+                            {q.score}/100 · {q.math_verified ? "SymPy OK" : "SymPy advarsel"}
+                            {q.summary && q.summary !== "OK" ? ` · ${q.summary}` : ""}
+                          </span>
+                        </div>
+                      );
+                    })}
 
                     {/* PDF preview / LaTeX toggle for the active level */}
                     <div className="flex items-center justify-between">

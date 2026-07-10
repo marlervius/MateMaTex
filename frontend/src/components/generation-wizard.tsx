@@ -884,7 +884,7 @@ export function GenerationWizard() {
                         {[
                           { key: "dyslexia" as const, label: "Dyslektikervennlig" },
                           { key: "highContrast" as const, label: "Høy kontrast" },
-                          { key: "accessible" as const, label: "Tagget PDF (UU)" },
+                          { key: "accessible" as const, label: "Norsk PDF-språk (skjermleser)" },
                         ].map(({ key, label }) => (
                           <label
                             key={key}

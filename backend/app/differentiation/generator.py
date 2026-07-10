@@ -36,6 +36,15 @@ router = APIRouter(prefix="/differentiation", tags=["differentiation"])
 # Data models
 # ---------------------------------------------------------------------------
 @dataclass
+class LevelQuality:
+    score: int = 100
+    passed: bool = True
+    math_verified: bool = False
+    issue_count: int = 0
+    summary: str = ""
+
+
+@dataclass
 class DifferentiatedOutput:
     """Three-level differentiated content."""
     basic_latex: str = ""
@@ -44,6 +53,9 @@ class DifferentiatedOutput:
     basic_verified: bool = False
     standard_verified: bool = False
     advanced_verified: bool = False
+    basic_quality: LevelQuality = field(default_factory=LevelQuality)
+    standard_quality: LevelQuality = field(default_factory=LevelQuality)
+    advanced_quality: LevelQuality = field(default_factory=LevelQuality)
 
 
 class DifferentiateRequest(BaseModel):
@@ -66,6 +78,14 @@ class DifferentiateRequest(BaseModel):
         }
 
 
+class LevelQualityOut(BaseModel):
+    score: int = 100
+    passed: bool = True
+    math_verified: bool = False
+    issue_count: int = 0
+    summary: str = ""
+
+
 class DifferentiateResponse(BaseModel):
     success: bool
     basic_latex: str = ""
@@ -74,6 +94,9 @@ class DifferentiateResponse(BaseModel):
     basic_exercise_count: int = 0
     standard_exercise_count: int = 0
     advanced_exercise_count: int = 0
+    basic_quality: LevelQualityOut | None = None
+    standard_quality: LevelQualityOut | None = None
+    advanced_quality: LevelQualityOut | None = None
     errors: list[str] = []
 
 
@@ -112,6 +135,39 @@ VIKTIG:
 # ---------------------------------------------------------------------------
 # Core logic
 # ---------------------------------------------------------------------------
+def _quality_out(level: str, content: str, verified: bool, grade: str, topic: str) -> LevelQuality:
+    from app.latex.text_sanitize import sanitize_latex_body
+    from app.models.state import GenerationRequest
+    from app.verification.content_quality import evaluate_content_quality
+
+    content = sanitize_latex_body(content)
+    diff_req = GenerationRequest(
+        grade=grade or "8. trinn",
+        topic=topic or "Matematikk",
+        material_type="differensiert",
+        num_exercises=6,
+    )
+    q = evaluate_content_quality(content, diff_req)
+    summary_parts: list[str] = []
+    if not verified:
+        summary_parts.append("SymPy fant mulige fasitfeil")
+    if not q.passed:
+        summary_parts.append(f"innholdsscore {q.score}/100")
+    if q.issues:
+        summary_parts.append(f"{len(q.issues)} kvalitetsmerknader")
+    return LevelQuality(
+        score=q.score,
+        passed=q.passed and verified,
+        math_verified=verified,
+        issue_count=len(q.issues),
+        summary="; ".join(summary_parts) if summary_parts else "OK",
+    )
+
+
+def _level_quality_out(q: LevelQuality) -> LevelQualityOut:
+    return LevelQualityOut(**q.__dict__)
+
+
 async def differentiate_content(
     latex_content: str,
     topic: str = "",
@@ -122,6 +178,9 @@ async def differentiate_content(
 
     Uses one LLM call with structured JSON output.
     """
+    from app.latex.text_sanitize import sanitize_latex_body
+
+    latex_content = sanitize_latex_body(latex_content)
     llm = get_llm(temperature=0.3)
 
     user_prompt = f"STANDARD-NIVÅ INNHOLD:\n\n{latex_content}"
@@ -145,9 +204,9 @@ async def differentiate_content(
         json_match = re.search(r'\{[\s\S]*\}', result)
         if json_match:
             data = json.loads(json_match.group())
-            output.basic_latex = data.get("basic", "")
-            output.standard_latex = data.get("standard", latex_content)
-            output.advanced_latex = data.get("advanced", "")
+            output.basic_latex = sanitize_latex_body(data.get("basic", ""))
+            output.standard_latex = sanitize_latex_body(data.get("standard", latex_content))
+            output.advanced_latex = sanitize_latex_body(data.get("advanced", ""))
         else:
             logger.warning("differentiation_no_json", response_preview=result[:200])
     except json.JSONDecodeError as e:
@@ -175,28 +234,21 @@ async def differentiate_content(
         logger.warning("differentiation_verification_skipped", error=str(e))
 
     try:
-        from app.models.state import GenerationRequest
-        from app.verification.content_quality import evaluate_content_quality
-
-        diff_req = GenerationRequest(
-            grade=grade or "8. trinn",
-            topic=topic or "Matematikk",
-            material_type="differensiert",
-            num_exercises=6,
-        )
         for level, content in [
             ("basic", output.basic_latex),
             ("standard", output.standard_latex),
             ("advanced", output.advanced_latex),
         ]:
             if content:
-                q = evaluate_content_quality(content, diff_req)
+                verified = getattr(output, f"{level}_verified", False)
+                q = _quality_out(level, content, verified, grade, topic)
+                setattr(output, f"{level}_quality", q)
                 if not q.passed:
                     logger.warning(
                         "differentiation_quality_gaps",
                         level=level,
                         score=q.score,
-                        issues=len(q.issues),
+                        issues=q.issue_count,
                     )
     except Exception as e:
         logger.warning("differentiation_quality_skipped", error=str(e))
@@ -296,6 +348,15 @@ async def differentiate(
             basic_exercise_count=_count_exercises(output.basic_latex),
             standard_exercise_count=_count_exercises(output.standard_latex),
             advanced_exercise_count=_count_exercises(output.advanced_latex),
+            basic_quality=_level_quality_out(output.basic_quality)
+            if output.basic_latex
+            else None,
+            standard_quality=_level_quality_out(output.standard_quality)
+            if output.standard_latex
+            else None,
+            advanced_quality=_level_quality_out(output.advanced_quality)
+            if output.advanced_latex
+            else None,
         )
     except Exception as e:
         logger.error("differentiation_failed", error=str(e))

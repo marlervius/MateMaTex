@@ -728,6 +728,27 @@ export async function differentiate(
   basic_exercise_count: number;
   standard_exercise_count: number;
   advanced_exercise_count: number;
+  basic_quality?: {
+    score: number;
+    passed: boolean;
+    math_verified: boolean;
+    issue_count: number;
+    summary: string;
+  } | null;
+  standard_quality?: {
+    score: number;
+    passed: boolean;
+    math_verified: boolean;
+    issue_count: number;
+    summary: string;
+  } | null;
+  advanced_quality?: {
+    score: number;
+    passed: boolean;
+    math_verified: boolean;
+    issue_count: number;
+    summary: string;
+  } | null;
   errors: string[];
 }> {
   return fetchJson(apiUrl("differentiation/generate"), {
