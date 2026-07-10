@@ -87,7 +87,17 @@ class Settings(BaseSettings):
     )
     verification_fail_open: bool = Field(
         default=False,
-        description="If True, math/LaTeX verifier errors allow pipeline to continue",
+        description=(
+            "If True, SymPy-confirmed fasit errors may still be delivered as "
+            "completed_with_warnings. Default False enforces grunnlov §1."
+        ),
+    )
+    launch_grades: str = Field(
+        default="VG1 1T,VG2 R1",
+        description=(
+            "Comma-separated grades shown by default in the UI (grunnlov §5 — "
+            "smalt slår bredt). Set to empty to expose all grades."
+        ),
     )
     max_latex_chars: int = Field(
         default=500_000,
@@ -175,6 +185,7 @@ class AppConfig:
         self.output_dir = s.output_dir
         self.max_verification_retries = s.max_verification_retries
         self.verification_fail_open = s.verification_fail_open
+        self.launch_grades = s.launch_grades
         self.max_latex_chars = s.max_latex_chars
         self.skip_editor = s.skip_editor
         self.skip_editor_material_types = s.skip_editor_material_types

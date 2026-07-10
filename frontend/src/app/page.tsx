@@ -48,7 +48,13 @@ export default function HomePage() {
                 Hva skal vi lage i dag?
               </h1>
               <p className="text-text-secondary">
-                Velg trinn, emne og type — AI-teamet tar seg av resten
+                LK20-tilpasset matte med SymPy-verifisert fasit — levert som PDF du eier
+              </p>
+              <p className="text-xs text-text-muted mt-2">
+                Ingen elevdata.{" "}
+                <a href="/personvern" className="text-accent-blue hover:underline">
+                  Les personvernerklæringen
+                </a>
               </p>
             </div>
             <GenerationWizard />

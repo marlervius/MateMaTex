@@ -28,6 +28,14 @@ import {
 /* -----------------------------------------------------------------------
    Data
    ----------------------------------------------------------------------- */
+/** Grunnlov §5 — smalt lanseringsnivå (kan utvides via env). */
+const LAUNCH_GRADES = (
+  process.env.NEXT_PUBLIC_LAUNCH_GRADES || "VG1 1T,VG2 R1"
+)
+  .split(",")
+  .map((g) => g.trim())
+  .filter(Boolean);
+
 const GRADES = [
   { value: "1.-4. trinn", label: "1.–4. trinn", sub: "Barneskole" },
   { value: "5.-7. trinn", label: "5.–7. trinn", sub: "Mellomtrinn" },
@@ -158,14 +166,26 @@ export function GenerationWizard() {
     null
   );
   const [estimateLoading, setEstimateLoading] = useState(false);
+  const [showAllGrades, setShowAllGrades] = useState(false);
+
+  const visibleGrades = useMemo(() => {
+    if (showAllGrades || LAUNCH_GRADES.length === 0) return GRADES;
+    const launch = new Set(LAUNCH_GRADES);
+    const filtered = GRADES.filter((g) => launch.has(g.value));
+    return filtered.length > 0 ? filtered : GRADES;
+  }, [showAllGrades]);
 
   useEffect(() => {
     const prefs = loadPreferences();
     const params = new URLSearchParams(window.location.search);
     const template = params.get("template");
     const materialTypeParam = params.get("materialType");
+    const defaultGrade =
+      prefs.grade ||
+      (LAUNCH_GRADES.length > 0 ? LAUNCH_GRADES[0] : GRADES[0]?.value) ||
+      "VG1 1T";
     setRequest({
-      grade: prefs.grade,
+      grade: defaultGrade,
       languageLevel: prefs.languageLevel,
       materialType: template
         ? materialTypeFromTemplate(template)
@@ -517,11 +537,13 @@ export function GenerationWizard() {
                 Hvilket trinn?
               </h2>
               <p className="text-text-secondary text-sm text-center mb-6">
-                Velg klassetrinnet for materialet
+                {LAUNCH_GRADES.length > 0 && !showAllGrades
+                  ? "Lansert for VGS-matte (1T og R1). Flere trinn kommer etter behov."
+                  : "Velg klassetrinnet for materialet"}
               </p>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                {GRADES.map((g, i) => (
+                {visibleGrades.map((g, i) => (
                   <motion.button
                     type="button"
                     key={g.value}
@@ -553,6 +575,17 @@ export function GenerationWizard() {
                   </motion.button>
                 ))}
               </div>
+              {LAUNCH_GRADES.length > 0 && LAUNCH_GRADES.length < GRADES.length && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllGrades((v) => !v)}
+                  className="mt-4 mx-auto block text-xs text-text-muted hover:text-accent-blue transition-colors"
+                >
+                  {showAllGrades
+                    ? "Vis kun lanseringsnivå (1T / R1)"
+                    : "Vis alle trinn (barneskole, ungdomsskole, VGS)"}
+                </button>
+              )}
             </motion.div>
           )}
 

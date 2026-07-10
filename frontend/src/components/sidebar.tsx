@@ -167,7 +167,16 @@ export function Sidebar() {
           </AnimatePresence>
         </button>
 
-        {/* Settings */}
+        {/* Settings + privacy (grunnlov §2 / §9) */}
+        <NavLink
+          item={{
+            href: "/personvern",
+            label: "Personvern",
+            icon: <User size={20} />,
+          }}
+          active={pathname === "/personvern"}
+          collapsed={collapsed}
+        />
         <NavLink
           item={{
             href: "/settings",

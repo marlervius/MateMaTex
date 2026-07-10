@@ -31,7 +31,7 @@ import structlog
 from langgraph.graph import END, StateGraph
 
 from app.config import get_config
-from app.latex.preamble import wrap_with_style
+from app.latex.preamble import inject_verification_banner, wrap_with_style
 from app.models.state import (
     GenerationRequest,
     PipelineState,
@@ -90,11 +90,24 @@ def try_restore_cached_pipeline(
         restored.status = (
             PipelineStatus.COMPLETED_WITH_WARNINGS
             if (
-                restored.math_verification.claims_incorrect > 0
-                or restored.math_verification.claims_unparseable > 0
+                restored.math_verification.claims_unparseable > 0
+                or (
+                    get_config().verification_fail_open
+                    and restored.math_verification.claims_incorrect > 0
+                )
             )
             else PipelineStatus.COMPLETED
         )
+        if (
+            restored.math_verification.claims_incorrect > 0
+            and not get_config().verification_fail_open
+        ):
+            logger.info(
+                "pipeline_cache_ignored_incorrect_fasit",
+                job_id=job_id,
+                incorrect=restored.math_verification.claims_incorrect,
+            )
+            return None
         logger.info("pipeline_cache_hit", job_id=restored.job_id)
         return restored
     except Exception as e:
@@ -153,13 +166,16 @@ def _should_skip_editor(state: PipelineState) -> bool:
 
 def should_retry_math(
     state: PipelineState,
-) -> Literal["author", "editor", "tikz_validator"]:
+) -> Literal["author", "editor", "tikz_validator", "math_blocked"]:
     """
     After math verification: retry author if errors found and retries remain.
-    Otherwise proceed to editor or skip straight to validators.
+    SymPy-confirmed incorrect fasit blocks delivery (grunnlov §1) unless
+    verification_fail_open is enabled. Unparseable claims may proceed with
+    a «lærer kontroll anbefales» marker in finalize.
     """
     config = get_config()
     max_retries = config.max_verification_retries
+    incorrect = state.math_verification.claims_incorrect
 
     if (
         not state.math_verification.all_correct
@@ -172,15 +188,24 @@ def should_retry_math(
             decision="retry",
             attempt=state.math_verification_attempts,
             max_retries=max_retries,
-            errors=state.math_verification.claims_incorrect,
+            errors=incorrect,
         )
         return "author"
+
+    if incorrect > 0 and not config.verification_fail_open:
+        logger.warning(
+            "math_retry_decision",
+            decision="blocked",
+            errors=incorrect,
+            attempts=state.math_verification_attempts,
+        )
+        return "math_blocked"
 
     if not state.math_verification.all_correct:
         logger.warning(
             "math_retry_decision",
-            decision="proceed_with_errors",
-            errors=state.math_verification.claims_incorrect,
+            decision="proceed_with_unparseable_only",
+            unparseable=state.math_verification.claims_unparseable,
         )
 
     if _should_skip_editor(state):
@@ -193,6 +218,30 @@ def should_retry_math(
         return "tikz_validator"
 
     return "editor"
+
+
+def run_math_blocked(state: PipelineState) -> PipelineState:
+    """Terminal node when SymPy confirms incorrect fasit (grunnlov §1)."""
+    incorrect = state.math_verification.claims_incorrect
+    state.status = PipelineStatus.FAILED
+    state.error_message = (
+        f"SymPy fant {incorrect} feil i fasiten etter "
+        f"{state.math_verification_attempts} forsøk. "
+        "Materialet leveres ikke — fasiten er hellig (MateMaTeX grunnlov §1)."
+    )
+    state.warning_reason = "incorrect"
+    state.pdf_base64 = None
+    state.pdf_path = None
+    state.current_agent = None
+    state.total_duration_seconds = sum(s.duration_seconds for s in state.steps)
+    state.total_tokens = sum(s.total_tokens for s in state.steps)
+    logger.warning(
+        "pipeline_math_blocked",
+        job_id=state.job_id,
+        incorrect=incorrect,
+        attempts=state.math_verification_attempts,
+    )
+    return state
 
 
 def should_retry_latex(state: PipelineState) -> Literal["latex_fixer", "latex_fallback", "finalize"]:
@@ -273,6 +322,24 @@ def finalize(state: PipelineState) -> PipelineState:
     """
     Final node: assemble the complete document and compute summary stats.
     """
+    config = get_config()
+    mv = state.math_verification
+
+    # Safety net: never mark completed when SymPy confirmed wrong answers.
+    if mv.claims_incorrect > 0 and not config.verification_fail_open:
+        state.status = PipelineStatus.FAILED
+        state.error_message = (
+            f"SymPy fant {mv.claims_incorrect} feil i fasiten. "
+            "Materialet leveres ikke (MateMaTeX grunnlov §1)."
+        )
+        state.warning_reason = "incorrect"
+        state.pdf_base64 = None
+        state.total_duration_seconds = sum(s.duration_seconds for s in state.steps)
+        state.total_tokens = sum(s.total_tokens for s in state.steps)
+        state.current_agent = None
+        logger.warning("finalize_blocked_incorrect_fasit", job_id=state.job_id)
+        return state
+
     body = (
         state.final_latex_body
         or state.edited_latex_body
@@ -280,12 +347,32 @@ def finalize(state: PipelineState) -> PipelineState:
         or state.raw_latex_body
     )
 
+    verified_banner = (
+        mv.claims_checked > 0
+        and mv.claims_incorrect == 0
+        and mv.claims_unparseable == 0
+    )
+    needs_review = mv.claims_unparseable > 0
+    if body.strip() and (verified_banner or needs_review):
+        body = inject_verification_banner(
+            body,
+            verified=verified_banner,
+            needs_teacher_review=needs_review,
+        )
+        if state.final_latex_body:
+            state.final_latex_body = body
+        elif state.edited_latex_body:
+            state.edited_latex_body = body
+        elif state.verified_latex_body:
+            state.verified_latex_body = body
+        else:
+            state.raw_latex_body = body
+
     if state.request.material_type == "differensiert":
         _apply_differentiation(state)
         try:
             from app.verification.latex_checker import LatexChecker
 
-            config = get_config()
             checker = LatexChecker(pdflatex_path=config.pdflatex_path)
             compile_result = checker.check(state.full_document)
             state.latex_compilation = compile_result
@@ -314,13 +401,13 @@ def finalize(state: PipelineState) -> PipelineState:
     state.total_tokens = sum(s.total_tokens for s in state.steps)
     state.current_agent = None
 
-    has_math_issues = (
-        state.math_verification.claims_incorrect > 0
-        or state.math_verification.claims_unparseable > 0
-    )
+    has_unparseable = mv.claims_unparseable > 0
+    has_fail_open_incorrect = mv.claims_incorrect > 0 and config.verification_fail_open
     reasons: list[str] = []
-    if has_math_issues:
-        reasons.append("math")
+    if has_unparseable:
+        reasons.append("unparseable")
+    if has_fail_open_incorrect:
+        reasons.append("incorrect")
     if state.used_latex_fallback:
         reasons.append("fallback")
 
@@ -399,6 +486,7 @@ def create_pipeline() -> StateGraph:
     graph.add_node("latex_validator", run_latex_validator)
     graph.add_node("latex_fixer", run_latex_fixer)
     graph.add_node("latex_fallback", run_latex_fallback)
+    graph.add_node("math_blocked", run_math_blocked)
     graph.add_node("layout", run_layout)  # Track E: non-destructive layout QA
     graph.add_node("finalize", finalize)
 
@@ -417,8 +505,11 @@ def create_pipeline() -> StateGraph:
             "author": "author",
             "editor": "editor",
             "tikz_validator": "tikz_validator",
+            "math_blocked": "math_blocked",
         },
     )
+
+    graph.add_edge("math_blocked", END)
 
     # Linear: editor → tikz_validator → table_validator → latex validation
     graph.add_edge("editor", "tikz_validator")

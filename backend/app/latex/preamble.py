@@ -609,6 +609,36 @@ def wrap_with_preamble(
     )
 
 
+# ── Grunnlov §1: verification trust markers in the PDF ─────────────────────
+
+VERIFIED_FASIT_BANNER = r"""
+\begin{merk}[title={SymPy-verifisert fasit}]
+Alle utregninger som kunne kontrolleres maskinelt, er sjekket med SymPy før utlevering.
+\end{merk}
+\vspace{0.4em}
+"""
+
+LAERERKONTROLL_BANNER = r"""
+\begin{merk}[title={Lærer kontroll anbefales}]
+Noen oppgaver (f.eks.\ «vis at», geometriske bevis, modellering eller tolkning) kunne ikke verifiseres automatisk.
+Kontroller fasit manuelt før du bruker materialet i undervisningen.
+\end{merk}
+\vspace{0.4em}
+"""
+
+
+def inject_verification_banner(body: str, *, verified: bool, needs_teacher_review: bool) -> str:
+    """Prepend a trust marker to the document body (grunnlov §1)."""
+    parts: list[str] = []
+    if verified:
+        parts.append(VERIFIED_FASIT_BANNER.strip())
+    if needs_teacher_review:
+        parts.append(LAERERKONTROLL_BANNER.strip())
+    if not parts:
+        return body
+    return "\n\n".join(parts) + "\n\n" + body.lstrip()
+
+
 def wrap_with_style(body_content: str, style: object | None = None) -> str:
     """
     Convenience wrapper that reads options off a duck-typed style object

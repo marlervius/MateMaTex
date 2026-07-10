@@ -12,6 +12,7 @@ import re
 import structlog
 from sympy import Eq, Symbol, simplify, solve, sqrt, sympify, expand, cancel
 from app.models.state import MathClaim, VerificationResult
+from m1.scorer import looks_like_prose, numeric_agreement
 
 logger = structlog.get_logger()
 
@@ -264,6 +265,11 @@ class MathChecker:
             claim.error_message = "Could not parse one or both sides"
             return
 
+        if looks_like_prose(lhs, rhs):
+            claim.is_correct = None
+            claim.error_message = "Looks like prose, not a verifiable expression (M1)"
+            return
+
         # Support vector/coordinate list/tuple comparison
         if isinstance(lhs, (list, tuple)) and isinstance(rhs, (list, tuple)):
             if len(lhs) != len(rhs):
@@ -358,6 +364,17 @@ class MathChecker:
                 pass
 
             if getattr(diff, "free_symbols", None):
+                # M1: numeric spot-check before giving up (reduces false negatives)
+                num = numeric_agreement(lhs, rhs, lhs.free_symbols | rhs.free_symbols)
+                if num is True:
+                    claim.is_correct = True
+                    claim.expected_result = str(rhs)
+                    claim.actual_result = str(lhs)
+                    return
+                if num is False:
+                    claim.is_correct = False
+                    claim.error_message = f"LHS ({lhs}) ≠ RHS ({rhs}) (numeric check)"
+                    return
                 claim.is_correct = None
                 claim.error_message = "Contains unknown symbols; cannot verify numerically"
                 return

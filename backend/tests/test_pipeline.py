@@ -56,8 +56,8 @@ class TestMathRetryRouting:
         )
         assert should_retry_math(state) == "editor"
 
-    def test_proceed_after_max_retries(self):
-        """Should proceed to editor after max retries even with errors."""
+    def test_blocked_after_max_retries(self):
+        """SymPy-confirmed errors block delivery after retries (grunnlov §1)."""
         state = PipelineState(
             request=GenerationRequest(
                 grade="8. trinn", topic="Algebra", material_type="kapittel"
@@ -69,7 +69,7 @@ class TestMathRetryRouting:
             ),
             math_verification_attempts=3,  # At max
         )
-        assert should_retry_math(state) == "editor"
+        assert should_retry_math(state) == "math_blocked"
 
     def test_skip_editor_for_arbeidsark(self):
         """Worksheets skip the slow LLM editor and go straight to validators."""
@@ -86,8 +86,8 @@ class TestMathRetryRouting:
         assert should_retry_math(state) == "tikz_validator"
         assert state.edited_latex_body == state.verified_latex_body
 
-    def test_skip_retry_when_mostly_unparseable(self):
-        """Few SymPy errors among many unparseable claims should not re-run author."""
+    def test_blocked_when_mostly_unparseable_but_some_incorrect(self):
+        """Confirmed SymPy errors block even when many claims are unparseable."""
         state = PipelineState(
             request=GenerationRequest(grade="8. trinn", topic="Algebra"),
             math_verification=VerificationResult(
@@ -98,7 +98,7 @@ class TestMathRetryRouting:
             ),
             math_verification_attempts=1,
         )
-        assert should_retry_math(state) == "tikz_validator"
+        assert should_retry_math(state) == "math_blocked"
 
 
 class TestLatexRetryRouting:
@@ -141,7 +141,7 @@ class TestLatexRetryRouting:
 class TestFinalizeStatus:
     """Test final status reflects math verification quality."""
 
-    def test_completed_with_warnings_when_math_issues(self):
+    def test_failed_when_incorrect_fasit(self):
         state = PipelineState(
             request=GenerationRequest(grade="8. trinn", topic="Algebra"),
             raw_latex_body="\\title{T}\\maketitle",
@@ -153,8 +153,24 @@ class TestFinalizeStatus:
             ),
         )
         result = finalize(state)
+        assert result.status == PipelineStatus.FAILED
+        assert "grunnlov" in result.error_message.lower() or "§1" in result.error_message
+
+    def test_completed_with_warnings_when_unparseable_only(self):
+        state = PipelineState(
+            request=GenerationRequest(grade="8. trinn", topic="Algebra"),
+            raw_latex_body="\\title{T}\\maketitle",
+            math_verification=VerificationResult(
+                claims_checked=5,
+                claims_correct=3,
+                claims_unparseable=2,
+                claims_incorrect=0,
+                all_correct=False,
+            ),
+        )
+        result = finalize(state)
         assert result.status == PipelineStatus.COMPLETED_WITH_WARNINGS
-        assert "math" in result.warning_reason
+        assert "unparseable" in result.warning_reason
 
     def test_warning_reason_fallback(self):
         state = PipelineState(
@@ -237,6 +253,7 @@ class TestGraphStructure:
             "latex_fixer",
             "latex_fallback",
             "layout",
+            "math_blocked",
             "finalize",
         }
         assert set(graph.nodes.keys()) == expected_nodes

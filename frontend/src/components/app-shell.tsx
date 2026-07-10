@@ -13,6 +13,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/school": "Skolens bank",
   "/shared": "Delt med meg",
   "/settings": "Innstillinger",
+  "/personvern": "Personvern",
 };
 
 export function AppShell({ children }: { children: React.ReactNode }) {

@@ -110,7 +110,7 @@ export function mapApiResultToGenerationResult(
   };
 }
 
-export type ErrorCategory = "aborted" | "latex" | "model" | "unknown";
+export type ErrorCategory = "aborted" | "latex" | "model" | "verification" | "unknown";
 
 export function isSuccessfulStatus(status: GenerationResult["status"]): boolean {
   return status === "completed" || status === "completed_with_warnings";
@@ -123,6 +123,14 @@ export function categorizeError(
 ): ErrorCategory {
   if (!failed) return "unknown";
   const m = errorMessage.toLowerCase();
+  if (
+    m.includes("sympy") ||
+    m.includes("fasit") ||
+    m.includes("grunnlov") ||
+    m.includes("§1")
+  ) {
+    return "verification";
+  }
   if (m.includes("avbrutt")) return "aborted";
   if (
     m.includes("latex") ||
@@ -145,17 +153,22 @@ export function categorizeError(
 /** Human-readable explanation for a completed_with_warnings result. */
 export function warningReasonLabel(reason: string): string {
   const parts = (reason || "").split(",").map((r) => r.trim()).filter(Boolean);
-  const hasMath = parts.includes("math");
+  const hasUnparseable = parts.includes("unparseable");
+  const hasIncorrect = parts.includes("incorrect");
   const hasFallback = parts.includes("fallback");
+  const hasLegacyMath = parts.includes("math");
 
-  if (hasMath && hasFallback) {
-    return "Noen figurer ble forenklet, og matematikken bør dobbeltsjekkes før bruk.";
+  if (hasIncorrect) {
+    return "SymPy fant feil i fasiten. Materialet bør ikke brukes uten manuell kontroll.";
+  }
+  if (hasUnparseable && hasFallback) {
+    return "Noen figurer ble forenklet, og deler av fasiten kunne ikke verifiseres automatisk — lærer kontroll anbefales.";
   }
   if (hasFallback) {
     return "Avanserte figurer (f.eks. TikZ) ble fjernet for å få dokumentet til å kompilere. Tekst og oppgaver er beholdt.";
   }
-  if (hasMath) {
-    return "Noen utregninger kunne ikke verifiseres automatisk — kontroller matematikken før du deler.";
+  if (hasUnparseable || hasLegacyMath) {
+    return "Del av fasiten kunne ikke verifiseres automatisk (f.eks. «vis at» eller modellering). Kontroller manuelt før bruk.";
   }
   return "Materialet bør gjennomgås før det deles med elever.";
 }
@@ -164,6 +177,8 @@ export function errorCategoryLabel(cat: ErrorCategory): string {
   switch (cat) {
     case "aborted":
       return "Avbrutt av bruker";
+    case "verification":
+      return "Fasit-verifisering (SymPy)";
     case "latex":
       return "LaTeX-kompilering";
     case "model":

@@ -128,6 +128,18 @@ TILGJENGELIGE MAKROER (for standard tilfeller — bruk når de passer):
 \\MMAqrtekst{URL}{Fasit}     → QR-kode med tekst under
 \\MMAnyside                  → Sideskift (én oppgave per side ved behov)
 
+=== UVERIFISERBART INNHOLD (MateMaTeX grunnlov §1) ===
+Oppgaver som IKKE kan maskinelt verifiseres (geometriske bevis, «vis at»,
+modelleringsoppgaver, tolkning, sannsynlighet med skjønn) skal ALDRI presenteres
+som automatisk kontrollert fasit. Marker dem tydelig med:
+\\begin{merk}[title={Lærer kontroll anbefales}]
+Denne oppgaven krever manuell gjennomgang av fasit før bruk i undervisningen.
+\\end{merk}
+Plasser merket rett FØR oppgaven det gjelder. Ikke bruk \\checkmark eller
+«fasit:» på slike oppgaver — skriv heller «Forslag til løsning» eller
+«Mulig tilnærming».
+Unngå å blande uverifiserbare bevisstoff inn blant reine regneoppgaver uten merking.
+
 Retningslinjer:
 - arbeidsark: legg \\MMAsvarlinjer eller \\MMAsvarfelt rett etter hver \\end{taskbox} så eleven har plass til å skrive.
 - prøve: bruk \\MMApoeng i oppgavetittelen, f.eks. \\begin{taskbox}{Oppgave 1 \\MMApoeng{4}} ... \\end{taskbox}, og gjerne \\MMAniva for nivå.

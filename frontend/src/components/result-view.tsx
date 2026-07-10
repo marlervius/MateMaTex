@@ -203,9 +203,14 @@ export function ResultView() {
 
   const isSuccess = isSuccessfulStatus(result.status);
   const hasWarnings = result.status === "completed_with_warnings";
-  const hasMathIssues =
-    result.mathVerification.claimsIncorrect > 0 ||
-    result.mathVerification.claimsUnparseable > 0;
+  const hasUnparseable = result.mathVerification.claimsUnparseable > 0;
+  const hasIncorrect = result.mathVerification.claimsIncorrect > 0;
+  const isVerifiedFasit =
+    result.mathVerification.claimsChecked > 0 &&
+    !hasIncorrect &&
+    !hasUnparseable &&
+    result.mathVerification.allCorrect;
+  const hasMathIssues = hasUnparseable || hasIncorrect;
   const canShare =
     approvalChecks.reviewed &&
     approvalChecks.language &&
@@ -500,8 +505,18 @@ export function ResultView() {
             <StatCard
               icon={<CheckCircle2 size={16} />}
               label="Matte-sjekk"
-              value={result.mathVerification.allCorrect ? "Alt korrekt" : `${result.mathVerification.claimsCorrect}/${result.mathVerification.claimsChecked}`}
-              color={result.mathVerification.allCorrect ? "green" : "orange"}
+              value={
+                isVerifiedFasit
+                  ? "SymPy OK"
+                  : hasIncorrect
+                  ? "Feil funnet"
+                  : hasUnparseable
+                  ? `${result.mathVerification.claimsCorrect}/${result.mathVerification.claimsChecked} (+ uverif.)`
+                  : result.mathVerification.allCorrect
+                  ? "Alt korrekt"
+                  : `${result.mathVerification.claimsCorrect}/${result.mathVerification.claimsChecked}`
+              }
+              color={isVerifiedFasit ? "green" : hasIncorrect ? "red" : hasUnparseable ? "orange" : "orange"}
             />
             <StatCard
               icon={<FileText size={16} />}
@@ -523,23 +538,43 @@ export function ResultView() {
             />
           </div>
 
-          {hasMathIssues && (
+          {isVerifiedFasit && (
+            <div className="card mb-6 !border-accent-green/30 bg-accent-green/5">
+              <h3 className="text-sm font-semibold text-accent-green mb-1">SymPy-verifisert fasit</h3>
+              <p className="text-xs text-text-secondary">
+                Alle utregninger som kunne kontrolleres maskinelt, er sjekket før utlevering (grunnlov §1).
+              </p>
+            </div>
+          )}
+
+          {hasUnparseable && !hasIncorrect && (
             <div className="card mb-6 !border-accent-orange/30 bg-accent-orange/5">
-              <h3 className="text-sm font-semibold mb-2">Matte-sjekk krever gjennomgang</h3>
+              <h3 className="text-sm font-semibold mb-2">Lærer kontroll anbefales</h3>
               <p className="text-xs text-text-secondary mb-3">
-                Noen påstander kunne ikke verifiseres automatisk. Sjekk disse før deling.
+                Noen oppgaver kunne ikke verifiseres automatisk. De er merket i PDF-en — kontroller fasit manuelt.
+              </p>
+              <div className="space-y-2 max-h-56 overflow-y-auto">
+                {result.mathVerification.unparseableClaims.map((c) => (
+                  <div key={c.claimId} className="rounded-lg border border-accent-orange/20 bg-accent-orange/5 p-2">
+                    <div className="text-[11px] font-mono text-accent-orange mb-1">{c.latexExpression || c.claimId}</div>
+                    <div className="text-xs text-text-secondary">Kunne ikke parses automatisk</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {hasIncorrect && (
+            <div className="card mb-6 !border-accent-red/30 bg-accent-red/5">
+              <h3 className="text-sm font-semibold text-accent-red mb-2">Feil i fasit</h3>
+              <p className="text-xs text-text-secondary mb-3">
+                SymPy fant utregninger som ikke stemmer. Slikt materiale leveres normalt ikke (grunnlov §1).
               </p>
               <div className="space-y-2 max-h-56 overflow-y-auto">
                 {result.mathVerification.incorrectClaims.map((c) => (
                   <div key={c.claimId} className="rounded-lg border border-accent-red/20 bg-accent-red/5 p-2">
                     <div className="text-[11px] font-mono text-accent-red mb-1">{c.latexExpression || c.claimId}</div>
                     <div className="text-xs text-text-secondary">{c.errorMessage || "Feil i påstand"}</div>
-                  </div>
-                ))}
-                {result.mathVerification.unparseableClaims.map((c) => (
-                  <div key={c.claimId} className="rounded-lg border border-accent-orange/20 bg-accent-orange/5 p-2">
-                    <div className="text-[11px] font-mono text-accent-orange mb-1">{c.latexExpression || c.claimId}</div>
-                    <div className="text-xs text-text-secondary">Kunne ikke parses automatisk</div>
                   </div>
                 ))}
               </div>

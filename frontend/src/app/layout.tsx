@@ -16,8 +16,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MateMaTeX 2.0",
-  description: "AI-drevet matematikkverksted for norske lærere",
+  title: "MateMaTeX — LK20-matte med verifisert fasit",
+  description:
+    "LK20-tilpassede matteoppgaver og prøver for norske VGS-lærere. SymPy-verifisert fasit. Ingen elevdata.",
 };
 
 export default function RootLayout({
