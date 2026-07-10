@@ -279,8 +279,8 @@ def run_math_blocked(state: PipelineState) -> PipelineState:
             "Materialet leveres ikke — fasiten er hellig (MateMaTeX grunnlov §1)."
         )
     state.warning_reason = "incorrect"
-    state.pdf_base64 = None
-    state.pdf_path = None
+    state.pdf_base64 = ""
+    state.pdf_path = ""
     state.current_agent = None
     state.total_duration_seconds = sum(s.duration_seconds for s in state.steps)
     state.total_tokens = sum(s.total_tokens for s in state.steps)
@@ -401,7 +401,8 @@ def finalize(state: PipelineState) -> PipelineState:
             "Materialet leveres ikke (MateMaTeX grunnlov §1)."
         )
         state.warning_reason = "incorrect"
-        state.pdf_base64 = None
+        state.pdf_base64 = ""
+        state.pdf_path = ""
         state.total_duration_seconds = sum(s.duration_seconds for s in state.steps)
         state.total_tokens = sum(s.total_tokens for s in state.steps)
         state.current_agent = None

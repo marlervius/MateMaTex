@@ -17,10 +17,36 @@ from app.pipeline.graph import (
     create_pipeline,
     finalize,
     route_final_math,
+    run_math_blocked,
     should_retry_content,
     should_retry_latex,
     should_retry_math,
 )
+
+
+def test_pipeline_state_normalizes_legacy_null_pdf_fields():
+    state = PipelineState.model_validate(
+        {
+            "request": {"grade": "8. trinn", "topic": "Algebra"},
+            "pdf_path": None,
+            "pdf_base64": None,
+        }
+    )
+    assert state.pdf_path == ""
+    assert state.pdf_base64 == ""
+
+
+def test_math_blocked_keeps_pdf_fields_as_strings():
+    state = PipelineState(
+        request=GenerationRequest(grade="8. trinn", topic="Algebra"),
+        math_verification=VerificationResult(claims_incorrect=1),
+        pdf_path="old.pdf",
+        pdf_base64="old",
+    )
+    result = run_math_blocked(state)
+    assert result.pdf_path == ""
+    assert result.pdf_base64 == ""
+    PipelineState.model_validate(result.model_dump())
 
 
 # ---------------------------------------------------------------------------

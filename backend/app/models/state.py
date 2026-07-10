@@ -12,7 +12,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Annotated, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -267,3 +267,9 @@ class PipelineState(BaseModel):
             "'fallback' | 'content_quality' (comma-separated)"
         ),
     )
+
+    @field_validator("pdf_path", "pdf_base64", mode="before")
+    @classmethod
+    def normalize_nullable_pdf_fields(cls, value: Any) -> str:
+        """Accept legacy snapshots that serialized absent PDF values as null."""
+        return "" if value is None else value
