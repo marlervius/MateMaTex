@@ -36,11 +36,16 @@ def math_errors_worth_author_retry(state: PipelineState) -> bool:
 
 def can_retry_math(state: PipelineState) -> bool:
     config = get_config()
+    # A confirmed fasit error must get at least one author correction pass.
+    # The noise heuristic below is useful for later passes on documents with
+    # many unparseable claims, but previously caused immediate failure after
+    # the first verifier run (with no opportunity for the author to fix it).
+    first_correction = state.math_verification_attempts == 1
     return (
         not state.math_verification.all_correct
         and state.math_verification.claims_incorrect > 0
         and state.math_verification_attempts < config.max_verification_retries
-        and math_errors_worth_author_retry(state)
+        and (first_correction or math_errors_worth_author_retry(state))
         and not over_time_budget(state)
         and author_run_count(state) < config.max_author_runs
     )

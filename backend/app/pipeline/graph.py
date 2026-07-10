@@ -271,12 +271,24 @@ def route_final_math(
 def run_math_blocked(state: PipelineState) -> PipelineState:
     """Terminal node when SymPy confirms incorrect fasit (grunnlov §1)."""
     incorrect = state.math_verification.claims_incorrect
+    error_details = []
+    for claim in state.math_verification.errors[:3]:
+        expression = claim.latex_expression.strip()
+        detail = claim.error_message.strip()
+        if expression:
+            error_details.append(
+                f"{expression}: {detail}" if detail else expression
+            )
+    details_suffix = (
+        " Kontroller: " + " | ".join(error_details) if error_details else ""
+    )
     state.status = PipelineStatus.FAILED
     if not state.error_message.startswith("Endelig fasitkontroll feilet"):
         state.error_message = (
             f"SymPy fant {incorrect} feil i fasiten etter "
-            f"{state.math_verification_attempts} forsøk. "
+            f"{state.math_verification_attempts} kontrollrunder. "
             "Materialet leveres ikke — fasiten er hellig (MateMaTeX grunnlov §1)."
+            f"{details_suffix}"
         )
     state.warning_reason = "incorrect"
     state.pdf_base64 = ""

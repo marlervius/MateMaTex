@@ -127,8 +127,8 @@ class TestMathRetryRouting:
         assert should_retry_math(state) == "content_quality"
         assert state.edited_latex_body == state.verified_latex_body
 
-    def test_blocked_when_mostly_unparseable_but_some_incorrect(self):
-        """Confirmed SymPy errors block even when many claims are unparseable."""
+    def test_first_correction_runs_when_mostly_unparseable(self):
+        """Confirmed errors always get one correction pass before blocking."""
         state = PipelineState(
             request=GenerationRequest(grade="8. trinn", topic="Algebra"),
             math_verification=VerificationResult(
@@ -139,7 +139,7 @@ class TestMathRetryRouting:
             ),
             math_verification_attempts=1,
         )
-        assert should_retry_math(state) == "math_blocked"
+        assert should_retry_math(state) == "author"
 
 
 class TestLatexRetryRouting:
