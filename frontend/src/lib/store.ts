@@ -13,6 +13,7 @@ export type PdfTheme = "default" | "calm" | "playful" | "highcontrast";
 
 export interface PdfStyle {
   theme: PdfTheme;
+  studentMode: boolean;
   accessible: boolean;
   dyslexia: boolean;
   highContrast: boolean;
@@ -104,6 +105,7 @@ export interface GenerationResult {
   warningReason: string;
   contentQuality?: ContentQualityReport;
   layoutReport?: LayoutReport;
+  layoutFixAttempts?: number;
   steps: AgentStep[];
   mathVerification: {
     claimsChecked: number;
@@ -178,6 +180,7 @@ const DEFAULT_REQUEST: GenerationRequest = {
   extraInstructions: "",
   pdfStyle: {
     theme: "default",
+    studentMode: false,
     accessible: false,
     dyslexia: false,
     highContrast: false,

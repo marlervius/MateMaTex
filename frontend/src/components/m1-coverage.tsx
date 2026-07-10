@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { fetchM1Report, type M1Report } from "@/lib/api";
 
-export function M1CoverageCard() {
+export function M1CoverageCard({ compact = false }: { compact?: boolean }) {
   const [report, setReport] = useState<M1Report | null>(null);
   const [error, setError] = useState("");
 
@@ -25,6 +25,7 @@ export function M1CoverageCard() {
   }
 
   if (!report) {
+    if (compact) return null;
     return (
       <section className="card mb-6 not-prose animate-pulse">
         <div className="h-4 bg-surface-elevated rounded w-1/3 mb-3" />
@@ -33,8 +34,31 @@ export function M1CoverageCard() {
     );
   }
 
+  if (compact) {
+    const top = report.levels[0];
+    if (!top) return null;
+    return (
+      <div className="rounded-lg border border-border bg-surface-elevated/40 px-4 py-3 mb-8 max-w-xl mx-auto text-center">
+        <p className="text-xs text-text-secondary mb-1">
+          {report.is_example ? "M1 (eksempeldata)" : "M1 empirisk dekning"}
+        </p>
+        <p className="text-sm">
+          <span className="font-display text-xl text-accent-green tabular-nums">
+            {top.green_pct}%
+          </span>
+          <span className="text-text-secondary ml-2">
+            SymPy-dekning · {top.level}
+          </span>
+        </p>
+        <a href="/personvern#m1" className="text-xs text-accent-blue hover:underline mt-1 inline-block">
+          Se full rapport
+        </a>
+      </div>
+    );
+  }
+
   return (
-    <section className="card mb-6 not-prose">
+    <section className="card mb-6 not-prose" id="m1">
       <h2 className="text-lg font-semibold mb-2">M1 — empirisk fasitdekning</h2>
       <p className="text-sm text-text-secondary mb-4">
         {report.is_example

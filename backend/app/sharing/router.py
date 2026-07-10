@@ -11,6 +11,7 @@ import hashlib
 import secrets
 import uuid
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import bcrypt
 import structlog
@@ -227,9 +228,8 @@ async def clone_shared(
 @router.get("/{token}/pdf")
 @limiter.limit("30/minute")
 async def get_shared_pdf(request: Request, token: str):
-    """Compile and return PDF for a shared generation (public via token)."""
+    """Return PDF for a shared generation (public via token). Cached after first compile."""
     import os
-    import tempfile
 
     link = _get_link(token)
     valid, error = _check_link_valid(link)
@@ -241,15 +241,28 @@ async def get_shared_pdf(request: Request, token: str):
     if not full_doc.strip():
         raise HTTPException(404, "Ingen PDF-kilde i delt ressurs")
 
+    from app.config import get_settings
     from app.latex.compiler import compile_to_pdf
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        out_path = os.path.join(tmpdir, "shared.pdf")
-        pdf_path = await asyncio.to_thread(compile_to_pdf, full_doc, out_path)
-        if not pdf_path or not os.path.isfile(pdf_path):
-            raise HTTPException(500, "Kunne ikke kompilere PDF")
-        with open(pdf_path, "rb") as f:
-            pdf_bytes = f.read()
+    doc_hash = hashlib.sha256(full_doc.encode("utf-8")).hexdigest()[:16]
+    cache_dir = Path(get_settings().output_dir) / "shared_pdfs"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_dir / f"{token}.pdf"
+
+    if link.get("pdf_doc_hash") == doc_hash and cache_path.is_file():
+        pdf_bytes = cache_path.read_bytes()
+    else:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = os.path.join(tmpdir, "shared.pdf")
+            pdf_path = await asyncio.to_thread(compile_to_pdf, full_doc, out_path)
+            if not pdf_path or not os.path.isfile(pdf_path):
+                raise HTTPException(500, "Kunne ikke kompilere PDF")
+            pdf_bytes = Path(pdf_path).read_bytes()
+        cache_path.write_bytes(pdf_bytes)
+        link["pdf_doc_hash"] = doc_hash
+        _persist_link(token, link)
 
     link["view_count"] = link.get("view_count", 0) + 1
     _persist_link(token, link)
@@ -261,6 +274,7 @@ async def get_shared_pdf(request: Request, token: str):
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'inline; filename="matematex-delt-{token[:8]}.pdf"',
-            "Cache-Control": "private, max-age=0",
+            "Cache-Control": "private, max-age=3600",
+            "ETag": f'"{doc_hash}"',
         },
     )

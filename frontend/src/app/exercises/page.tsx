@@ -81,6 +81,29 @@ export default function ExerciseBankPage() {
   // Filters
   const [filterDifficulty, setFilterDifficulty] = useState("");
   const [filterType, setFilterType] = useState("");
+  const [filterGrade, setFilterGrade] = useState("");
+  const [filterTopic, setFilterTopic] = useState("");
+
+  const GRADES = ["8. trinn", "9. trinn", "10. trinn", "VG1 1T", "VG2 R1"];
+
+  const applyClientFilters = useCallback(
+    (items: Exercise[]) =>
+      items.filter((ex) => {
+        if (filterDifficulty && ex.difficulty !== filterDifficulty) return false;
+        if (filterType && ex.exercise_type !== filterType) return false;
+        if (
+          filterGrade &&
+          !ex.grade_level.toLowerCase().includes(filterGrade.toLowerCase())
+        ) {
+          return false;
+        }
+        if (filterTopic && !ex.topic.toLowerCase().includes(filterTopic.toLowerCase())) {
+          return false;
+        }
+        return true;
+      }),
+    [filterDifficulty, filterType, filterGrade, filterTopic]
+  );
 
   // Hint / similar state (for the expanded card)
   const [hints, setHints] = useState<any>(null);
@@ -121,12 +144,15 @@ export default function ExerciseBankPage() {
     try {
       if (searchQuery.trim()) {
         const res = await searchExercises(searchQuery);
-        setExercises(res.exercises);
-        setTotal(res.total);
+        const filtered = applyClientFilters(res.exercises);
+        setExercises(filtered);
+        setTotal(filtered.length);
       } else {
         const res = await listExercises({
           difficulty: filterDifficulty || undefined,
           exercise_type: filterType || undefined,
+          grade_level: filterGrade || undefined,
+          topic: filterTopic || undefined,
           page,
           page_size: 21,
         });
@@ -139,7 +165,7 @@ export default function ExerciseBankPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, filterDifficulty, filterType, page]);
+  }, [searchQuery, filterDifficulty, filterType, filterGrade, filterTopic, page, applyClientFilters]);
 
   useEffect(() => {
     fetchExercises();
@@ -356,6 +382,24 @@ export default function ExerciseBankPage() {
               <option key={k} value={k}>{v}</option>
             ))}
           </select>
+
+          <select
+            value={filterGrade}
+            onChange={(e) => { setFilterGrade(e.target.value); setPage(1); }}
+            className="input !w-auto !py-1.5 !text-xs"
+          >
+            <option value="">Trinn</option>
+            {GRADES.map((g) => (
+              <option key={g} value={g}>{g}</option>
+            ))}
+          </select>
+
+          <input
+            value={filterTopic}
+            onChange={(e) => { setFilterTopic(e.target.value); setPage(1); }}
+            placeholder="Emne"
+            className="input !w-auto !py-1.5 !text-xs min-w-[7rem]"
+          />
 
           <div className="flex-1" />
 

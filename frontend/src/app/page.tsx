@@ -5,6 +5,8 @@ import { useAppStore } from "@/lib/store";
 import { GenerationWizard } from "@/components/generation-wizard";
 import { PipelineProgress } from "@/components/pipeline-progress";
 import { ResultView } from "@/components/result-view";
+import { TrustSignals } from "@/components/trust-signals";
+import { M1CoverageCard } from "@/components/m1-coverage";
 import { LatexEditor } from "@/components/latex-editor";
 import {
   compileLatex,
@@ -101,6 +103,8 @@ export default function HomePage() {
                 </a>
               </p>
             </div>
+            <TrustSignals />
+            <M1CoverageCard compact />
             <GenerationWizard />
           </motion.div>
         )}

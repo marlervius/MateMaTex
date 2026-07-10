@@ -259,6 +259,7 @@ export function ResultView() {
           print_optimized: format === "pdf-print",
           include_solutions: includeSolutionsExport,
           theme: result.generationMeta?.pdfStyle.theme,
+          student_mode: result.generationMeta?.pdfStyle.studentMode,
           accessible: result.generationMeta?.pdfStyle.accessible,
           dyslexia: result.generationMeta?.pdfStyle.dyslexia,
           high_contrast: result.generationMeta?.pdfStyle.highContrast,
@@ -667,6 +668,15 @@ export function ResultView() {
                   <p className="text-xs text-text-secondary mb-3">
                     Kontroller disse punktene før materialet brukes:
                   </p>
+                  {result.contentQuality.semanticScore !== undefined &&
+                    result.contentQuality.semanticScore < 100 && (
+                      <p className="text-xs text-text-secondary mb-3 rounded-md border border-accent-purple/20 bg-accent-purple/5 px-2 py-1.5">
+                        Semantisk vurdering: {result.contentQuality.semanticScore}/100
+                        {result.contentQuality.semanticSummary
+                          ? ` — ${result.contentQuality.semanticSummary}`
+                          : ""}
+                      </p>
+                    )}
                   <div className="space-y-1.5 max-h-48 overflow-y-auto">
                     {result.contentQuality.issues.slice(0, 12).map((issue, index) => (
                       <div
@@ -680,6 +690,12 @@ export function ResultView() {
                 </>
               )}
             </div>
+          )}
+
+          {(result.layoutFixAttempts ?? 0) > 0 && (
+            <p className="text-xs text-accent-blue mb-4 px-3 py-2 rounded-lg border border-accent-blue/20 bg-accent-blue/5">
+              Layout ble automatisk justert (figurstørrelse/linjebryting) før PDF ble levert.
+            </p>
           )}
 
           {result.layoutReport && result.layoutReport.issues.length > 0 && (

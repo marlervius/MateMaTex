@@ -57,6 +57,7 @@ export function ExportModal({ isOpen, onClose, latexContent, pdfStyle }: ExportM
           cover_topic: coverTopic,
           print_optimized: printOptimized,
           theme: pdfStyle?.theme,
+          student_mode: pdfStyle?.studentMode,
           accessible: pdfStyle?.accessible,
           dyslexia: pdfStyle?.dyslexia,
           high_contrast: pdfStyle?.highContrast,
@@ -96,8 +97,8 @@ export function ExportModal({ isOpen, onClose, latexContent, pdfStyle }: ExportM
         high_contrast: pdfStyle?.highContrast,
       };
       const [student, teacher] = await Promise.all([
-        exportPdf({ ...common, include_solutions: false }),
-        exportPdf({ ...common, include_solutions: true }),
+        exportPdf({ ...common, include_solutions: false, student_mode: true }),
+        exportPdf({ ...common, include_solutions: true, student_mode: false }),
       ]);
       if (!student.success || !teacher.success) {
         setError(

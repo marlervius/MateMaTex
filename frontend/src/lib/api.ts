@@ -104,6 +104,7 @@ export interface GenerateRequest {
   extra_instructions: string;
   pdf_style?: {
     theme: string;
+    student_mode?: boolean;
     accessible: boolean;
     dyslexia: boolean;
     high_contrast: boolean;
@@ -781,6 +782,7 @@ export async function exportPdf(params: {
   cover_topic?: string;
   print_optimized?: boolean;
   theme?: string;
+  student_mode?: boolean;
   accessible?: boolean;
   dyslexia?: boolean;
   high_contrast?: boolean;

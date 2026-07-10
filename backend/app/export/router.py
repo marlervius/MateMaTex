@@ -96,6 +96,7 @@ class PdfExportRequest(BaseModel):
     accessible: bool = False
     dyslexia: bool = False
     high_contrast: bool = False
+    student_mode: bool = False
 
     class Config:
         json_schema_extra = {
@@ -248,6 +249,7 @@ async def export_pdf(
         full_doc = wrap_with_preamble(
             full_body,
             theme=req.theme,
+            student_mode=req.student_mode,
             accessible=req.accessible,
             dyslexia=req.dyslexia,
             high_contrast=req.high_contrast or req.print_optimized,
@@ -281,7 +283,10 @@ async def export_pdf(
             retry_parts.append(stripped_body)
             retry_full = "\n".join(retry_parts)
             retry_doc = (
-                wrap_with_preamble(retry_full)
+                wrap_with_preamble(
+                    retry_full,
+                    student_mode=req.student_mode,
+                )
                 if r"\documentclass" not in retry_full
                 else retry_full
             )

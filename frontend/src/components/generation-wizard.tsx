@@ -295,6 +295,7 @@ export function GenerationWizard() {
         extra_instructions: request.extraInstructions,
         pdf_style: {
           theme: request.pdfStyle.theme,
+          student_mode: request.pdfStyle.studentMode,
           accessible: request.pdfStyle.accessible,
           dyslexia: request.pdfStyle.dyslexia,
           high_contrast: request.pdfStyle.highContrast,
@@ -880,8 +881,9 @@ export function GenerationWizard() {
                           </button>
                         ))}
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {[
+                          { key: "studentMode" as const, label: "Elevkopi (svarlinjer i oppgaver)" },
                           { key: "dyslexia" as const, label: "Dyslektikervennlig" },
                           { key: "highContrast" as const, label: "Høy kontrast" },
                           { key: "accessible" as const, label: "Norsk PDF-språk (skjermleser)" },

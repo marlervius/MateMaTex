@@ -108,6 +108,7 @@ export function mapApiResultToGenerationResult(
     warningReason: String(raw.warning_reason ?? ""),
     contentQuality: mapContentQuality(raw.content_quality),
     layoutReport: mapLayoutReport(raw.layout_report),
+    layoutFixAttempts: Number(raw.layout_fix_attempts ?? 0),
     steps,
     mathVerification: {
       claimsChecked: Number(mv.claims_checked ?? 0),

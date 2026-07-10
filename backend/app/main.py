@@ -463,6 +463,7 @@ async def get_result(
         "content_quality": state.content_quality.model_dump(),
         "latex_compilation": state.latex_compilation.model_dump(),
         "layout_report": state.layout_report.model_dump(),
+        "layout_fix_attempts": state.layout_fix_attempts,
         "steps": [s.model_dump() for s in state.steps],
         "total_duration_seconds": state.total_duration_seconds,
         "total_tokens": state.total_tokens,
