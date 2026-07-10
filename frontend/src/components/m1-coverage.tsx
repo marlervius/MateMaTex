@@ -16,6 +16,7 @@ export function M1CoverageCard({ compact = false }: { compact?: boolean }) {
   }, []);
 
   if (error) {
+    if (compact) return null;
     return (
       <section className="card mb-6 not-prose">
         <h2 className="text-lg font-semibold mb-2">M1 — empirisk fasitdekning</h2>

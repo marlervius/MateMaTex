@@ -13,6 +13,13 @@ def test_report_json_example_has_levels():
     assert data["topics"]
 
 
+def test_packaged_example_is_available_for_docker_build():
+    path = Path(__file__).resolve().parents[1] / "m1" / "m1_skjema_eksempel.csv"
+    assert path.is_file()
+    data = report_json(str(path))
+    assert {level["level"] for level in data["levels"]} == {"1T", "R1"}
+
+
 def test_resolve_prefers_example_when_primary_empty():
     root = Path(__file__).resolve().parents[2]
     primary = root / "m1_skjema.csv"

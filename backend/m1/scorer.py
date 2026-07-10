@@ -147,15 +147,30 @@ def _pct(part, whole):
 
 
 def resolve_m1_csv_path() -> Path:
-    """Prefer filled m1_skjema.csv; fall back to the documented example."""
+    """Prefer filled M1 data; fall back to the packaged example.
+
+    Render builds with ``backend/`` as Docker context, so CSV files in the
+    repository root are unavailable in production. Keep a packaged fallback
+    next to this module while still preferring real root-level data locally.
+    """
     root = Path(__file__).resolve().parents[2]
-    primary = root / "m1_skjema.csv"
-    example = root / "m1_skjema_eksempel.csv"
-    if primary.is_file():
-        rows = list(csv.DictReader(primary.open(encoding="utf-8")))
-        if any(r.get("nivaa", "").strip() for r in rows):
-            return primary
-    return example if example.is_file() else primary
+    package_dir = Path(__file__).resolve().parent
+
+    for primary in (root / "m1_skjema.csv", package_dir / "m1_skjema.csv"):
+        if primary.is_file():
+            with primary.open(encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+            if any(r.get("nivaa", "").strip() for r in rows):
+                return primary
+
+    for example in (
+        root / "m1_skjema_eksempel.csv",
+        package_dir / "m1_skjema_eksempel.csv",
+    ):
+        if example.is_file():
+            return example
+
+    raise FileNotFoundError("M1 scoring data is not installed")
 
 
 def report_json(csv_path: str) -> dict:
