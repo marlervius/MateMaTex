@@ -364,7 +364,11 @@ class MathChecker:
                 pass
 
             if getattr(diff, "free_symbols", None):
-                # M1: numeric spot-check before giving up (reduces false negatives)
+                # A symbolic equation can be an equation to solve/define, not an
+                # identity. Numeric disagreement therefore does NOT prove a
+                # fasit error unless the surrounding text explicitly claims an
+                # identity (e.g. "for alle x"). This prevents task equations
+                # such as 2^x = 10 from being blocked as false statements.
                 num = numeric_agreement(lhs, rhs, lhs.free_symbols | rhs.free_symbols)
                 if num is True:
                     claim.is_correct = True
@@ -372,8 +376,18 @@ class MathChecker:
                     claim.actual_result = str(lhs)
                     return
                 if num is False:
-                    claim.is_correct = False
-                    claim.error_message = f"LHS ({lhs}) ≠ RHS ({rhs}) (numeric check)"
+                    if self._context_claims_identity(claim.context):
+                        claim.is_correct = False
+                        claim.error_message = (
+                            f"LHS ({lhs}) ≠ RHS ({rhs}) for generic values "
+                            "(identity check)"
+                        )
+                    else:
+                        claim.is_correct = None
+                        claim.error_message = (
+                            "Symbolic equation may be a condition to solve; "
+                            "not treated as an identity"
+                        )
                     return
                 claim.is_correct = None
                 claim.error_message = "Contains unknown symbols; cannot verify numerically"
@@ -698,6 +712,20 @@ class MathChecker:
         if re.match(r"^[a-zA-Z]$", lhs) and not re.search(r"\d|[+\-*/^]", rhs):
             return True
         return False
+
+    @staticmethod
+    def _context_claims_identity(context: str) -> bool:
+        """Return True only when prose explicitly presents a symbolic identity."""
+        normalized = context.lower()
+        return any(
+            marker in normalized
+            for marker in (
+                "identitet",
+                "for alle",
+                "uansett verdien",
+                "alltid lik",
+            )
+        )
 
 
 def format_errors_for_agent(result: VerificationResult) -> str:

@@ -66,6 +66,26 @@ class TestEquationVerification:
         result = checker.verify(latex)
         assert result.claims_incorrect == 0
 
+    def test_equations_to_solve_are_not_identity_errors(self, checker: MathChecker):
+        latex = r"""
+        Den generelle andregradslikningen er $ax^2 + bx + c = 0$.
+        Løs eksponentiallikningene $2^x = 10$ og $10^x = 100$.
+        """
+        result = checker.verify(latex)
+        assert result.claims_incorrect == 0
+        assert result.claims_unparseable == 3
+
+    def test_correct_symbolic_identity_is_verified(self, checker: MathChecker):
+        latex = r"Identiteten $x + 1 = 1 + x$ gjelder for alle x."
+        result = checker.verify(latex)
+        assert result.claims_correct == 1
+        assert result.claims_incorrect == 0
+
+    def test_false_explicit_identity_is_incorrect(self, checker: MathChecker):
+        latex = r"Identiteten $x^2 = x$ gjelder for alle x."
+        result = checker.verify(latex)
+        assert result.claims_incorrect == 1
+
 
 class TestMultipleEquations:
     """Test documents with multiple equations."""
