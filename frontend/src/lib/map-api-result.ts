@@ -47,6 +47,8 @@ function mapContentQuality(raw: unknown): GenerationResult["contentQuality"] {
   return {
     passed: Boolean(report.passed),
     score: Number(report.score ?? 0),
+    semanticScore: Number(report.semantic_score ?? 100),
+    semanticSummary: String(report.semantic_summary ?? ""),
     missingSubtopics: Array.isArray(report.missing_subtopics)
       ? report.missing_subtopics.map(String)
       : [],

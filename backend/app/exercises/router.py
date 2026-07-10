@@ -69,6 +69,8 @@ class ExerciseUpdate(BaseModel):
     difficulty: str | None = None
     user_rating: int | None = Field(None, ge=1, le=5)
     keywords: list[str] | None = None
+    latex_content: str | None = Field(None, max_length=100_000)
+    solution: str | None = Field(None, max_length=50_000)
 
 
 class ExerciseListResponse(BaseModel):
@@ -317,7 +319,20 @@ async def update_exercise(exercise_id: str, update: ExerciseUpdate, user_id: str
     if not d or d.get("deleted") or not _user_owns(d, user_id):
         raise HTTPException(404, "Exercise not found")
 
-    for field, value in update.model_dump(exclude_unset=True).items():
+    payload = update.model_dump(exclude_unset=True)
+    new_latex = payload.pop("latex_content", None)
+    if new_latex is not None:
+        from app.verification.math_checker import MathChecker
+
+        verification = await asyncio.to_thread(MathChecker().verify, new_latex)
+        if verification.claims_incorrect > 0:
+            raise HTTPException(
+                422,
+                "Oppgaven ble ikke lagret — SymPy fant feil i fasiten.",
+            )
+        d["latex_content"] = new_latex
+
+    for field, value in payload.items():
         d[field] = value
     await store.save(d, user_id=user_id)
     return _dict_to_out(d)

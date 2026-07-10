@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { M1CoverageCard } from "@/components/m1-coverage";
 
 export const metadata = {
   title: "Personvern — MateMaTeX",
@@ -48,6 +49,8 @@ export default function PersonvernPage() {
           </li>
         </ul>
       </section>
+
+      <M1CoverageCard />
 
       <section className="card mb-6 not-prose">
         <h2 className="text-lg font-semibold mb-2">Verifisert fasit (SymPy)</h2>

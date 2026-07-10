@@ -169,6 +169,7 @@ from app.export.router import router as export_router
 from app.export.qr import router as qr_router
 from app.sharing.router import router as sharing_router
 from app.collaboration.router import router as collab_router
+from app.m1.router import router as m1_router
 
 app.include_router(exercises_router)
 app.include_router(editor_compile_router)
@@ -179,6 +180,7 @@ app.include_router(export_router)
 app.include_router(qr_router)
 app.include_router(sharing_router)
 app.include_router(collab_router)
+app.include_router(m1_router)
 
 _jobs = get_job_memory()
 _executor = ThreadPoolExecutor(max_workers=get_settings().max_concurrent_jobs)

@@ -109,9 +109,14 @@ def run_latex_fixer(state: PipelineState) -> PipelineState:
         llm = LLMInterface(temperature=0.1)  # Very low temp for precise fixes
 
         error_report = format_latex_errors_for_agent(state.latex_compilation)
+        layout_mode = bool(
+            state.layout_fix_attempts > 0
+            and any("Layout-problemer" in e for e in state.latex_compilation.errors)
+        )
         user_prompt = build_fixer_prompt(
             full_document=state.full_document,
             compilation_errors=error_report,
+            layout_mode=layout_mode,
         )
 
         response = llm.invoke(SYSTEM_PROMPT, user_prompt)

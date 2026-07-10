@@ -639,6 +639,52 @@ export async function ingestExercises(
   });
 }
 
+export async function updateExercise(
+  exerciseId: string,
+  patch: {
+    title?: string;
+    latex_content?: string;
+    solution?: string;
+    topic?: string;
+    grade_level?: string;
+  }
+): Promise<Exercise> {
+  return fetchJson(apiUrl(`exercises/${encodeURIComponent(exerciseId)}`), {
+    method: "PUT",
+    body: JSON.stringify(patch),
+  });
+}
+
+export interface M1LevelReport {
+  level: string;
+  total_points: number;
+  green_pct: number;
+  fixable_pct: number;
+  realistic_ceiling_pct: number;
+  red_pct: number;
+}
+
+export interface M1Report {
+  source: string;
+  is_example: boolean;
+  levels: M1LevelReport[];
+  topics: Array<{ level: string; topic: string; total_points: number; green_pct: number }>;
+}
+
+export async function fetchM1Report(): Promise<M1Report> {
+  return fetchJson(apiUrl("m1/report"));
+}
+
+export async function fetchSharedPdfObjectUrl(token: string): Promise<string> {
+  const url =
+    typeof window !== "undefined"
+      ? `/api/backend/sharing/${encodeURIComponent(token)}/pdf`
+      : apiUrl(`sharing/${encodeURIComponent(token)}/pdf`);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+  return URL.createObjectURL(await res.blob());
+}
+
 export async function findSimilarExercises(exerciseId: string, limit: number = 5): Promise<Exercise[]> {
   return fetchJson(`${apiUrl(`exercises/${exerciseId}/similar`)}?limit=${limit}`);
 }

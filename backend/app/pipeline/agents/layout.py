@@ -31,6 +31,19 @@ def run_layout(state: PipelineState) -> PipelineState:
         )
         state.layout_report = report
         step.output_summary = f"Layout-score {report.score}/100 — {report.summary}"
+        bad = [
+            i
+            for i in report.issues
+            if i.kind in ("oversized_float", "overfull_hbox") and i.severity != "info"
+        ]
+        if report.score < 75 and bad and state.layout_fix_attempts < 1:
+            state.layout_fix_requested = True
+            logger.info(
+                "layout_fix_scheduled",
+                job_id=state.job_id,
+                score=report.score,
+                issues=len(bad),
+            )
         logger.info(
             "layout_qa",
             job_id=state.job_id,

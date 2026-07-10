@@ -96,6 +96,65 @@ def _strip_latex_commands(text: str, include_solutions: bool = True) -> str:
     return text.strip()
 
 
+def _extract_body(latex_content: str, include_solutions: bool = True) -> str:
+    """Document body with inline $...$ preserved for Word math runs."""
+    text = re.sub(r'%.*$', '', latex_content, flags=re.MULTILINE)
+    doc_begin = text.find(r"\begin{document}")
+    if doc_begin >= 0:
+        text = text[doc_begin + len(r"\begin{document}") :]
+    doc_end = text.find(r"\end{document}")
+    if doc_end >= 0:
+        text = text[:doc_end]
+    if not include_solutions:
+        text = _DOCX_SOLUTION_ENV.sub("", text)
+        text = _DOCX_SOLUTION_SECTION.sub("", text)
+    text = re.sub(r"\\begin\{[^}]*\}(?:\{[^}]*\})?", "", text)
+    text = re.sub(r"\\end\{[^}]*\}", "", text)
+    text = re.sub(r"\\section\*?\{([^}]*)\}", r"\n\n\1\n", text)
+    text = re.sub(r"\\subsection\*?\{([^}]*)\}", r"\n\1\n", text)
+    return text.strip()
+
+
+def _latex_inline_to_readable(expr: str) -> str:
+    """Convert inline LaTeX to readable Unicode via MathML."""
+    try:
+        import xml.etree.ElementTree as ET
+
+        from latex2mathml.converter import convert
+
+        mathml = convert(expr.strip())
+        plain = "".join(ET.fromstring(mathml).itertext())
+        return plain.strip() or expr
+    except Exception:
+        return expr.replace("\\", "")
+
+
+def _add_word_paragraph(doc, line: str) -> None:
+    """Paragraph with Cambria Math runs for $...$ segments."""
+    from docx.shared import Pt
+
+    if line.startswith("• "):
+        doc.add_paragraph(line[2:], style="List Bullet")
+        return
+
+    if "$" not in line:
+        doc.add_paragraph(line)
+        return
+
+    p = doc.add_paragraph()
+    parts = re.split(r"\$([^$]+)\$", line)
+    for idx, part in enumerate(parts):
+        if not part:
+            continue
+        if idx % 2 == 1:
+            run = p.add_run(_latex_inline_to_readable(part))
+            run.italic = True
+            run.font.name = "Cambria Math"
+            run.font.size = Pt(11)
+        else:
+            p.add_run(part)
+
+
 def latex_to_docx(
     latex_content: str,
     title: str = "Oppgaveark",
@@ -131,38 +190,25 @@ def latex_to_docx(
 
     doc.add_paragraph()  # Spacer
 
-    # Convert content
-    plain_text = _strip_latex_commands(latex_content, include_solutions=include_solutions)
-
-    # Split into sections
-    sections = re.split(r'\n\n+', plain_text)
-
-    for section in sections:
+    body = _extract_body(latex_content, include_solutions=include_solutions)
+    body = re.sub(r"\$\$([^$]+)\$\$", r" $\1$ ", body)
+    for section in re.split(r"\n\n+", body):
         section = section.strip()
         if not section:
             continue
-
-        # Check if it's a heading-like line (short, no bullet)
-        lines = section.split('\n')
+        lines = section.split("\n")
         first_line = lines[0].strip()
-
-        if len(lines) == 1 and len(first_line) < 80 and not first_line.startswith('•'):
-            # Likely a heading
-            if any(word in first_line.lower() for word in ['oppgave', 'eksempel', 'definisjon', 'løsning']):
+        if len(lines) == 1 and len(first_line) < 80 and not first_line.startswith("•"):
+            if any(
+                word in first_line.lower()
+                for word in ["oppgave", "eksempel", "definisjon", "løsning", "del 1", "del 2"]
+            ):
                 doc.add_heading(first_line, level=2)
                 continue
-
-        # Regular paragraph
         for line in lines:
             line = line.strip()
-            if not line:
-                continue
-
-            if line.startswith('• '):
-                # Bullet point
-                doc.add_paragraph(line[2:], style='List Bullet')
-            else:
-                doc.add_paragraph(line)
+            if line:
+                _add_word_paragraph(doc, line)
 
     # Save to bytes
     buf = io.BytesIO()

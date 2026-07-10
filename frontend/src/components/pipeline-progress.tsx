@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useAppStore } from "@/lib/store";
+import { agentLabel } from "@/lib/agent-labels";
 import { abortGeneration, closeActiveStream } from "@/lib/api";
 import {
   GraduationCap,
@@ -79,6 +80,12 @@ const AGENT_INFO: Record<
     description: "Sjekker pensumdekning og kapitteldybde...",
     color: "accent-teal",
   },
+  final_math_verifier: {
+    name: "Endelig fasitkontroll",
+    icon: <Calculator size={18} />,
+    description: "Verifiserer fasit etter redigering...",
+    color: "accent-purple",
+  },
   latex_fallback: {
     name: "Forenkling (Fallback)",
     icon: <Wrench size={18} />,
@@ -98,6 +105,7 @@ const BASE_PIPELINE_ORDER = [
   "author",
   "math_verifier",
   "editor",
+  "final_math_verifier",
   "content_quality",
   "tikz_validator",
   "table_validator",
@@ -147,7 +155,12 @@ export function PipelineProgress() {
       : 5;
   const remaining = Math.max(0, (totalAgents - completedCount) * avgDuration);
   const currentInfo = currentAgent
-    ? AGENT_INFO[currentAgent]
+    ? AGENT_INFO[currentAgent] || {
+        name: agentLabel(currentAgent),
+        icon: <Loader2 size={18} className="animate-spin" />,
+        description: "Jobber...",
+        color: "accent-blue",
+      }
     : null;
   const liveStatus = currentInfo
     ? `${currentInfo.name} jobber: ${currentInfo.description}`
@@ -198,7 +211,11 @@ export function PipelineProgress() {
 
         <div className="space-y-1">
           {displayOrder.map((agentKey, index) => {
-            const info = AGENT_INFO[agentKey] || { name: agentKey, description: "Jobber...", color: "accent-blue" };
+            const info = AGENT_INFO[agentKey] || {
+              name: agentLabel(agentKey),
+              description: "Fullført",
+              color: "accent-blue",
+            };
             const isCompleted = completedAgents.has(agentKey);
             const isCurrent = currentAgent === agentKey;
             const step = steps.find((s) => s.agent === agentKey);

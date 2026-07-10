@@ -146,6 +146,8 @@ class ContentQualityReport(BaseModel):
     graph_count: int = 0
     exercise_count: int = 0
     body_chars: int = 0
+    semantic_score: int = Field(default=100, ge=0, le=100)
+    semantic_summary: str = ""
 
 
 class LayoutReport(BaseModel):
@@ -241,6 +243,8 @@ class PipelineState(BaseModel):
         default=False,
         description="Skip the LLM editor pass once (after a quality retry author run)",
     )
+    layout_fix_attempts: int = 0
+    layout_fix_requested: bool = False
 
     # --- Observability ---
     steps: list[AgentStep] = Field(default_factory=list)

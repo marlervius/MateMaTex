@@ -38,6 +38,22 @@ def run_content_quality(state: PipelineState) -> PipelineState:
 
     try:
         report = evaluate_content_quality(body, state.request)
+
+        if state.request.material_type == "kapittel":
+            from app.verification.semantic_quality import evaluate_semantic_quality
+
+            sem_score, sem_issues = evaluate_semantic_quality(body, state.request)
+            report.semantic_score = sem_score
+            if sem_issues:
+                report.issues.extend(sem_issues)
+                if sem_score < 70:
+                    report.score = min(report.score, sem_score)
+                    report.passed = report.passed and sem_score >= 70
+                report.semantic_summary = (
+                    f"Semantisk vurdering: {sem_score}/100 "
+                    f"({len(sem_issues)} observasjoner)"
+                )
+
         state.content_quality = report
 
         if report.passed:

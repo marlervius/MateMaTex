@@ -6,6 +6,7 @@ Supports: password protection, expiry dates, view limits, cloning.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import secrets
 import uuid
@@ -221,3 +222,45 @@ async def clone_shared(
     original = get_resource_snapshot(link["resource_type"], link["resource_id"]) or {}
     store_shared_resource(new_id, {**original, "id": new_id, "cloned_from": link["resource_id"]})
     return CloneResponse(success=True, new_resource_id=new_id)
+
+
+@router.get("/{token}/pdf")
+@limiter.limit("30/minute")
+async def get_shared_pdf(request: Request, token: str):
+    """Compile and return PDF for a shared generation (public via token)."""
+    import os
+    import tempfile
+
+    link = _get_link(token)
+    valid, error = _check_link_valid(link)
+    if not valid:
+        raise HTTPException(410, error)
+
+    content = _resolve_shared_content(link)
+    full_doc = str(content.get("full_document") or "")
+    if not full_doc.strip():
+        raise HTTPException(404, "Ingen PDF-kilde i delt ressurs")
+
+    from app.latex.compiler import compile_to_pdf
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        out_path = os.path.join(tmpdir, "shared.pdf")
+        pdf_path = await asyncio.to_thread(compile_to_pdf, full_doc, out_path)
+        if not pdf_path or not os.path.isfile(pdf_path):
+            raise HTTPException(500, "Kunne ikke kompilere PDF")
+        with open(pdf_path, "rb") as f:
+            pdf_bytes = f.read()
+
+    link["view_count"] = link.get("view_count", 0) + 1
+    _persist_link(token, link)
+
+    from fastapi.responses import Response
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="matematex-delt-{token[:8]}.pdf"',
+            "Cache-Control": "private, max-age=0",
+        },
+    )

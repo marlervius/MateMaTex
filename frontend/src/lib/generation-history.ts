@@ -14,6 +14,8 @@ export interface HistoryEntry {
   grade: string;
   materialType: string;
   favorite: boolean;
+  status?: "completed" | "completed_with_warnings" | "failed";
+  warningReason?: string;
   /** Full kopi av skjema for «Lag lignende» og visning */
   request: GenerationRequest;
 }

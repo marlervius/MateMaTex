@@ -76,6 +76,8 @@ export interface LayoutReport {
 export interface ContentQualityReport {
   passed: boolean;
   score: number;
+  semanticScore?: number;
+  semanticSummary?: string;
   missingSubtopics: string[];
   issues: Array<{
     code: string;

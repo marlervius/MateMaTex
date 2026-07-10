@@ -318,6 +318,13 @@ export function GenerationWizard() {
             grade: snapshot.grade,
             materialType: snapshot.materialType,
             favorite: false,
+            status:
+              mapped.status === "completed" ||
+              mapped.status === "completed_with_warnings" ||
+              mapped.status === "failed"
+                ? mapped.status
+                : undefined,
+            warningReason: mapped.warningReason,
             request: { ...snapshot },
           });
         }

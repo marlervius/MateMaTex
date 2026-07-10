@@ -18,6 +18,7 @@ import csv
 import random
 import sys
 from collections import defaultdict
+from pathlib import Path
 
 import sympy as sp
 from sympy.parsing.sympy_parser import (
@@ -143,6 +144,53 @@ def aggregate(csv_path: str):
 
 def _pct(part, whole):
     return 0.0 if whole == 0 else 100 * part / whole
+
+
+def resolve_m1_csv_path() -> Path:
+    """Prefer filled m1_skjema.csv; fall back to the documented example."""
+    root = Path(__file__).resolve().parents[2]
+    primary = root / "m1_skjema.csv"
+    example = root / "m1_skjema_eksempel.csv"
+    if primary.is_file():
+        rows = list(csv.DictReader(primary.open(encoding="utf-8")))
+        if any(r.get("nivaa", "").strip() for r in rows):
+            return primary
+    return example if example.is_file() else primary
+
+
+def report_json(csv_path: str) -> dict:
+    """Structured M1 report for API/UI consumption."""
+    by_level, by_topic = aggregate(csv_path)
+    levels = []
+    for lvl, d in sorted(by_level.items()):
+        tot = d["poeng"]
+        green = _pct(d["groenn"], tot)
+        fixable = _pct(d["fiksbar"], tot)
+        levels.append(
+            {
+                "level": lvl,
+                "total_points": tot,
+                "green_pct": round(green, 1),
+                "fixable_pct": round(fixable, 1),
+                "realistic_ceiling_pct": round(green + fixable, 1),
+                "red_pct": round(_pct(d["roed"], tot), 1),
+            }
+        )
+    topics = []
+    for (lvl, emne), d in sorted(by_topic.items()):
+        topics.append(
+            {
+                "level": lvl,
+                "topic": emne,
+                "total_points": d["poeng"],
+                "green_pct": round(_pct(d["groenn"], d["poeng"]), 1),
+            }
+        )
+    return {
+        "source": Path(csv_path).name,
+        "levels": levels,
+        "topics": topics,
+    }
 
 
 def report(csv_path: str):

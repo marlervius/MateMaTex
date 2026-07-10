@@ -174,6 +174,33 @@ async def differentiate_content(
     except Exception as e:
         logger.warning("differentiation_verification_skipped", error=str(e))
 
+    try:
+        from app.models.state import GenerationRequest
+        from app.verification.content_quality import evaluate_content_quality
+
+        diff_req = GenerationRequest(
+            grade=grade or "8. trinn",
+            topic=topic or "Matematikk",
+            material_type="differensiert",
+            num_exercises=6,
+        )
+        for level, content in [
+            ("basic", output.basic_latex),
+            ("standard", output.standard_latex),
+            ("advanced", output.advanced_latex),
+        ]:
+            if content:
+                q = evaluate_content_quality(content, diff_req)
+                if not q.passed:
+                    logger.warning(
+                        "differentiation_quality_gaps",
+                        level=level,
+                        score=q.score,
+                        issues=len(q.issues),
+                    )
+    except Exception as e:
+        logger.warning("differentiation_quality_skipped", error=str(e))
+
     logger.info(
         "differentiation_completed",
         basic_len=len(output.basic_latex),

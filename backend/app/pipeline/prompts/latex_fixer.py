@@ -38,13 +38,24 @@ OUTPUTFORMAT (KRITISK):
 def build_fixer_prompt(
     full_document: str,
     compilation_errors: str,
+    *,
+    layout_mode: bool = False,
 ) -> str:
     """Build the user prompt for the LaTeX fixer agent."""
+    layout_hint = ""
+    if layout_mode:
+        layout_hint = (
+            "\n\nDette er en LAYOUT-retting (dokumentet kompilerer, men figurer/tabber "
+            "stikker utenfor margen). Bruk \\resizebox{\\linewidth}{!}{...} på store "
+            "figurer og sett width=0.85\\linewidth på pgfplots axis der det trengs. "
+            "Ikke endre matematisk innhold.\n"
+        )
     return f"""\
 Følgende LaTeX-dokument feiler ved kompilering:
 
 FEILMELDINGER:
 {compilation_errors}
+{layout_hint}
 
 DOKUMENT:
 {full_document}

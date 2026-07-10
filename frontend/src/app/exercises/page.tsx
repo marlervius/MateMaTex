@@ -24,6 +24,7 @@ import {
   findSimilarExercises,
   generateVariant,
   generateHints,
+  updateExercise,
   downloadBase64,
   publishToSchool,
   type Exercise,
@@ -251,6 +252,19 @@ export default function ExerciseBankPage() {
     }
   };
 
+  const handleSaveExercise = async (id: string, latexContent: string) => {
+    setActionLoading("save");
+    setActionError("");
+    try {
+      const updated = await updateExercise(id, { latex_content: latexContent });
+      setExercises((prev) => prev.map((e) => (e.id === id ? updated : e)));
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : "Kunne ikke lagre oppgave");
+    } finally {
+      setActionLoading("");
+    }
+  };
+
   const removeFilter = (filter: string) => {
     if (filter.startsWith("diff:")) setFilterDifficulty("");
     if (filter.startsWith("type:")) setFilterType("");
@@ -444,6 +458,7 @@ export default function ExerciseBankPage() {
                   onPublish={() => handlePublishToSchool(ex.id)}
                   onHints={() => handleGenerateHints(ex)}
                   onSimilar={() => handleFindSimilar(ex)}
+                  onSaveLatex={(latex) => handleSaveExercise(ex.id, latex)}
                   onAddToExam={() => {
                     if (!examExercises.find((e) => e.id === ex.id)) {
                       setExamExercises([...examExercises, ex]);
@@ -561,6 +576,7 @@ function ExerciseCard({
   onPublish,
   onHints,
   onSimilar,
+  onSaveLatex,
   onAddToExam,
   hints,
   similar,
@@ -576,6 +592,7 @@ function ExerciseCard({
   onPublish: () => void;
   onHints: () => void;
   onSimilar: () => void;
+  onSaveLatex: (latex: string) => void;
   onAddToExam: () => void;
   hints: any;
   similar: Exercise[] | null;
@@ -583,6 +600,12 @@ function ExerciseCard({
   buildMode: boolean;
 }) {
   const diff = DIFFICULTY_CONFIG[exercise.difficulty] || DIFFICULTY_CONFIG.middels;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(exercise.latex_content);
+
+  useEffect(() => {
+    setDraft(exercise.latex_content);
+  }, [exercise.latex_content]);
 
   return (
     <div
@@ -641,14 +664,43 @@ function ExerciseCard({
         <SmallBtn label="Variant" onClick={onVariant} loading={actionLoading === "variant"} />
         <SmallBtn label="Skole" onClick={onPublish} loading={actionLoading === "publish"} />
         <SmallBtn label="Hint" onClick={onHints} loading={actionLoading === "hints"} />
+        <SmallBtn
+          label={editing ? "Avbryt" : "Rediger"}
+          onClick={() => setEditing((v) => !v)}
+        />
         {buildMode && (
           <SmallBtn label="+ Eksamen" onClick={onAddToExam} accent />
         )}
       </div>
 
-      {/* Expanded: similar exercises */}
+      {/* Expanded: edit / similar */}
       <AnimatePresence>
-        {isExpanded && similar && (
+        {isExpanded && editing && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mt-3 pt-3 border-t border-border space-y-2"
+          >
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              className="input font-mono text-xs min-h-[120px] w-full"
+            />
+            <button
+              type="button"
+              className="btn-primary text-xs"
+              disabled={actionLoading === "save"}
+              onClick={() => {
+                onSaveLatex(draft);
+                setEditing(false);
+              }}
+            >
+              {actionLoading === "save" ? "Lagrer…" : "Lagre (SymPy-sjekk)"}
+            </button>
+          </motion.div>
+        )}
+        {isExpanded && similar && !editing && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}

@@ -43,6 +43,8 @@ import {
   isSuccessfulStatus,
   warningReasonLabel,
 } from "@/lib/map-api-result";
+import { agentLabel } from "@/lib/agent-labels";
+import { PdfViewer } from "@/components/pdf-viewer";
 import { ExportModal } from "@/components/export-modal";
 
 type Tab = "document" | "editor" | "differentiation";
@@ -376,7 +378,12 @@ export function ResultView() {
   const handleIngest = async () => {
     setIngestStatus("loading");
     try {
-      const res = await ingestExercises(result.fullDocument);
+      const res = await ingestExercises(
+        result.fullDocument,
+        result.generationMeta?.topic || request.topic,
+        result.generationMeta?.grade || request.grade,
+        result.jobId
+      );
       setIngestStatus(`${res.ingested} oppgaver lagret`);
     } catch {
       setIngestStatus("Feil");
@@ -613,6 +620,15 @@ export function ResultView() {
               {result.contentQuality.passed ? (
                 <p className="text-xs text-text-secondary">
                   Struktur og valgte pensumområder bestod den automatiske innholdskontrollen.
+                  {result.contentQuality.semanticScore !== undefined &&
+                    result.contentQuality.semanticScore < 100 && (
+                      <span className="block mt-1">
+                        Semantisk vurdering: {result.contentQuality.semanticScore}/100
+                        {result.contentQuality.semanticSummary
+                          ? ` — ${result.contentQuality.semanticSummary}`
+                          : ""}
+                      </span>
+                    )}
                 </p>
               ) : (
                 <>
@@ -740,18 +756,12 @@ export function ResultView() {
                 {/* PDF Preview */}
                 <div className="card !p-0 overflow-hidden">
                   {result.pdfBase64 ? (
-                    <iframe
-                      title="PDF-forhåndsvisning"
+                    <PdfViewer
                       src={`data:application/pdf;base64,${result.pdfBase64}`}
-                      className="w-full min-h-[520px] border-0 bg-white"
+                      title="Generert PDF"
                     />
                   ) : pdfPreviewUrl ? (
-                    <iframe
-                      src={pdfPreviewUrl}
-                      title="PDF-forhåndsvisning"
-                      className="w-full"
-                      style={{ height: "75vh", border: 0 }}
-                    />
+                    <PdfViewer src={pdfPreviewUrl} title="Generert PDF" />
                   ) : (
                     <div className="bg-surface-elevated p-8 text-center min-h-[400px] flex flex-col items-center justify-center gap-3">
                       <FileText size={48} className="opacity-30 text-text-muted" />
@@ -820,7 +830,7 @@ export function ResultView() {
                         key={i}
                         className="flex items-center justify-between text-sm py-2 border-b border-border last:border-0"
                       >
-                        <span className="text-text-secondary">{step.agent}</span>
+                        <span className="text-text-secondary">{agentLabel(step.agent)}</span>
                         <div className="flex items-center gap-3 text-xs text-text-muted">
                           {step.error && (
                             <span className="text-accent-red">{step.error}</span>

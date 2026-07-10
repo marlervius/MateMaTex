@@ -63,6 +63,23 @@ export default function HistoryPage() {
                   {entry.grade} · {entry.materialType} ·{" "}
                   {new Date(entry.createdAt).toLocaleString("nb-NO")}
                 </p>
+                {entry.status && (
+                  <span
+                    className={`inline-block mt-2 text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                      entry.status === "completed"
+                        ? "bg-accent-green/15 text-accent-green"
+                        : entry.status === "completed_with_warnings"
+                          ? "bg-accent-orange/15 text-accent-orange"
+                          : "bg-accent-red/15 text-accent-red"
+                    }`}
+                  >
+                    {entry.status === "completed"
+                      ? "OK"
+                      : entry.status === "completed_with_warnings"
+                        ? "Advarsel"
+                        : "Feilet"}
+                  </span>
+                )}
                 {entry.request.competencyGoals.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-2">
                     {entry.request.competencyGoals.slice(0, 3).map((goal) => (

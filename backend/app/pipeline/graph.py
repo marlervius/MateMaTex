@@ -367,6 +367,25 @@ def _apply_differentiation(state: PipelineState) -> None:
     state.full_document = wrap_with_style(combined_body, state.request.pdf_style)
 
 
+def should_route_after_layout(state: PipelineState) -> Literal["latex_fixer", "finalize"]:
+    """One layout-driven fix pass before delivery (resize floats / overfull boxes)."""
+    if state.layout_fix_requested and state.layout_fix_attempts < 1:
+        state.layout_fix_attempts += 1
+        state.layout_fix_requested = False
+        hints = [
+            i.detail
+            for i in state.layout_report.issues
+            if i.kind in ("oversized_float", "overfull_hbox")
+        ][:6]
+        state.latex_compilation.errors = [
+            "Layout-problemer — reduser figur/tabell-bredde med \\resizebox eller mindre axis width:",
+            *hints,
+        ]
+        logger.info("layout_route_to_fixer", job_id=state.job_id, hints=len(hints))
+        return "latex_fixer"
+    return "finalize"
+
+
 def finalize(state: PipelineState) -> PipelineState:
     """
     Final node: assemble the complete document and compute summary stats.
@@ -607,8 +626,15 @@ def create_pipeline() -> StateGraph:
     # Fallback runs layout QA too, then finalize
     graph.add_edge("latex_fallback", "layout")
 
-    # Layout QA → finalize → END
-    graph.add_edge("layout", "finalize")
+    # Layout QA → optional fixer → finalize → END
+    graph.add_conditional_edges(
+        "layout",
+        should_route_after_layout,
+        {
+            "latex_fixer": "latex_fixer",
+            "finalize": "finalize",
+        },
+    )
     graph.add_edge("finalize", END)
 
     return graph

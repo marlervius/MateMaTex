@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Lock, AlertTriangle, Download, Copy, FileText } from "lucide-react";
-import { getShared, cloneShared, downloadSharedLatex } from "@/lib/api";
+import { getShared, cloneShared, downloadSharedLatex, fetchSharedPdfObjectUrl } from "@/lib/api";
+import { PdfViewer } from "@/components/pdf-viewer";
 
 interface SharedResource {
   success: boolean;
@@ -25,6 +26,8 @@ export default function SharedResourcePage({
   const [password, setPassword] = useState("");
   const [actionLoading, setActionLoading] = useState("");
   const [cloneMessage, setCloneMessage] = useState("");
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [pdfError, setPdfError] = useState("");
 
   const loadResource = useCallback(
     async (pwd?: string) => {
@@ -63,6 +66,23 @@ export default function SharedResourcePage({
   useEffect(() => {
     loadResource();
   }, [loadResource]);
+
+  useEffect(() => {
+    if (!resource?.content?.full_document) return;
+    let revoke: string | null = null;
+    setPdfError("");
+    fetchSharedPdfObjectUrl(params.token)
+      .then((url) => {
+        revoke = url;
+        setPdfUrl(url);
+      })
+      .catch((e: unknown) => {
+        setPdfError(e instanceof Error ? e.message : "Kunne ikke laste PDF");
+      });
+    return () => {
+      if (revoke) URL.revokeObjectURL(revoke);
+    };
+  }, [resource, params.token]);
 
   const handleDownload = () => {
     if (!resource?.content) return;
@@ -166,8 +186,8 @@ export default function SharedResourcePage({
           </div>
           <div className="flex gap-2">
             {resource.allow_download && (
-              <button type="button" onClick={handleDownload} className="btn-primary">
-                <Download size={14} /> Last ned
+              <button type="button" onClick={handleDownload} className="btn-secondary">
+                <Download size={14} /> LaTeX
               </button>
             )}
             {resource.allow_clone && (
@@ -185,12 +205,22 @@ export default function SharedResourcePage({
         </div>
       </div>
 
-      <div className="card">
-        <h2 className="text-sm font-medium mb-3">Innhold</h2>
-        <pre className="text-xs font-mono whitespace-pre-wrap text-text-secondary max-h-[60vh] overflow-y-auto">
+      {pdfUrl ? (
+        <div className="card !p-0 overflow-hidden mb-6">
+          <PdfViewer src={pdfUrl} title="Delt PDF" />
+        </div>
+      ) : pdfError ? (
+        <p className="text-sm text-text-secondary mb-4">{pdfError}</p>
+      ) : (
+        <p className="text-sm text-text-muted mb-4">Laster PDF-forhåndsvisning…</p>
+      )}
+
+      <details className="card">
+        <summary className="text-sm font-medium cursor-pointer">Vis LaTeX-kilde</summary>
+        <pre className="text-xs font-mono whitespace-pre-wrap text-text-secondary max-h-[40vh] overflow-y-auto mt-3">
           {String(resource.content.full_document || JSON.stringify(resource.content, null, 2))}
         </pre>
-      </div>
+      </details>
     </div>
   );
 }
