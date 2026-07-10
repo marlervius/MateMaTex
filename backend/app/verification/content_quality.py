@@ -36,7 +36,8 @@ def evaluate_content_quality(
     Evaluate LaTeX body. Strict for material_type=kapittel; lenient otherwise.
     """
     body = latex_body or ""
-    text_lower = body.lower()
+    semantic_body = re.sub(r"(?m)(?<!\\)%.*$", "", body)
+    text_lower = semantic_body.lower()
     spec = get_topic_coverage_spec(
         request.grade,
         request.topic,
@@ -56,7 +57,7 @@ def evaluate_content_quality(
     exercise_count = _count_pattern(body, r"\\begin\{taskbox\}")
     if exercise_count == 0:
         exercise_count = _count_pattern(body, r"\\textbf\{Oppgave\s+\d+")
-    body_chars = len(body)
+    body_chars = len(re.sub(r"\s+", " ", semantic_body).strip())
 
     report = ContentQualityReport(
         section_count=section_count,
@@ -66,9 +67,61 @@ def evaluate_content_quality(
         body_chars=body_chars,
     )
 
+    if request.material_type == "arbeidsark":
+        if request.include_exercises and exercise_count < min(3, request.num_exercises):
+            issues.append(
+                ContentQualityIssue(
+                    code="few_exercises",
+                    message=f"For få oppgaver i arbeidsarket: {exercise_count}",
+                )
+            )
+        if request.include_theory and not _has_any(
+            text_lower, ["\\begin{husk}", "\\begin{regel}", "\\begin{eksempel}"]
+        ):
+            issues.append(
+                ContentQualityIssue(
+                    code="missing_theory",
+                    message="Arbeidsarket mangler kort teori, regel eller eksempel.",
+                )
+            )
+    elif request.material_type == "prøve":
+        if not re.search(r"\\section\*?\{[^}]*del\s*1", body, re.IGNORECASE):
+            issues.append(
+                ContentQualityIssue(
+                    code="missing_exam_part_1",
+                    message="Prøven mangler Del 1 uten hjelpemidler.",
+                )
+            )
+        if not re.search(r"\\section\*?\{[^}]*del\s*2", body, re.IGNORECASE):
+            issues.append(
+                ContentQualityIssue(
+                    code="missing_exam_part_2",
+                    message="Prøven mangler Del 2 med hjelpemidler.",
+                )
+            )
+        if "poeng" not in text_lower:
+            issues.append(
+                ContentQualityIssue(
+                    code="missing_points",
+                    message="Prøven mangler poengangivelse eller poengskjema.",
+                )
+            )
+    elif request.material_type == "differensiert":
+        for level in ("grunnleggende", "standard", "avansert"):
+            if not re.search(
+                rf"\\section\*?\{{[^}}]*{level}", body, re.IGNORECASE
+            ):
+                issues.append(
+                    ContentQualityIssue(
+                        code=f"missing_level_{level}",
+                        message=f"Mangler nivået {level.title()}.",
+                    )
+                )
+
     if request.material_type != "kapittel":
-        report.passed = True
-        report.score = 100
+        report.issues = issues
+        report.score = max(0, 100 - 25 * len(issues))
+        report.passed = not issues
         return report
 
     # --- Off-topic guards ---

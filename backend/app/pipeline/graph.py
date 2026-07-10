@@ -45,7 +45,7 @@ from app.pipeline.agents.latex_fallback import run_latex_fallback
 from app.pipeline.agents.latex_fixer import run_latex_fixer
 from app.pipeline.agents.latex_validator import run_latex_validator
 from app.pipeline.agents.layout import run_layout
-from app.pipeline.agents.math_verifier import run_math_verifier
+from app.pipeline.agents.math_verifier import run_final_math_verifier, run_math_verifier
 from app.pipeline.agents.pedagogue import run_pedagogue
 from app.pipeline.agents.table_validator import run_table_validator
 from app.pipeline.agents.tikz_validator import run_tikz_validator
@@ -101,6 +101,13 @@ def try_restore_cached_pipeline(
                     get_config().verification_fail_open
                     and restored.math_verification.claims_incorrect > 0
                 )
+                or (
+                    not restored.content_quality.passed
+                    and (
+                        restored.content_quality.score > 0
+                        or bool(restored.content_quality.issues)
+                    )
+                )
             )
             else PipelineStatus.COMPLETED
         )
@@ -148,6 +155,12 @@ def should_retry_content(
     After content quality gate: retry author if kapittel fails standards.
     """
     if state.request.material_type != "kapittel":
+        if not state.content_quality.passed:
+            state.warning_reason = (
+                f"{state.warning_reason},content_quality"
+                if state.warning_reason
+                else "content_quality"
+            )
         return "tikz_validator"
 
     if state.content_quality.passed:
@@ -240,15 +253,31 @@ def should_retry_math(
     return "editor"
 
 
+def route_final_math(
+    state: PipelineState,
+) -> Literal["content_quality", "math_blocked"]:
+    """Fail closed if the editor introduced an incorrect or unverifiable fasit."""
+    config = get_config()
+    if state.error_message.startswith("Endelig fasitkontroll feilet"):
+        return "math_blocked"
+    if (
+        state.math_verification.claims_incorrect > 0
+        and not config.verification_fail_open
+    ):
+        return "math_blocked"
+    return "content_quality"
+
+
 def run_math_blocked(state: PipelineState) -> PipelineState:
     """Terminal node when SymPy confirms incorrect fasit (grunnlov §1)."""
     incorrect = state.math_verification.claims_incorrect
     state.status = PipelineStatus.FAILED
-    state.error_message = (
-        f"SymPy fant {incorrect} feil i fasiten etter "
-        f"{state.math_verification_attempts} forsøk. "
-        "Materialet leveres ikke — fasiten er hellig (MateMaTeX grunnlov §1)."
-    )
+    if not state.error_message.startswith("Endelig fasitkontroll feilet"):
+        state.error_message = (
+            f"SymPy fant {incorrect} feil i fasiten etter "
+            f"{state.math_verification_attempts} forsøk. "
+            "Materialet leveres ikke — fasiten er hellig (MateMaTeX grunnlov §1)."
+        )
     state.warning_reason = "incorrect"
     state.pdf_base64 = None
     state.pdf_path = None
@@ -424,6 +453,11 @@ def finalize(state: PipelineState) -> PipelineState:
     has_unparseable = mv.claims_unparseable > 0
     has_fail_open_incorrect = mv.claims_incorrect > 0 and config.verification_fail_open
     reasons: list[str] = []
+    if (
+        not state.content_quality.passed
+        and (state.content_quality.score > 0 or bool(state.content_quality.issues))
+    ):
+        reasons.append("content_quality")
     if has_unparseable:
         reasons.append("unparseable")
     if has_fail_open_incorrect:
@@ -501,6 +535,7 @@ def create_pipeline() -> StateGraph:
     graph.add_node("author", run_author)
     graph.add_node("math_verifier", run_math_verifier)
     graph.add_node("editor", run_editor)
+    graph.add_node("final_math_verifier", run_final_math_verifier)
     graph.add_node("content_quality", run_content_quality)
     graph.add_node("tikz_validator", run_tikz_validator)    # Rule-based figure fixer
     graph.add_node("table_validator", run_table_validator)  # Rule-based table fixer
@@ -530,7 +565,15 @@ def create_pipeline() -> StateGraph:
         },
     )
 
-    graph.add_edge("editor", "content_quality")
+    graph.add_edge("editor", "final_math_verifier")
+    graph.add_conditional_edges(
+        "final_math_verifier",
+        route_final_math,
+        {
+            "content_quality": "content_quality",
+            "math_blocked": "math_blocked",
+        },
+    )
 
     graph.add_conditional_edges(
         "content_quality",

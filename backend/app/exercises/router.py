@@ -396,6 +396,19 @@ async def generate_variant(
     )
 
     variant_latex = await asyncio.to_thread(llm.invoke, system_prompt, user_prompt)
+    from app.verification.math_checker import MathChecker
+
+    verification = await asyncio.to_thread(MathChecker().verify, variant_latex)
+    if verification.claims_incorrect > 0:
+        logger.warning(
+            "variant_blocked_incorrect_fasit",
+            original_id=exercise_id,
+            incorrect=verification.claims_incorrect,
+        )
+        raise HTTPException(
+            422,
+            "Varianten ble ikke lagret fordi fasitkontrollen fant matematiske feil.",
+        )
 
     variant_id = uuid.uuid4().hex[:12]
     variant = {

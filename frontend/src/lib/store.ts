@@ -73,6 +73,17 @@ export interface LayoutReport {
   summary: string;
 }
 
+export interface ContentQualityReport {
+  passed: boolean;
+  score: number;
+  missingSubtopics: string[];
+  issues: Array<{
+    code: string;
+    severity: "warning" | "error";
+    message: string;
+  }>;
+}
+
 export interface GenerationResult {
   jobId: string;
   status:
@@ -89,6 +100,7 @@ export interface GenerationResult {
   differentiatedBasic: string;
   differentiatedAdvanced: string;
   warningReason: string;
+  contentQuality?: ContentQualityReport;
   layoutReport?: LayoutReport;
   steps: AgentStep[];
   mathVerification: {

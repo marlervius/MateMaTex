@@ -207,6 +207,10 @@ class CompileResponse(BaseModel):
     errors: list[str] = []
 
 
+class VerifyLatexRequest(BaseModel):
+    latex_content: str = Field(..., min_length=1, max_length=500_000)
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -454,6 +458,7 @@ async def get_result(
         "differentiated_advanced": state.differentiated_advanced,
         "warning_reason": state.warning_reason,
         "math_verification": state.math_verification.model_dump(),
+        "content_quality": state.content_quality.model_dump(),
         "latex_compilation": state.latex_compilation.model_dump(),
         "layout_report": state.layout_report.model_dump(),
         "steps": [s.model_dump() for s in state.steps],
@@ -523,6 +528,20 @@ async def get_job_pdf(job_id: str, user_id: str = Depends(get_current_user)):
         filename=f"matematex_{job_id[:8]}.pdf",
         headers={"Cache-Control": "private, max-age=0, must-revalidate"},
     )
+
+
+@app.post("/verify-latex")
+@limiter.limit("30/minute")
+async def verify_latex(
+    request: Request,
+    body: VerifyLatexRequest,
+    user_id: str = Depends(get_current_user),
+):
+    """Re-run the deterministic fasit check after manual or AI editing."""
+    from app.verification.math_checker import MathChecker
+
+    result = await asyncio.to_thread(MathChecker().verify, body.latex_content)
+    return result.model_dump()
 
 
 @app.post("/compile", response_model=CompileResponse)

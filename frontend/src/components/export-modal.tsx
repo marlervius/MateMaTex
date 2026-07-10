@@ -10,11 +10,13 @@ import {
   X,
 } from "lucide-react";
 import { exportPdf, exportDocx, exportPptx, downloadBase64 } from "@/lib/api";
+import type { PdfStyle } from "@/lib/store";
 
 interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;
   latexContent: string;
+  pdfStyle?: PdfStyle;
 }
 
 type ExportFormat = "pdf" | "docx" | "pptx";
@@ -25,7 +27,7 @@ const FORMAT_CONFIG = {
   pptx: { label: "PowerPoint", icon: <Presentation size={20} />, ext: ".pptx" },
 };
 
-export function ExportModal({ isOpen, onClose, latexContent }: ExportModalProps) {
+export function ExportModal({ isOpen, onClose, latexContent, pdfStyle }: ExportModalProps) {
   const [format, setFormat] = useState<ExportFormat>("pdf");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -54,6 +56,10 @@ export function ExportModal({ isOpen, onClose, latexContent }: ExportModalProps)
           cover_teacher: coverTeacher,
           cover_topic: coverTopic,
           print_optimized: printOptimized,
+          theme: pdfStyle?.theme,
+          accessible: pdfStyle?.accessible,
+          dyslexia: pdfStyle?.dyslexia,
+          high_contrast: pdfStyle?.highContrast,
         });
         if (res.success) { downloadBase64(res.content_base64, res.filename, res.mime_type); onClose(); }
         else setError(res.errors.join(", "));
@@ -68,6 +74,43 @@ export function ExportModal({ isOpen, onClose, latexContent }: ExportModalProps)
       }
     } catch (e: any) {
       setError(e.message || "Eksport feilet");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTeacherAndStudentPdf = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const common = {
+        latex_content: latexContent,
+        include_cover: includeCover,
+        cover_school: coverSchool,
+        cover_teacher: coverTeacher,
+        cover_topic: coverTopic,
+        print_optimized: printOptimized,
+        theme: pdfStyle?.theme,
+        accessible: pdfStyle?.accessible,
+        dyslexia: pdfStyle?.dyslexia,
+        high_contrast: pdfStyle?.highContrast,
+      };
+      const [student, teacher] = await Promise.all([
+        exportPdf({ ...common, include_solutions: false }),
+        exportPdf({ ...common, include_solutions: true }),
+      ]);
+      if (!student.success || !teacher.success) {
+        setError(
+          [...(student.errors || []), ...(teacher.errors || [])].join(", ") ||
+            "Kunne ikke lage begge PDF-versjonene."
+        );
+        return;
+      }
+      downloadBase64(student.content_base64, "matematex-elevkopi.pdf", student.mime_type);
+      downloadBase64(teacher.content_base64, "matematex-lærerkopi.pdf", teacher.mime_type);
+      onClose();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Eksport feilet");
     } finally {
       setLoading(false);
     }
@@ -186,6 +229,15 @@ export function ExportModal({ isOpen, onClose, latexContent }: ExportModalProps)
           {/* Actions */}
           <div className="flex justify-end gap-2">
             <button onClick={onClose} className="btn-secondary">Avbryt</button>
+            {format === "pdf" && (
+              <button
+                onClick={handleTeacherAndStudentPdf}
+                disabled={loading}
+                className="btn-secondary"
+              >
+                Elev + lærer
+              </button>
+            )}
             <button onClick={handleExport} disabled={loading} className="btn-primary">
               {loading && <Loader2 size={14} className="animate-spin" />}
               Eksporter

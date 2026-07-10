@@ -130,6 +130,7 @@ export interface GenerationResultApi {
   pdf_path?: string;
   pdf_available?: boolean;
   math_verification: Record<string, unknown>;
+  content_quality?: Record<string, unknown>;
   latex_compilation: Record<string, unknown>;
   layout_report?: Record<string, unknown>;
   steps: Array<Record<string, unknown>>;
@@ -466,6 +467,26 @@ export async function fetchJobPdfObjectUrl(jobId: string): Promise<string> {
   return URL.createObjectURL(blob);
 }
 
+export async function downloadJobPdf(
+  jobId: string,
+  filename = "matematex-lærerkopi.pdf"
+): Promise<void> {
+  const url =
+    typeof window !== "undefined"
+      ? `/api/generate/${encodeURIComponent(jobId)}/pdf`
+      : apiUrl(`generate/${encodeURIComponent(jobId)}/pdf`);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+  const objectUrl = URL.createObjectURL(await res.blob());
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
 export interface CostEstimateResponse {
   estimated_input_tokens: number;
   estimated_output_tokens: number;
@@ -486,6 +507,36 @@ export async function estimateCost(
 // ---------------------------------------------------------------------------
 // Editor
 // ---------------------------------------------------------------------------
+export async function verifyLatex(latexContent: string): Promise<{
+  claims_checked: number;
+  claims_correct: number;
+  claims_incorrect: number;
+  claims_unparseable: number;
+  all_correct: boolean;
+  summary: string;
+  errors: Array<Record<string, unknown>>;
+  unparseable_claims: Array<Record<string, unknown>>;
+}> {
+  return fetchJson(apiUrl("verify-latex"), {
+    method: "POST",
+    body: JSON.stringify({ latex_content: latexContent }),
+  });
+}
+
+export async function createGenerationVersion(
+  generationId: string,
+  latexBody: string,
+  changeSummary = "Manuell redigering"
+): Promise<{ id: string; version_number: number }> {
+  return fetchJson(apiUrl(`generations/${encodeURIComponent(generationId)}/versions`), {
+    method: "POST",
+    body: JSON.stringify({
+      latex_body: latexBody,
+      change_summary: changeSummary,
+    }),
+  });
+}
+
 export async function compileLatex(
   latexBody: string,
   filename: string = "preview"
@@ -662,6 +713,10 @@ export async function exportPdf(params: {
   cover_subject?: string;
   cover_topic?: string;
   print_optimized?: boolean;
+  theme?: string;
+  accessible?: boolean;
+  dyslexia?: boolean;
+  high_contrast?: boolean;
 }): Promise<{ success: boolean; content_base64: string; filename: string; mime_type: string; errors: string[] }> {
   return fetchJson(apiUrl("export/pdf"), { method: "POST", body: JSON.stringify(params) });
 }

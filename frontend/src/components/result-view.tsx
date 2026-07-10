@@ -31,6 +31,7 @@ import {
   ingestExercises,
   differentiate,
   createShare,
+  downloadJobPdf,
   fetchJobPdfObjectUrl,
 } from "@/lib/api";
 import {
@@ -42,6 +43,7 @@ import {
   isSuccessfulStatus,
   warningReasonLabel,
 } from "@/lib/map-api-result";
+import { ExportModal } from "@/components/export-modal";
 
 type Tab = "document" | "editor" | "differentiation";
 
@@ -53,10 +55,10 @@ export function ResultView() {
   const clearLastFailedRequest = useAppStore((s) => s.clearLastFailedRequest);
   const toggleLatexEditor = useAppStore((s) => s.toggleLatexEditor);
   const setResult = useAppStore((s) => s.setResult);
-  const resetRequest = useAppStore((s) => s.resetRequest);
   const [activeTab, setActiveTab] = useState<Tab>("document");
   const [showLatex, setShowLatex] = useState(false);
   const [showDownloads, setShowDownloads] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
   const [includeSolutionsExport, setIncludeSolutionsExport] = useState(true);
   const [approvalChecks, setApprovalChecks] = useState({
@@ -225,10 +227,18 @@ export function ResultView() {
       let res: { success: boolean; content_base64: string; filename: string; mime_type?: string; errors?: string[] } | null = null;
 
       if (format === "pdf" || format === "pdf-print") {
+        if (format === "pdf" && includeSolutionsExport && result.jobId) {
+          await downloadJobPdf(result.jobId);
+          return;
+        }
         res = await exportPdf({
           latex_content: result.fullDocument,
           print_optimized: format === "pdf-print",
           include_solutions: includeSolutionsExport,
+          theme: result.generationMeta?.pdfStyle.theme,
+          accessible: result.generationMeta?.pdfStyle.accessible,
+          dyslexia: result.generationMeta?.pdfStyle.dyslexia,
+          high_contrast: result.generationMeta?.pdfStyle.highContrast,
         });
       } else if (format === "docx") {
         res = await exportDocx(result.fullDocument, "Oppgaveark", includeSolutionsExport);
@@ -462,7 +472,6 @@ export function ResultView() {
             <button
               onClick={() => {
                 setResult(null);
-                resetRequest();
               }}
               className="btn-ghost"
             >
@@ -578,6 +587,50 @@ export function ResultView() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {result.contentQuality && (
+            <div
+              className={`card mb-6 ${
+                result.contentQuality.passed
+                  ? "!border-accent-green/30 bg-accent-green/5"
+                  : "!border-accent-orange/30 bg-accent-orange/5"
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold">Innholdskvalitet og pensumdekning</h3>
+                <span
+                  className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                    result.contentQuality.passed
+                      ? "bg-accent-green/15 text-accent-green"
+                      : "bg-accent-orange/15 text-accent-orange"
+                  }`}
+                >
+                  {result.contentQuality.score}/100
+                </span>
+              </div>
+              {result.contentQuality.passed ? (
+                <p className="text-xs text-text-secondary">
+                  Struktur og valgte pensumområder bestod den automatiske innholdskontrollen.
+                </p>
+              ) : (
+                <>
+                  <p className="text-xs text-text-secondary mb-3">
+                    Kontroller disse punktene før materialet brukes:
+                  </p>
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                    {result.contentQuality.issues.slice(0, 12).map((issue, index) => (
+                      <div
+                        key={`${issue.code}-${index}`}
+                        className="text-xs text-text-secondary rounded-md border border-accent-orange/20 px-2 py-1"
+                      >
+                        {issue.message}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -1003,6 +1056,16 @@ export function ResultView() {
                           {exportLoading === item.id ? "Eksporterer..." : item.label}
                         </button>
                       ))}
+                      <button
+                        onClick={() => {
+                          setShowDownloads(false);
+                          setShowExportModal(true);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-text-secondary hover:bg-surface-elevated hover:text-text-primary border-t border-border transition-colors"
+                      >
+                        <Download size={14} />
+                        Flere eksportvalg
+                      </button>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -1122,6 +1185,12 @@ export function ResultView() {
               </div>
             </div>
           </div>
+          <ExportModal
+            isOpen={showExportModal}
+            onClose={() => setShowExportModal(false)}
+            latexContent={result.fullDocument}
+            pdfStyle={result.generationMeta?.pdfStyle}
+          />
         </>
       )}
     </div>

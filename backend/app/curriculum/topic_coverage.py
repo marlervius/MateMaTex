@@ -103,6 +103,13 @@ def _match_category(grade: str, topic: str) -> tuple[str | None, list[str]]:
 
     topic_n = _normalize(topic)
 
+    # Prefer an explicitly named subtopic over a broader category substring
+    # (e.g. "Lineære funksjoner" must not become all of "Funksjoner").
+    for category, subtopics in topics_by_cat.items():
+        for sub in subtopics:
+            if topic_n == _normalize(sub):
+                return category, [sub]
+
     # Exact / substring category match (e.g. "Funksjoner" in "Funksjoner 1T").
     for category, subtopics in topics_by_cat.items():
         cat_n = _normalize(category)
@@ -113,7 +120,10 @@ def _match_category(grade: str, topic: str) -> tuple[str | None, list[str]]:
     for category, subtopics in topics_by_cat.items():
         for sub in subtopics:
             if _normalize(sub) in topic_n or topic_n in _normalize(sub):
-                return category, list(subtopics)
+                # A request for one named subtopic must not silently expand into
+                # an entire category. Category-level requests still use all
+                # subtopics via the branch above.
+                return category, [sub]
 
     # Keyword overlap between topic and category words.
     topic_words = {w for w in re.split(r"[^\wæøåÆØÅ]+", topic_n) if len(w) > 3}

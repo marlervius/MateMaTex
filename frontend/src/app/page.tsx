@@ -6,6 +6,11 @@ import { GenerationWizard } from "@/components/generation-wizard";
 import { PipelineProgress } from "@/components/pipeline-progress";
 import { ResultView } from "@/components/result-view";
 import { LatexEditor } from "@/components/latex-editor";
+import {
+  compileLatex,
+  createGenerationVersion,
+  verifyLatex,
+} from "@/lib/api";
 
 export default function HomePage() {
   const isGenerating = useAppStore((s) => s.isGenerating);
@@ -19,10 +24,49 @@ export default function HomePage() {
       <div className="fixed inset-0 z-40 bg-bg flex flex-col">
         <LatexEditor
           initialContent={result.fullDocument}
-          onSave={(content) => {
+          onSave={async (content) => {
+            const verification = await verifyLatex(content);
+            if (verification.claims_incorrect > 0) {
+              throw new Error(
+                `Lagring blokkert: SymPy fant ${verification.claims_incorrect} feil i fasiten.`
+              );
+            }
+            const compiled = await compileLatex(content, `edited-${result.jobId.slice(0, 8)}`);
+            if (!compiled.success) {
+              throw new Error("Lagring blokkert: Dokumentet kompilerer ikke til PDF.");
+            }
+            await createGenerationVersion(result.jobId, content);
+            const mapClaim = (claim: Record<string, unknown>) => ({
+              claimId: String(claim.claim_id ?? ""),
+              latexExpression: String(claim.latex_expression ?? ""),
+              claimType: String(claim.claim_type ?? ""),
+              context: String(claim.context ?? ""),
+              isCorrect: (claim.is_correct ?? null) as boolean | null,
+              errorMessage: String(claim.error_message ?? ""),
+              expectedResult: String(claim.expected_result ?? ""),
+              actualResult: String(claim.actual_result ?? ""),
+            });
             useAppStore.getState().setResult({
               ...result,
               fullDocument: content,
+              pdfBase64: compiled.pdf_base64,
+              latexCompiled: true,
+              status:
+                verification.claims_unparseable > 0
+                  ? "completed_with_warnings"
+                  : "completed",
+              warningReason:
+                verification.claims_unparseable > 0 ? "unparseable" : "",
+              mathVerification: {
+                claimsChecked: verification.claims_checked,
+                claimsCorrect: verification.claims_correct,
+                claimsIncorrect: verification.claims_incorrect,
+                claimsUnparseable: verification.claims_unparseable,
+                allCorrect: verification.all_correct,
+                summary: verification.summary,
+                incorrectClaims: verification.errors.map(mapClaim),
+                unparseableClaims: verification.unparseable_claims.map(mapClaim),
+              },
             });
           }}
           onClose={toggleLatexEditor}

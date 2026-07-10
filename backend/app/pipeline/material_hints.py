@@ -11,6 +11,11 @@ def pedagogue_material_instructions(material_type: str) -> str:
         return """
 TYPE: PRØVE/EKSAMEN
 - Lag struktur: forside/tittel, instruksjoner (tid, hjelpemidler), oppgaver med poeng
+- Del prøven i \\section*{Del 1 — uten hjelpemidler} og
+  \\section*{Del 2 — med hjelpemidler}. Oppgi anbefalt tid for hver del.
+- Del 1 skal teste grunnleggende regning, resonnement og ferdigheter som kan
+  utføres uten digitale verktøy. Del 2 skal inneholde modellering, problemløsing
+  og oppgaver der grafverktøy/CAS kan være relevant.
 - Oppgaver nummerert; deloppgaver a), b), c)
 - Ingen løsningsforslag i elevversjonen (løsninger i egen \\section*{Løsningsforslag} kun hvis løsninger er påkrevd)
 - Inkluder poengskjema-tabell (booktabs) til slutt
@@ -71,6 +76,9 @@ def author_material_instructions(material_type: str, include_solutions: bool) ->
         return f"""
 PRØVE-MODUS:
 - Start med \\title, tid (f.eks. 90 min), og korte instruksjoner
+- Bruk alltid \\section*{{Del 1 — uten hjelpemidler}} og
+  \\section*{{Del 2 — med hjelpemidler}}, med tydelig tids- og hjelpemiddelinformasjon.
+- Fordel oppgavene og poengene mellom delene, og oppgi delsummer.
 - Oppgaver i \\begin{{taskbox}}{{Oppgave N}} med poeng i tittelen, f.eks. {{Oppgave 1 (4 poeng)}}
 - Avslutt med poengskjema-tabell (booktabs): Oppgave | Poeng | Oppnådd
 - {sol}

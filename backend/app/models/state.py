@@ -258,5 +258,8 @@ class PipelineState(BaseModel):
     error_message: str = ""
     warning_reason: str = Field(
         default="",
-        description="Why status is completed_with_warnings: 'unparseable' | 'incorrect' | 'fallback' (comma-separated)",
+        description=(
+            "Why status is completed_with_warnings: 'unparseable' | 'incorrect' | "
+            "'fallback' | 'content_quality' (comma-separated)"
+        ),
     )

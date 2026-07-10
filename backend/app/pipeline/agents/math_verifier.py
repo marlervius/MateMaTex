@@ -78,3 +78,41 @@ def run_math_verifier(state: PipelineState) -> PipelineState:
         state.steps.append(step)
 
     return state
+
+
+def run_final_math_verifier(state: PipelineState) -> PipelineState:
+    """Verify the editor's final body so an edit cannot invalidate the fasit badge."""
+    step = AgentStep(agent=AgentRole.MATH_VERIFIER)
+    state.current_agent = AgentRole.MATH_VERIFIER
+    source = (
+        state.edited_latex_body
+        or state.verified_latex_body
+        or state.raw_latex_body
+    )
+
+    logger.info("final_math_verifier_start", job_id=state.job_id)
+    try:
+        result = MathChecker().verify(source)
+        state.math_verification = result
+        state.math_verification_attempts += 1
+        if result.all_correct:
+            state.verified_latex_body = source
+        step.output_summary = f"Endelig fasitkontroll: {result.summary}"
+        logger.info(
+            "final_math_verifier_complete",
+            job_id=state.job_id,
+            incorrect=result.claims_incorrect,
+            unparseable=result.claims_unparseable,
+        )
+    except Exception as e:
+        step.error = str(e)
+        state.math_verification_attempts += 1
+        if not get_settings().verification_fail_open:
+            state.error_message = f"Endelig fasitkontroll feilet: {e}"
+        logger.error("final_math_verifier_failed", job_id=state.job_id, error=str(e))
+    finally:
+        step.completed_at = datetime.now()
+        step.duration_seconds = (step.completed_at - step.started_at).total_seconds()
+        state.steps.append(step)
+
+    return state

@@ -343,48 +343,12 @@ export function GenerationWizard() {
       let resultLoaded = false;
       let loadingResult = false;
 
-      const showPlaceholderResult = (status: string) => {
-        const currentSteps = useAppStore.getState().steps;
-        setResult(
-          mapApiResultToGenerationResult(
-            {
-              job_id,
-              status,
-              full_document: "",
-              pdf_available: true,
-              latex_compilation: { success: true },
-              math_verification: {
-                claims_checked: 0,
-                claims_correct: 0,
-                claims_incorrect: 0,
-                claims_unparseable: 0,
-                all_correct: true,
-                summary: "",
-              },
-              steps: currentSteps.map((s) => ({
-                agent: s.agent,
-                started_at: s.startedAt,
-                completed_at: s.completedAt,
-                duration_seconds: s.durationSeconds,
-                output_summary: s.outputSummary,
-                error: s.error,
-                retries: s.retries,
-              })),
-              total_duration_seconds: 0,
-              error: "",
-            },
-            snapshot
-          )
-        );
-      };
-
       const loadResultOnce = async (statusHint?: string) => {
         if (resultLoaded || loadingResult || activeJobRef.current !== job_id) return;
         if (isJobAborted(job_id)) return;
         loadingResult = true;
         if (statusHint && statusHint !== "failed") {
-          setCurrentAgent(null);
-          showPlaceholderResult(statusHint);
+          setCurrentAgent("Henter ferdig materiale");
         }
         try {
           await finishWithResult();

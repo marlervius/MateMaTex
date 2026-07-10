@@ -16,6 +16,7 @@ from app.models.state import (
 from app.pipeline.graph import (
     create_pipeline,
     finalize,
+    route_final_math,
     should_retry_content,
     should_retry_latex,
     should_retry_math,
@@ -42,7 +43,7 @@ class TestMathRetryRouting:
         assert should_retry_math(state) == "author"
 
     def test_proceed_when_correct(self):
-        """Kapittel skips LLM editor and goes to content quality."""
+        """Kapittel receives the editor pass before final verification."""
         state = PipelineState(
             request=GenerationRequest(
                 grade="8. trinn", topic="Algebra", material_type="kapittel"
@@ -55,7 +56,7 @@ class TestMathRetryRouting:
             ),
             math_verification_attempts=1,
         )
-        assert should_retry_math(state) == "content_quality"
+        assert should_retry_math(state) == "editor"
 
     def test_blocked_after_max_retries(self):
         """SymPy-confirmed errors block delivery after retries (grunnlov §1)."""
@@ -71,6 +72,19 @@ class TestMathRetryRouting:
             math_verification_attempts=3,  # At max
         )
         assert should_retry_math(state) == "math_blocked"
+
+    def test_final_verification_blocks_editor_regression(self):
+        state = PipelineState(
+            request=GenerationRequest(
+                grade="VG1 1T", topic="Algebra", material_type="kapittel"
+            ),
+            math_verification=VerificationResult(
+                claims_checked=1,
+                claims_incorrect=1,
+                all_correct=False,
+            ),
+        )
+        assert route_final_math(state) == "math_blocked"
 
     def test_skip_editor_for_arbeidsark(self):
         """Worksheets skip the slow LLM editor and go straight to validators."""
@@ -247,6 +261,7 @@ class TestGraphStructure:
             "pedagogue",
             "author",
             "math_verifier",
+            "final_math_verifier",
             "content_quality",
             "editor",
             "tikz_validator",

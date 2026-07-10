@@ -113,7 +113,10 @@ def _build_passing_kapittel_latex() -> str:
             f"\\end{{taskbox}}"
         )
     body = "\n".join(parts)
-    body += "\n% " + ("utfylling " * 2500)
+    body += "\n" + (
+        "Vi forklarer sammenhengen mellom tabell, graf og formel med et "
+        "gjennomarbeidet eksempel og begrunner hvert steg. " * 220
+    )
     return body
 
 
@@ -124,6 +127,13 @@ class TestTopicCoverage:
         assert "Lineære funksjoner" in spec.required_subtopics
         assert "Logaritmer" in spec.required_subtopics
         assert len(spec.required_subtopics) >= 6
+
+    def test_named_subtopic_does_not_expand_to_full_category(self):
+        spec = get_topic_coverage_spec(
+            "VG1 1T", "Lineære funksjoner", material_type="kapittel"
+        )
+        assert spec.category == "Funksjoner"
+        assert spec.required_subtopics == ["Lineære funksjoner"]
 
     def test_funksjoner_1t_forbids_vectors(self):
         spec = get_topic_coverage_spec("VG1 1T", "Funksjoner 1T", material_type="kapittel")
@@ -173,14 +183,33 @@ class TestContentQuality:
         assert report.passed, [i.message for i in report.issues]
         assert report.score >= 90
 
-    def test_arbeidsark_always_passes(self):
+    def test_thin_arbeidsark_fails_light_gate(self):
         req = GenerationRequest(
             grade="VG1 1T",
             topic="Funksjoner",
             material_type="arbeidsark",
         )
         report = evaluate_content_quality("kort", req)
-        assert report.passed
+        assert not report.passed
+        assert {issue.code for issue in report.issues} >= {
+            "few_exercises",
+            "missing_theory",
+        }
+
+    def test_complete_arbeidsark_passes_light_gate(self):
+        req = GenerationRequest(
+            grade="VG1 1T",
+            topic="Funksjoner",
+            material_type="arbeidsark",
+            num_exercises=3,
+        )
+        body = (
+            r"\begin{regel}Stigningstall.\end{regel}"
+            r"\begin{taskbox}{Oppgave 1}Regn.\end{taskbox}"
+            r"\begin{taskbox}{Oppgave 2}Regn.\end{taskbox}"
+            r"\begin{taskbox}{Oppgave 3}Regn.\end{taskbox}"
+        )
+        assert evaluate_content_quality(body, req).passed
 
 
 class TestContentQualityRouting:

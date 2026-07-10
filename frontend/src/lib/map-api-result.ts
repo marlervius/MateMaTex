@@ -40,6 +40,24 @@ function mapClaims(raw: unknown[]): MathClaimDetail[] {
   }));
 }
 
+function mapContentQuality(raw: unknown): GenerationResult["contentQuality"] {
+  if (!raw || typeof raw !== "object") return undefined;
+  const report = raw as Record<string, any>;
+  const issues = Array.isArray(report.issues) ? report.issues : [];
+  return {
+    passed: Boolean(report.passed),
+    score: Number(report.score ?? 0),
+    missingSubtopics: Array.isArray(report.missing_subtopics)
+      ? report.missing_subtopics.map(String)
+      : [],
+    issues: issues.map((issue: any) => ({
+      code: String(issue.code ?? ""),
+      severity: issue.severity === "warning" ? "warning" : "error",
+      message: String(issue.message ?? ""),
+    })),
+  };
+}
+
 /**
  * Mapper backend GET /generate/{id}/result til frontend-modell.
  */
@@ -86,6 +104,7 @@ export function mapApiResultToGenerationResult(
     differentiatedBasic: String(raw.differentiated_basic ?? ""),
     differentiatedAdvanced: String(raw.differentiated_advanced ?? ""),
     warningReason: String(raw.warning_reason ?? ""),
+    contentQuality: mapContentQuality(raw.content_quality),
     layoutReport: mapLayoutReport(raw.layout_report),
     steps,
     mathVerification: {
@@ -156,6 +175,7 @@ export function warningReasonLabel(reason: string): string {
   const hasUnparseable = parts.includes("unparseable");
   const hasIncorrect = parts.includes("incorrect");
   const hasFallback = parts.includes("fallback");
+  const hasContentQuality = parts.includes("content_quality");
   const hasLegacyMath = parts.includes("math");
 
   if (hasIncorrect) {
@@ -166,6 +186,9 @@ export function warningReasonLabel(reason: string): string {
   }
   if (hasFallback) {
     return "Avanserte figurer (f.eks. TikZ) ble fjernet for å få dokumentet til å kompilere. Tekst og oppgaver er beholdt.";
+  }
+  if (hasContentQuality) {
+    return "Materialet har mangler i pensumdekning eller didaktisk struktur. Se kvalitetsrapporten og kontroller før bruk.";
   }
   if (hasUnparseable || hasLegacyMath) {
     return "Del av fasiten kunne ikke verifiseres automatisk (f.eks. «vis at» eller modellering). Kontroller manuelt før bruk.";

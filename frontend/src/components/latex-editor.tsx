@@ -19,7 +19,7 @@ import { compileLatex, editorAction } from "@/lib/api";
 
 interface LatexEditorProps {
   initialContent: string;
-  onSave?: (content: string) => void;
+  onSave?: (content: string) => void | Promise<void>;
   onClose?: () => void;
 }
 
@@ -33,6 +33,8 @@ export function LatexEditor({ initialContent, onSave, onClose }: LatexEditorProp
   const [diffContent, setDiffContent] = useState("");
   const [aiLoading, setAiLoading] = useState("");
   const [aiError, setAiError] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [saving, setSaving] = useState(false);
   const [mobileTab, setMobileTab] = useState<"code" | "preview">("code");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const compileGenRef = useRef(0);
@@ -55,13 +57,26 @@ export function LatexEditor({ initialContent, onSave, onClose }: LatexEditorProp
         setWarnings(result.warnings || []);
       } catch {
         if (gen === compileGenRef.current) {
-          setErrors([{ line: 0, message: "Compilation request failed" }]);
+          setErrors([{ line: 0, message: "Kunne ikke kompilere dokumentet" }]);
         }
       } finally {
         if (gen === compileGenRef.current) setCompiling(false);
       }
     }, 800);
   }, []);
+
+  const handleSave = useCallback(async () => {
+    if (!onSave || saving) return;
+    setSaving(true);
+    setSaveError("");
+    try {
+      await onSave(content);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Kunne ikke lagre endringene.");
+    } finally {
+      setSaving(false);
+    }
+  }, [content, onSave, saving]);
 
   useEffect(() => {
     triggerCompile(content);
@@ -75,12 +90,12 @@ export function LatexEditor({ initialContent, onSave, onClose }: LatexEditorProp
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
         e.preventDefault();
-        onSave?.(content);
+        void handleSave();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [content, onSave]);
+  }, [handleSave]);
 
   const handleChange = (value: string) => {
     setContent(value);
@@ -186,8 +201,13 @@ export function LatexEditor({ initialContent, onSave, onClose }: LatexEditorProp
         <div className="w-px h-5 bg-border mx-1.5" />
 
         {onSave && (
-          <button onClick={() => onSave(content)} className="btn-primary !py-1.5 !px-3 text-xs">
-            <Save size={12} /> Lagre
+          <button
+            onClick={() => void handleSave()}
+            disabled={saving}
+            className="btn-primary !py-1.5 !px-3 text-xs disabled:opacity-60"
+          >
+            {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+            {saving ? "Verifiserer..." : "Lagre"}
           </button>
         )}
         {onClose && (
@@ -196,6 +216,12 @@ export function LatexEditor({ initialContent, onSave, onClose }: LatexEditorProp
           </button>
         )}
       </div>
+
+      {saveError && (
+        <div className="px-4 py-2 border-b border-accent-red/20 bg-accent-red/5 text-xs text-accent-red">
+          {saveError}
+        </div>
+      )}
 
       <div className="md:hidden flex border-b border-border">
         <button
