@@ -663,6 +663,8 @@ export interface M1LevelReport {
   fixable_pct: number;
   realistic_ceiling_pct: number;
   red_pct: number;
+  /** Share of points without a result yet; absent from older backends. */
+  unscored_pct?: number;
 }
 
 export interface M1Report {

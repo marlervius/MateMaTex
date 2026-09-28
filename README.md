@@ -89,6 +89,14 @@ Se [`M1-testprotokoll.md`](M1-testprotokoll.md). Etter at du har fylt `m1_skjema
 python m1_scorer.py m1_skjema.csv
 ```
 
+Raskere vei: før inn oppgavene i en kopi av `m1_oppgaver_mal.csv` med `fasit`, `kandidat` (pipelinens svar) og `modus` (`expr`, `integral` eller `set`), og la referansesjekken skåre det den kan:
+
+```bash
+python m1_scorer.py --auto m1_oppgaver.csv m1_skjema.csv
+```
+
+`verified` fylles inn automatisk. `mismatch` fylles inn, men må bekreftes manuelt. Rader SymPy ikke kan avgjøre, får tomt `resultat` og kommentaren `MANUELL` — der avgjør du `false_negative` eller `unverifiable` (protokollen kap. 5). Rapporten advarer så lenge noe er uskåret, og forsiden viser ikke M1-tallet før dataene er ekte og ferdig skåret (grunnlov §1).
+
 Eksempelrapport (dummy-data):
 
 ```bash

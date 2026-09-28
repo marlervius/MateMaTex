@@ -36,13 +36,13 @@ export function M1CoverageCard({ compact = false }: { compact?: boolean }) {
   }
 
   if (compact) {
+    // Grunnlov §1: never headline a coverage number that is not real,
+    // measured and fully scored.
     const top = report.levels[0];
-    if (!top) return null;
+    if (!top || report.is_example || (top.unscored_pct ?? 0) > 0) return null;
     return (
       <div className="rounded-lg border border-border bg-surface-elevated/40 px-4 py-3 mb-8 max-w-xl mx-auto text-center">
-        <p className="text-xs text-text-secondary mb-1">
-          {report.is_example ? "M1 (eksempeldata)" : "M1 empirisk dekning"}
-        </p>
+        <p className="text-xs text-text-secondary mb-1">M1 empirisk dekning</p>
         <p className="text-sm">
           <span className="font-display text-xl text-accent-green tabular-nums">
             {top.green_pct}%
@@ -82,6 +82,11 @@ export function M1CoverageCard({ compact = false }: { compact?: boolean }) {
             <p className="text-xs text-text-secondary mt-1">
               SymPy-verifisert nå · realistisk tak {lvl.realistic_ceiling_pct}%
             </p>
+            {(lvl.unscored_pct ?? 0) > 0 && (
+              <p className="text-xs text-accent-orange mt-1">
+                {lvl.unscored_pct}% av poengene er ikke skåret ennå — tallet er foreløpig.
+              </p>
+            )}
             <div className="mt-2 h-1.5 rounded-full bg-border overflow-hidden">
               <div
                 className="h-full bg-accent-green"

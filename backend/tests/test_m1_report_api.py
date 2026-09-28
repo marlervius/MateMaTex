@@ -9,7 +9,7 @@ def test_report_json_example_has_levels():
     path = resolve_m1_csv_path()
     data = report_json(str(path))
     assert data["levels"]
-    assert any(l["level"] == "1T" for l in data["levels"])
+    assert any(lvl["level"] == "1T" for lvl in data["levels"])
     assert data["topics"]
 
 

@@ -12,6 +12,7 @@ saa tallet maales uavhengig av implementasjonen som skal haandheve det.
 
 Se M1-testprotokoll.md i repo-roten for prosedyre.
 """
+
 from __future__ import annotations
 
 import csv
@@ -86,6 +87,7 @@ def answer_check(true_answer: str, candidate: str, mode: str = "expr") -> str:
     """
     try:
         if mode == "set":
+
             def to_set(s):
                 parts = str(s).replace("{", "").replace("}", "").replace(";", ",").split(",")
                 return {sp.nsimplify(_parse(p)) for p in parts if p.strip()}
@@ -121,10 +123,70 @@ def answer_check(true_answer: str, candidate: str, mode: str = "expr") -> str:
 GREEN = {"verified"}
 RECOVERABLE = {"false_negative"}
 RED = {"unverifiable", "mismatch"}
+OUTCOMES = GREEN | RECOVERABLE | RED
+
+# Forslag fra answer_check -> resultat i skjemaet. UNCERTAIN gir ikke forslag:
+# da maa et menneske avgjoere false_negative vs. unverifiable (protokoll kap. 5).
+AUTO_OUTCOME = {VERIFIED: "verified", MISMATCH: "mismatch"}
+MODES = {"expr", "integral", "set"}
+
+
+def autoscore(in_path: str, out_path: str) -> dict[str, int]:
+    """
+    Fyll ``resultat`` automatisk der referansesjekken kan avgjoere.
+
+    Leser et skjema med ekstra kolonnene ``fasit``, ``kandidat`` og (valgfritt)
+    ``modus`` (expr/integral/set). Rader som allerede har et resultat roeres ikke.
+    VERIFIED -> verified, MISMATCH -> mismatch (bekreft manuelt at fasiten
+    faktisk er feil), UNCERTAIN -> tomt resultat og ``kommentar`` som ber om
+    manuell skaaring. Returnerer antall rader per kategori.
+    """
+    with open(in_path, encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = list(reader.fieldnames or [])
+        rows = list(reader)
+
+    for col in ("resultat", "kommentar"):
+        if col not in fieldnames:
+            fieldnames.append(col)
+
+    counts = {"kept": 0, "verified": 0, "mismatch": 0, "manual": 0}
+    for r in rows:
+        if not (r.get("nivaa") or "").strip():
+            continue
+        if (r.get("resultat") or "").strip():
+            counts["kept"] += 1
+            continue
+        fasit = (r.get("fasit") or "").strip()
+        kandidat = (r.get("kandidat") or "").strip()
+        mode = (r.get("modus") or "expr").strip().lower() or "expr"
+        if mode not in MODES:
+            raise ValueError(f"Ukjent modus {mode!r} (gyldige: {sorted(MODES)})")
+        verdict = answer_check(fasit, kandidat, mode) if fasit and kandidat else UNCERTAIN
+        outcome = AUTO_OUTCOME.get(verdict)
+        note = (r.get("kommentar") or "").strip()
+        if outcome:
+            r["resultat"] = outcome
+            tag = f"auto: {verdict}"
+            if outcome == "mismatch":
+                tag += " - bekreft manuelt at fasiten er feil"
+            counts[outcome] += 1
+        else:
+            r["resultat"] = ""
+            tag = "MANUELL: false_negative eller unverifiable?"
+            counts["manual"] += 1
+        r["kommentar"] = f"{note}; {tag}" if note else tag
+
+    with open(out_path, "w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+    return counts
 
 
 def aggregate(csv_path: str):
-    rows = list(csv.DictReader(open(csv_path, encoding="utf-8")))
+    with open(csv_path, encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
     by_level = defaultdict(lambda: defaultdict(float))
     by_topic = defaultdict(lambda: defaultdict(float))
     for r in rows:
@@ -132,9 +194,11 @@ def aggregate(csv_path: str):
             continue
         lvl, emne = r["nivaa"].strip(), r["emne"].strip()
         p = float(r["poeng"])
-        res = r["resultat"].strip().lower()
+        res = (r.get("resultat") or "").strip().lower()
         by_level[lvl]["poeng"] += p
         by_topic[(lvl, emne)]["poeng"] += p
+        if res not in OUTCOMES:
+            by_level[lvl]["uskaaret"] += p
         for bucket, names in (("groenn", GREEN), ("fiksbar", RECOVERABLE), ("roed", RED)):
             if res in names:
                 by_level[lvl][bucket] += p
@@ -189,6 +253,7 @@ def report_json(csv_path: str) -> dict:
                 "fixable_pct": round(fixable, 1),
                 "realistic_ceiling_pct": round(green + fixable, 1),
                 "red_pct": round(_pct(d["roed"], tot), 1),
+                "unscored_pct": round(_pct(d["uskaaret"], tot), 1),
             }
         )
     topics = []
@@ -208,6 +273,21 @@ def report_json(csv_path: str) -> dict:
     }
 
 
+def main(argv: list[str]) -> None:
+    if len(argv) == 3 and argv[0] == "--auto":
+        counts = autoscore(argv[1], argv[2])
+        print(
+            f"Auto-skaaret: {counts['verified']} verified, {counts['mismatch']} mismatch "
+            f"(bekreft manuelt), {counts['manual']} krever manuell skaaring, "
+            f"{counts['kept']} hadde allerede resultat. Skrevet til {argv[2]}."
+        )
+    elif len(argv) == 1:
+        report(argv[0])
+    else:
+        print("Bruk: python m1_scorer.py <skjema.csv>")
+        print("      python m1_scorer.py --auto <oppgaver.csv> <skjema.csv>")
+
+
 def report(csv_path: str):
     by_level, by_topic = aggregate(csv_path)
     print("=" * 64)
@@ -221,13 +301,15 @@ def report(csv_path: str):
         print(f"  + fiksbar (falsk negativ)    : {f:5.1f} %")
         print(f"  = realistisk tak             : {g + f:5.1f} %")
         print(f"  Roed (uverifiserbar/feil)    : {_pct(d['roed'], tot):5.1f} %")
+        if d["uskaaret"]:
+            print(
+                f"  ADVARSEL: {_pct(d['uskaaret'], tot):.1f} % av poengene er ikke skaaret "
+                "(tomt/ukjent resultat) - tallene over er ikke endelige"
+            )
     print("\nPer emne (groenn naa %):")
     for (lvl, emne), d in sorted(by_topic.items()):
         print(f"  {lvl:5} {emne:28} {_pct(d['groenn'], d['poeng']):5.1f} %  ({d['poeng']:.0f} p)")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        report(sys.argv[1])
-    else:
-        print("Bruk: python -m m1.scorer <skjema.csv>")
+    main(sys.argv[1:])

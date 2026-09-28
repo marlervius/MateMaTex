@@ -1,0 +1,5 @@
+nivaa,emne,oppgavetype,poeng,fasit,kandidat,modus,resultat,kommentar
+1T,Likninger,andregrad,3,"2, -3","-3, 2",set,,EKSEMPELRAD - slett
+1T,Derivasjon,polynom,2,6*x**2 - 4,2*(3*x**2 - 2),expr,,EKSEMPELRAD - slett
+R1,Funksjonsdrofting,vendepunkt,3,"0, 2","2, 0",set,,EKSEMPELRAD - slett
+R1,Bevis,induksjon,6,,,,,EKSEMPELRAD - slett

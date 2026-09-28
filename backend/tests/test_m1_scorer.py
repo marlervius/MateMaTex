@@ -39,3 +39,58 @@ class TestAggregate:
         assert by_level["1T"]["poeng"] == 35
         assert by_level["R1"]["poeng"] == 34
         assert pytest.approx(by_level["1T"]["groenn"], rel=0.01) == 24
+
+
+class TestAutoscore:
+    HEADER = "nivaa,emne,oppgavetype,poeng,fasit,kandidat,modus,resultat,kommentar\n"
+
+    def _run(self, tmp_path, body):
+        import csv
+
+        from m1.scorer import autoscore
+
+        src = tmp_path / "in.csv"
+        dst = tmp_path / "out.csv"
+        src.write_text(self.HEADER + body, encoding="utf-8")
+        counts = autoscore(str(src), str(dst))
+        with dst.open(encoding="utf-8") as handle:
+            return counts, list(csv.DictReader(handle))
+
+    def test_fills_verified_and_mismatch(self, tmp_path):
+        counts, rows = self._run(
+            tmp_path,
+            '1T,Likninger,andregrad,3,"2, -3","-3, 2",set,,\n'
+            "1T,Derivasjon,polynom,2,6*x**2,6*x**3,expr,,\n",
+        )
+        assert [r["resultat"] for r in rows] == ["verified", "mismatch"]
+        assert "bekreft manuelt" in rows[1]["kommentar"]
+        assert counts["verified"] == 1 and counts["mismatch"] == 1
+
+    def test_uncertain_left_for_human(self, tmp_path):
+        counts, rows = self._run(tmp_path, "R1,Bevis,induksjon,6,,,,,bevismetode\n")
+        assert rows[0]["resultat"] == ""
+        assert rows[0]["kommentar"].startswith("bevismetode; MANUELL")
+        assert counts["manual"] == 1
+
+    def test_existing_result_is_kept(self, tmp_path):
+        counts, rows = self._run(tmp_path, "R1,Bevis,induksjon,6,x,y,expr,unverifiable,\n")
+        assert rows[0]["resultat"] == "unverifiable"
+        assert counts["kept"] == 1
+
+    def test_unknown_mode_rejected(self, tmp_path):
+        with pytest.raises(ValueError):
+            self._run(tmp_path, "1T,A,b,1,x,x,feil,,\n")
+
+    def test_unscored_rows_are_reported(self, tmp_path):
+        from m1.scorer import report_json
+
+        path = tmp_path / "skjema.csv"
+        path.write_text(
+            "nivaa,emne,oppgavetype,poeng,resultat,kommentar\n"
+            "1T,Algebra,a,3,verified,\n"
+            "1T,Algebra,b,1,,\n",
+            encoding="utf-8",
+        )
+        level = report_json(str(path))["levels"][0]
+        assert level["green_pct"] == 75.0
+        assert level["unscored_pct"] == 25.0
