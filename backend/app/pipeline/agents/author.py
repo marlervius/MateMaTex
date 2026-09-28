@@ -98,9 +98,7 @@ def run_author(state: PipelineState) -> PipelineState:
             grade_context = state.curriculum_context or format_boundaries_for_prompt(
                 state.request.grade
             )
-            language_instructions = get_language_level_instructions(
-                state.request.language_level
-            )
+            language_instructions = get_language_level_instructions(state.request.language_level)
 
             user_prompt = build_author_prompt(
                 pedagogical_plan=state.pedagogical_plan,
@@ -116,16 +114,16 @@ def run_author(state: PipelineState) -> PipelineState:
 
         import re as _re
 
-        body = _re.sub(r'^```(?:latex|tex)?\s*\n?', '', body)
-        body = _re.sub(r'\n?```\s*$', '', body)
+        body = _re.sub(r"^```(?:latex|tex)?\s*\n?", "", body)
+        body = _re.sub(r"\n?```\s*$", "", body)
         body = _re.sub(
-            r'\\documentclass.*?\\begin\{document\}\s*',
-            '',
+            r"\\documentclass.*?\\begin\{document\}\s*",
+            "",
             body,
             flags=_re.DOTALL,
         )
-        body = _re.sub(r'\\end\{document\}.*$', '', body, flags=_re.DOTALL)
-        body = _re.sub(r'\\includegraphics\s*(?:\[.*?\])?\s*\{.*?\}', '', body)
+        body = _re.sub(r"\\end\{document\}.*$", "", body, flags=_re.DOTALL)
+        body = _re.sub(r"\\includegraphics\s*(?:\[.*?\])?\s*\{.*?\}", "", body)
 
         from app.latex.text_sanitize import sanitize_latex_body
 
@@ -148,7 +146,9 @@ def run_author(state: PipelineState) -> PipelineState:
     finally:
         step.completed_at = datetime.now()
         step.duration_seconds = (step.completed_at - step.started_at).total_seconds()
-        step.retries = state.content_quality_attempts if is_quality_retry else state.math_verification_attempts
+        step.retries = (
+            state.content_quality_attempts if is_quality_retry else state.math_verification_attempts
+        )
         state.steps.append(step)
 
     return state

@@ -169,7 +169,7 @@ class TestEdgeCases:
         assert result.claims_incorrect == 0
 
     def test_nested_frac_and_sqrt(self, checker: MathChecker):
-        """Test nested \frac and \sqrt expressions do not hang and parse correctly."""
+        """Test nested \frac and \\sqrt expressions do not hang and parse correctly."""
         latex = r"Vi har $\frac{\sqrt{16}}{2} = 2$."
         result = checker.verify(latex)
         assert result.claims_incorrect == 0
@@ -182,7 +182,7 @@ class TestEdgeCases:
         assert result.claims_checked == 0
 
     def test_formatting_macros(self, checker: MathChecker):
-        """Test LaTeX formatting macros like \mathrm, \text, \mathbf are correctly parsed/stripped."""
+        """Test LaTeX formatting macros like \\mathrm, \text, \\mathbf are correctly parsed/stripped."""
         latex = r"Vi regner ut $\mathbf{a} + \mathrm{b} = c$ og $\text{f}(x) = 2$."
         # Note: \text{f}(x) = 2 is treated as definition because of "f(x) = ", which gets skipped
         result = checker.verify(latex)

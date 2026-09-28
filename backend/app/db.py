@@ -39,7 +39,7 @@ def _parse_database_url(url: str) -> dict:
 
     # Normalise scheme
     if url.startswith("postgres://"):
-        url = "postgresql://" + url[len("postgres://"):]
+        url = "postgresql://" + url[len("postgres://") :]
     if url.startswith("jdbc:"):
         url = url[5:]
 
@@ -56,7 +56,7 @@ def _parse_database_url(url: str) -> dict:
         host_part = without_scheme
     else:
         credentials = without_scheme[:at_idx]
-        host_part = without_scheme[at_idx + 1:]
+        host_part = without_scheme[at_idx + 1 :]
 
     # Parse credentials (user:password)
     if ":" in credentials:
@@ -85,7 +85,7 @@ def _parse_database_url(url: str) -> dict:
     if host_port.startswith("["):
         bracket_end = host_port.index("]")
         host = host_port[1:bracket_end]
-        port_str = host_port[bracket_end + 2:] if bracket_end + 1 < len(host_port) else ""
+        port_str = host_port[bracket_end + 2 :] if bracket_end + 1 < len(host_port) else ""
     elif ":" in host_port:
         host, port_str = host_port.rsplit(":", 1)
     else:
@@ -111,8 +111,7 @@ async def get_pool() -> asyncpg.Pool:
         settings = get_settings()
         if not settings.database_url:
             raise RuntimeError(
-                "DATABASE_URL is not set. "
-                "Set it to your Supabase connection string."
+                "DATABASE_URL is not set. " "Set it to your Supabase connection string."
             )
 
         raw_url = settings.database_url
@@ -122,11 +121,13 @@ async def get_pool() -> asyncpg.Pool:
             # Mask password between first : after :// and last @
             scheme_end = raw_url.find("://")
             if scheme_end != -1:
-                after_scheme = raw_url[scheme_end + 3:]
+                after_scheme = raw_url[scheme_end + 3 :]
                 last_at = after_scheme.rfind("@")
                 first_colon = after_scheme.find(":")
                 if first_colon != -1 and last_at != -1 and first_colon < last_at:
-                    _masked = raw_url[:scheme_end + 3 + first_colon + 1] + "***" + after_scheme[last_at:]
+                    _masked = (
+                        raw_url[: scheme_end + 3 + first_colon + 1] + "***" + after_scheme[last_at:]
+                    )
         logger.info("database_raw_url_masked", url=_masked)
 
         conn_kwargs = _parse_database_url(raw_url)

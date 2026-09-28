@@ -134,10 +134,7 @@ class LLMInterface:
         self._primary = self._build(primary_provider, primary_model)
 
         # Fallback model (only if different from primary)
-        if (
-            cfg.fallback_provider != primary_provider
-            or cfg.fallback_model != primary_model
-        ):
+        if cfg.fallback_provider != primary_provider or cfg.fallback_model != primary_model:
             try:
                 self._fallback = self._build(cfg.fallback_provider, cfg.fallback_model)
             except Exception:
@@ -150,11 +147,15 @@ class LLMInterface:
         self.last_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
 
     def _extract_usage(self, response: Any) -> None:
-        usage = getattr(response, "usage_metadata", None) or getattr(response, "response_metadata", {}).get("token_usage")
+        usage = getattr(response, "usage_metadata", None) or getattr(
+            response, "response_metadata", {}
+        ).get("token_usage")
         if isinstance(usage, dict):
             self.last_usage = {
                 "input_tokens": int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0),
-                "output_tokens": int(usage.get("output_tokens") or usage.get("completion_tokens") or 0),
+                "output_tokens": int(
+                    usage.get("output_tokens") or usage.get("completion_tokens") or 0
+                ),
             }
         else:
             self.last_usage = {"input_tokens": 0, "output_tokens": 0}

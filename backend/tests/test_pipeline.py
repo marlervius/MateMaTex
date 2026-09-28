@@ -4,8 +4,6 @@ Integration tests for the LangGraph pipeline.
 Tests the pipeline graph structure and routing logic.
 """
 
-import pytest
-
 from app.models.state import (
     GenerationRequest,
     LatexCompilationResult,
@@ -18,7 +16,6 @@ from app.pipeline.graph import (
     finalize,
     route_final_math,
     run_math_blocked,
-    should_retry_content,
     should_retry_latex,
     should_retry_math,
 )
@@ -71,9 +68,7 @@ class TestMathRetryRouting:
     def test_proceed_when_correct(self):
         """Kapittel receives the editor pass before final verification."""
         state = PipelineState(
-            request=GenerationRequest(
-                grade="8. trinn", topic="Algebra", material_type="kapittel"
-            ),
+            request=GenerationRequest(grade="8. trinn", topic="Algebra", material_type="kapittel"),
             math_verification=VerificationResult(
                 claims_checked=5,
                 claims_correct=5,
@@ -87,9 +82,7 @@ class TestMathRetryRouting:
     def test_blocked_after_max_retries(self):
         """SymPy-confirmed errors block delivery after retries (grunnlov §1)."""
         state = PipelineState(
-            request=GenerationRequest(
-                grade="8. trinn", topic="Algebra", material_type="kapittel"
-            ),
+            request=GenerationRequest(grade="8. trinn", topic="Algebra", material_type="kapittel"),
             math_verification=VerificationResult(
                 claims_checked=5,
                 claims_incorrect=2,
@@ -101,9 +94,7 @@ class TestMathRetryRouting:
 
     def test_final_verification_blocks_editor_regression(self):
         state = PipelineState(
-            request=GenerationRequest(
-                grade="VG1 1T", topic="Algebra", material_type="kapittel"
-            ),
+            request=GenerationRequest(grade="VG1 1T", topic="Algebra", material_type="kapittel"),
             math_verification=VerificationResult(
                 claims_checked=1,
                 claims_incorrect=1,
@@ -255,10 +246,7 @@ class TestRuleBasedLatexFix:
     def test_closes_unclosed_environment(self):
         from app.pipeline.agents.latex_fixer import _try_rule_based_fix
 
-        doc = (
-            "\\documentclass{article}\\begin{document}"
-            "\\begin{itemize}\\item A\\end{document}"
-        )
+        doc = "\\documentclass{article}\\begin{document}" "\\begin{itemize}\\item A\\end{document}"
         fixed = _try_rule_based_fix(doc)
         assert fixed is not None
         assert "\\end{itemize}" in fixed

@@ -32,11 +32,7 @@ def run_editor(state: PipelineState) -> PipelineState:
 
     try:
         config = get_config()
-        fast_types = {
-            t.strip()
-            for t in config.skip_editor_material_types.split(",")
-            if t.strip()
-        }
+        fast_types = {t.strip() for t in config.skip_editor_material_types.split(",") if t.strip()}
         if config.skip_editor or state.request.material_type in fast_types:
             state.edited_latex_body = state.verified_latex_body
             step.output_summary = "Rask modus — redaktør hoppet over"
@@ -60,17 +56,17 @@ def run_editor(state: PipelineState) -> PipelineState:
             body = response.strip()
 
             # Strip markdown code fences
-            body = _re.sub(r'^```(?:latex|tex)?\s*\n?', '', body)
-            body = _re.sub(r'\n?```\s*$', '', body)
+            body = _re.sub(r"^```(?:latex|tex)?\s*\n?", "", body)
+            body = _re.sub(r"\n?```\s*$", "", body)
 
             # Strip preamble if editor re-introduced it
             body = _re.sub(
-                r'\\documentclass.*?\\begin\{document\}\s*',
-                '',
+                r"\\documentclass.*?\\begin\{document\}\s*",
+                "",
                 body,
                 flags=_re.DOTALL,
             )
-            body = _re.sub(r'\\end\{document\}.*$', '', body, flags=_re.DOTALL)
+            body = _re.sub(r"\\end\{document\}.*$", "", body, flags=_re.DOTALL)
 
             from app.latex.text_sanitize import sanitize_latex_body
 

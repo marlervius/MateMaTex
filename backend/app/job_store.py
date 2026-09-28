@@ -92,7 +92,9 @@ def load_job_from_disk(job_id: str) -> PipelineState | None:
         return None
 
 
-def resolve_job(job_id: str, memory: dict[str, PipelineState] | None = None) -> PipelineState | None:
+def resolve_job(
+    job_id: str, memory: dict[str, PipelineState] | None = None
+) -> PipelineState | None:
     """Prefer in-memory state; otherwise load from disk and warm the cache."""
     store = memory if memory is not None else _memory_jobs
     if job_id in store:
@@ -152,11 +154,7 @@ def evict_terminal_jobs(
     cutoff = datetime.now() - timedelta(hours=max_age_hours)
     evicted = 0
 
-    terminal = [
-        (jid, st)
-        for jid, st in store.items()
-        if st.status in TERMINAL_STATUSES
-    ]
+    terminal = [(jid, st) for jid, st in store.items() if st.status in TERMINAL_STATUSES]
     terminal.sort(key=lambda x: x[1].created_at)
 
     for jid, st in terminal:

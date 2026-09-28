@@ -7,7 +7,7 @@ Supports optional MATE_API_KEY and Supabase JWT (Bearer) for user identity.
 from __future__ import annotations
 
 import structlog
-from fastapi import HTTPException, Header, Query
+from fastapi import Header, HTTPException, Query
 
 from app.config import get_settings
 
@@ -110,11 +110,7 @@ async def require_stream_access(
     for EventSource-only clients. Prefer server-side proxy with X-API-Key.
     """
     settings = get_settings()
-    token = (
-        (x_api_key or "").strip()
-        or _extract_bearer(authorization)
-        or (api_key or "").strip()
-    )
+    token = (x_api_key or "").strip() or _extract_bearer(authorization) or (api_key or "").strip()
 
     user_id = _resolve_user_from_token(token)
     if user_id:

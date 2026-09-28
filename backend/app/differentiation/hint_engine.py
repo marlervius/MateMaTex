@@ -16,11 +16,10 @@ import json
 import re
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from app.auth import get_current_user
-
 from app.models.llm import get_llm
 
 logger = structlog.get_logger()
@@ -33,6 +32,7 @@ router = APIRouter(prefix="/exercises", tags=["differentiation"])
 # ---------------------------------------------------------------------------
 class HintSet(BaseModel):
     """Three progressive hints for an exercise."""
+
     nudge: str = Field("", description="Vag retningsindikasjon")
     step: str = Field("", description="Første konkrete steg")
     near_solution: str = Field("", description="Mesteparten av løsningen")
@@ -103,7 +103,7 @@ async def generate_hints(
 
     # Parse JSON
     try:
-        json_match = re.search(r'\{[\s\S]*\}', result)
+        json_match = re.search(r"\{[\s\S]*\}", result)
         if json_match:
             data = json.loads(json_match.group())
             return HintSet(
@@ -122,7 +122,7 @@ def generate_qr_code(url: str) -> bytes:
     """Generate a QR code PNG for the given URL."""
     try:
         import qrcode
-        from qrcode.image.pil import PilImage
+        from qrcode.image.pil import PilImage  # noqa: F401 — fail early without Pillow
 
         qr = qrcode.QRCode(
             version=1,
@@ -147,12 +147,15 @@ def generate_qr_code(url: str) -> bytes:
 # Endpoints
 # ---------------------------------------------------------------------------
 
+
 @router.post(
     "/{exercise_id}/hints",
     response_model=HintResponse,
     summary="Generate progressive hints for an exercise",
 )
-async def create_hints(exercise_id: str, req: HintRequest, user_id: str = Depends(get_current_user)) -> HintResponse:
+async def create_hints(
+    exercise_id: str, req: HintRequest, user_id: str = Depends(get_current_user)
+) -> HintResponse:
     """
     Generate three progressive hints for the specified exercise.
 

@@ -2,16 +2,17 @@
 Tests for sharing — access control, password, expiry.
 """
 
-import pytest
 from datetime import datetime, timedelta
 
-from app.stores import sharing_store as share_store
+import pytest
+
 from app.sharing.router import (
     ShareRequest,
     _check_link_valid,
     _check_password,
     _hash_password,
 )
+from app.stores import sharing_store as share_store
 
 
 @pytest.fixture(autouse=True)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from pathlib import Path
@@ -96,8 +97,7 @@ async def list_active(*, user_id: str | None = None) -> list[dict]:
     file_items = [d for d in _memory.values() if not d.get("deleted")]
     if user_id and user_id not in ("anonymous", "api-user"):
         file_items = [
-            d for d in file_items
-            if d.get("owner_id", user_id) == user_id or not d.get("owner_id")
+            d for d in file_items if d.get("owner_id", user_id) == user_id or not d.get("owner_id")
         ]
 
     try:
@@ -128,9 +128,7 @@ async def soft_delete(exercise_id: str) -> bool:
     d = _memory.get(exercise_id)
     if d:
         d["deleted"] = True
-        try:
+        with contextlib.suppress(OSError):
             _persist_one(d)
-        except OSError:
-            pass
         deleted = True
     return deleted

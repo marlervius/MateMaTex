@@ -9,8 +9,10 @@ arithmetic errors, incorrect solutions, and invalid equations.
 from __future__ import annotations
 
 import re
+
 import structlog
-from sympy import Eq, Symbol, simplify, solve, sqrt, sympify, expand, cancel
+from sympy import Eq, Symbol, cancel, expand, simplify, sympify
+
 from app.models.state import MathClaim, VerificationResult
 from m1.scorer import looks_like_prose, numeric_agreement
 
@@ -38,25 +40,25 @@ class MathChecker:
 
     _EQUATION_PATTERNS = [
         # Standalone equation: $expr = expr$
-        re.compile(r'\$([^$]+?)\s*=\s*([^$]+?)\$'),
+        re.compile(r"\$([^$]+?)\s*=\s*([^$]+?)\$"),
         # Display equation: \[ expr = expr \]
-        re.compile(r'\\\[([^\\]+?)\s*=\s*([^\\]+?)\\\]'),
+        re.compile(r"\\\[([^\\]+?)\s*=\s*([^\\]+?)\\\]"),
     ]
 
     # Pattern for "Oppgave N ... fasit: answer" or solution blocks
     _SOLUTION_PATTERNS = [
         # a) $x = 3$  or  a) x = 3
-        re.compile(r'[a-z]\)\s*\$?\\?x\s*=\s*([^$\\\n,]+)\$?'),
+        re.compile(r"[a-z]\)\s*\$?\\?x\s*=\s*([^$\\\n,]+)\$?"),
     ]
 
     # Patterns to find equations inside taskbox environments
     _TASK_EQUATION_PATTERN = re.compile(
-        r'\\begin\{taskbox\}\{([^}]*)\}(.*?)\\end\{taskbox\}',
+        r"\\begin\{taskbox\}\{([^}]*)\}(.*?)\\end\{taskbox\}",
         re.DOTALL,
     )
 
     _SOLUTION_SECTION_PATTERN = re.compile(
-        r'\\section\*\{Løsningsforslag\}(.*?)(?:\\section|\Z)',
+        r"\\section\*\{Løsningsforslag\}(.*?)(?:\\section|\Z)",
         re.DOTALL,
     )
 
@@ -80,7 +82,12 @@ class MathChecker:
         for claim in claims:
             # Check total timeout
             if time.monotonic() - start_time > _TOTAL_TIMEOUT:
-                logger.warning("math_verification_total_timeout", checked_so_far=result.claims_correct + result.claims_incorrect + result.claims_unparseable)
+                logger.warning(
+                    "math_verification_total_timeout",
+                    checked_so_far=result.claims_correct
+                    + result.claims_incorrect
+                    + result.claims_unparseable,
+                )
                 break
 
             claim_start = time.monotonic()
@@ -150,7 +157,9 @@ class MathChecker:
                 lhs_raw = match.group(1).strip()
                 rhs_raw = match.group(2).strip()
 
-                if not self._is_valid_math_fragment(lhs_raw) or not self._is_valid_math_fragment(rhs_raw):
+                if not self._is_valid_math_fragment(lhs_raw) or not self._is_valid_math_fragment(
+                    rhs_raw
+                ):
                     continue
 
                 # Skip trivial definitions (x = ...) with no computation
@@ -162,7 +171,7 @@ class MathChecker:
                 claim = MathClaim(
                     latex_expression=f"{lhs_raw} = {rhs_raw}",
                     claim_type="equation",
-                    context=content[max(0, match.start() - 40):match.end() + 40],
+                    context=content[max(0, match.start() - 40) : match.end() + 40],
                 )
                 claims.append(claim)
 
@@ -189,13 +198,13 @@ class MathChecker:
             task_body = task_match.group(2)
 
             # Find equations in the task (e.g., "Løs likningen $2x + 3 = 7$")
-            equations_in_task = re.findall(r'\$([^$]*?[=<>][^$]*?)\$', task_body)
+            equations_in_task = re.findall(r"\$([^$]*?[=<>][^$]*?)\$", task_body)
 
             # Find the corresponding solution
-            task_num = re.search(r'(\d+)', task_title)
+            task_num = re.search(r"(\d+)", task_title)
             if task_num:
                 sol_pattern = re.compile(
-                    rf'\\textbf\{{Oppgave\s*{task_num.group(1)}\}}(.*?)(?=\\textbf|$)',
+                    rf"\\textbf\{{Oppgave\s*{task_num.group(1)}\}}(.*?)(?=\\textbf|$)",
                     re.DOTALL,
                 )
                 sol_match_task = sol_pattern.search(solution_text)
@@ -204,11 +213,11 @@ class MathChecker:
 
                     # For each sub-answer (a), b), etc.)
                     sub_answers = re.findall(
-                        r'([a-z])\)\s*\$?([^$\n,]+?)\$?(?:\s|\\|$)',
+                        r"([a-z])\)\s*\$?([^$\n,]+?)\$?(?:\s|\\|$)",
                         sol_text,
                     )
                     for sub_letter, answer in sub_answers:
-                        if '=' in answer:
+                        if "=" in answer:
                             claim = MathClaim(
                                 latex_expression=answer.strip(),
                                 claim_type="solution",
@@ -243,12 +252,12 @@ class MathChecker:
         """Verify that LHS = RHS symbolically."""
         expr_str = claim.latex_expression
 
-        if '=' not in expr_str:
+        if "=" not in expr_str:
             claim.is_correct = None
             claim.error_message = "No equality found"
             return
 
-        parts = expr_str.split('=', 1)
+        parts = expr_str.split("=", 1)
         lhs_latex = parts[0].strip()
         rhs_latex = parts[1].strip()
 
@@ -276,12 +285,12 @@ class MathChecker:
                 claim.is_correct = False
                 claim.error_message = f"Vector length mismatch: {len(lhs)} ≠ {len(rhs)}"
                 return
-            for i, (l, r) in enumerate(zip(lhs, rhs)):
+            for i, (l, r) in enumerate(zip(lhs, rhs, strict=True)):  # noqa: E741
                 try:
                     diff_raw = l - r
                     if diff_raw == 0 or getattr(diff_raw, "is_zero", False) is True:
                         continue
-                    
+
                     # Try cheap checks before heavy simplify
                     resolved = False
                     for simplifier in (expand, cancel):
@@ -298,7 +307,7 @@ class MathChecker:
                     diff = simplify(diff_raw)
                     if diff == 0 or getattr(diff, "is_zero", False) is True:
                         continue
-                    
+
                     try:
                         d = complex(diff.evalf())
                         if abs(d) < 1e-9:
@@ -379,8 +388,7 @@ class MathChecker:
                     if self._context_claims_identity(claim.context):
                         claim.is_correct = False
                         claim.error_message = (
-                            f"LHS ({lhs}) ≠ RHS ({rhs}) for generic values "
-                            "(identity check)"
+                            f"LHS ({lhs}) ≠ RHS ({rhs}) for generic values " "(identity check)"
                         )
                     else:
                         claim.is_correct = None
@@ -400,8 +408,7 @@ class MathChecker:
             claim.actual_result = str(simplified_lhs)
             claim.is_correct = False
             claim.error_message = (
-                f"LHS ({simplified_lhs}) ≠ RHS ({simplified_rhs}), "
-                f"difference = {diff}"
+                f"LHS ({simplified_lhs}) ≠ RHS ({simplified_rhs}), " f"difference = {diff}"
             )
         except (TypeError, ValueError):
             try:
@@ -418,7 +425,7 @@ class MathChecker:
         Verify a solution claim like 'x = 3' against its equation context.
         """
         # Extract variable and value from the solution
-        sol_match = re.match(r'\\?([a-z])\s*=\s*(.+)', claim.latex_expression.strip())
+        sol_match = re.match(r"\\?([a-z])\s*=\s*(.+)", claim.latex_expression.strip())
         if not sol_match:
             claim.is_correct = None
             claim.error_message = "Could not parse solution format"
@@ -447,10 +454,10 @@ class MathChecker:
         var = Symbol(var_name)
 
         for eq_str in eq_strs:
-            if '=' not in eq_str:
+            if "=" not in eq_str:
                 continue
 
-            parts = eq_str.split('=', 1)
+            parts = eq_str.split("=", 1)
             try:
                 lhs = self._parse_latex_expr(parts[0].strip())
                 rhs = self._parse_latex_expr(parts[1].strip())
@@ -464,9 +471,13 @@ class MathChecker:
             try:
                 # Support element-by-element substitution for lists
                 if isinstance(lhs, (list, tuple)) or isinstance(rhs, (list, tuple)):
-                    if isinstance(lhs, (list, tuple)) and isinstance(rhs, (list, tuple)) and len(lhs) == len(rhs):
+                    if (
+                        isinstance(lhs, (list, tuple))
+                        and isinstance(rhs, (list, tuple))
+                        and len(lhs) == len(rhs)
+                    ):
                         all_match = True
-                        for l, r in zip(lhs, rhs):
+                        for l, r in zip(lhs, rhs, strict=True):  # noqa: E741
                             diff_raw = (l - r).subs(var, value)
                             if diff_raw == 0 or getattr(diff_raw, "is_zero", False) is True:
                                 continue
@@ -474,7 +485,10 @@ class MathChecker:
                             for simplifier in (expand, cancel):
                                 try:
                                     diff_simple = simplifier(diff_raw)
-                                    if diff_simple == 0 or getattr(diff_simple, "is_zero", False) is True:
+                                    if (
+                                        diff_simple == 0
+                                        or getattr(diff_simple, "is_zero", False) is True
+                                    ):
                                         resolved = True
                                         break
                                 except Exception:
@@ -527,7 +541,7 @@ class MathChecker:
                     claim.expected_result = str(value)
                     claim.actual_result = str(value)
                     return
-                
+
                 try:
                     val_complex = complex(diff)
                     if abs(val_complex) < 1e-10:
@@ -563,9 +577,9 @@ class MathChecker:
         """
         # Clean the expression
         expr = latex_expr.strip()
-        expr = expr.replace('\\,', '')
-        expr = expr.replace('\\;', '')
-        expr = expr.replace('\\!', '')
+        expr = expr.replace("\\,", "")
+        expr = expr.replace("\\;", "")
+        expr = expr.replace("\\!", "")
 
         # Manual parse only for reliability: parse_latex can hang without full antlr.
         manual = self._manual_parse(expr)
@@ -576,7 +590,7 @@ class MathChecker:
         s = expr
 
         # Convert caret superscript to ** early to simplify other replacements
-        s = s.replace('^', '**')
+        s = s.replace("^", "**")
 
         # Robust loop to handle nested structures, \frac, \sqrt, formatting macros, etc.
         while True:
@@ -584,50 +598,50 @@ class MathChecker:
 
             # 1. Strip styling/formatting wrappers: \text{...}, \mathrm{...}, \mathbf{...}, etc.
             s_new = re.sub(
-                r'\\(text|mathrm|mathbf|mathit|mathsf|mathtt|operatorname)\{([^{}]+)\}',
-                r'\2',
+                r"\\(text|mathrm|mathbf|mathit|mathsf|mathtt|operatorname)\{([^{}]+)\}",
+                r"\2",
                 s_new,
             )
 
             # 2. Convert \frac{a}{b} -> ((a)/(b))
             s_new = re.sub(
-                r'\\frac\{([^{}]+)\}\{([^{}]+)\}',
-                r'((\1)/(\2))',
+                r"\\frac\{([^{}]+)\}\{([^{}]+)\}",
+                r"((\1)/(\2))",
                 s_new,
             )
 
             # 3. Convert \binom{n}{k} -> binomial(n, k)
             s_new = re.sub(
-                r'\\binom\{([^{}]+)\}\{([^{}]+)\}',
-                r'binomial(\1,\2)',
+                r"\\binom\{([^{}]+)\}\{([^{}]+)\}",
+                r"binomial(\1,\2)",
                 s_new,
             )
 
             # 4. Convert \sqrt{x} -> sqrt(x)
             s_new = re.sub(
-                r'\\sqrt\{([^{}]+)\}',
-                r'sqrt(\1)',
+                r"\\sqrt\{([^{}]+)\}",
+                r"sqrt(\1)",
                 s_new,
             )
 
             # 5. Handle curly braces in exponents: **{x} -> **(x)
             s_new = re.sub(
-                r'\*\*\{([^{}]+)\}',
-                r'**(\1)',
+                r"\*\*\{([^{}]+)\}",
+                r"**(\1)",
                 s_new,
             )
 
             # 6. Handle alphanumeric curly braces in subscripts: _{1} -> _1, _{ij} -> _ij
             s_new = re.sub(
-                r'_\{([a-zA-Z0-9]+)\}',
-                r'_\1',
+                r"_\{([a-zA-Z0-9]+)\}",
+                r"_\1",
                 s_new,
             )
 
             # 7. Handle remaining complex curly braces in subscripts: _{expr} -> _(expr)
             s_new = re.sub(
-                r'_\{([^{}]+)\}',
-                r'_(\1)',
+                r"_\{([^{}]+)\}",
+                r"_(\1)",
                 s_new,
             )
 
@@ -637,13 +651,13 @@ class MathChecker:
             s = s_new
 
         # \cdot → *
-        s = s.replace('\\cdot', '*')
-        s = s.replace('\\times', '*')
-        s = s.replace('\\div', '/')
+        s = s.replace("\\cdot", "*")
+        s = s.replace("\\times", "*")
+        s = s.replace("\\div", "/")
 
         # Clean remaining LaTeX controls and symbols
-        s = s.replace('\\left', '').replace('\\right', '')
-        s = s.replace('\\', '')
+        s = s.replace("\\left", "").replace("\\right", "")
+        s = s.replace("\\", "")
 
         try:
             return sympify(s)

@@ -1,5 +1,6 @@
 """LaTeX preamble and compilation."""
 
+from .compiler import compile_to_pdf, resolve_engine
 from .preamble import (
     STANDARD_PREAMBLE,
     THEMES,
@@ -7,7 +8,6 @@ from .preamble import (
     wrap_with_preamble,
     wrap_with_style,
 )
-from .compiler import compile_to_pdf, resolve_engine
 
 __all__ = [
     "STANDARD_PREAMBLE",

@@ -84,11 +84,7 @@ def run_final_math_verifier(state: PipelineState) -> PipelineState:
     """Verify the editor's final body so an edit cannot invalidate the fasit badge."""
     step = AgentStep(agent=AgentRole.MATH_VERIFIER)
     state.current_agent = AgentRole.MATH_VERIFIER
-    source = (
-        state.edited_latex_body
-        or state.verified_latex_body
-        or state.raw_latex_body
-    )
+    source = state.edited_latex_body or state.verified_latex_body or state.raw_latex_body
 
     logger.info("final_math_verifier_start", job_id=state.job_id)
     try:

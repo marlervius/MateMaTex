@@ -6,11 +6,9 @@ All endpoints are grouped under the `exercises` tag in OpenAPI docs.
 
 from __future__ import annotations
 
-import hashlib
 import asyncio
 import uuid
 from datetime import datetime
-from enum import Enum
 from typing import Literal
 
 import structlog
@@ -18,8 +16,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from app.auth import get_current_user
-from app.rate_limit import limiter
-
 from app.exercises.parser import (
     Difficulty,
     ParsedExercise,
@@ -28,13 +24,14 @@ from app.exercises.parser import (
 )
 from app.latex.compiler import compile_to_pdf
 from app.latex.preamble import wrap_with_preamble
+from app.rate_limit import limiter
 
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/exercises", tags=["exercises"])
 
 
-from app.stores import exercise_store as store
+from app.stores import exercise_store as store  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -42,6 +39,7 @@ from app.stores import exercise_store as store
 # ---------------------------------------------------------------------------
 class ExerciseOut(BaseModel):
     """Exercise as returned by the API."""
+
     id: str
     title: str
     number: int = 0
@@ -63,6 +61,7 @@ class ExerciseOut(BaseModel):
 
 class ExerciseUpdate(BaseModel):
     """Fields that can be updated on an exercise."""
+
     title: str | None = None
     topic: str | None = None
     grade_level: str | None = None
@@ -82,6 +81,7 @@ class ExerciseListResponse(BaseModel):
 
 class IngestRequest(BaseModel):
     """Request to ingest exercises from a generation's LaTeX output."""
+
     latex_content: str = Field(..., max_length=500_000)
     topic: str = ""
     grade_level: str = ""
@@ -109,6 +109,7 @@ class ExportResponse(BaseModel):
 
 class VariantRequest(BaseModel):
     """Request to generate a variant of an exercise."""
+
     instructions: str = ""
 
 
@@ -175,7 +176,11 @@ def _user_owns(d: dict, user_id: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-@router.post("/ingest", response_model=IngestResponse, summary="Parse LaTeX and ingest exercises into the bank")
+@router.post(
+    "/ingest",
+    response_model=IngestResponse,
+    summary="Parse LaTeX and ingest exercises into the bank",
+)
 @limiter.limit("20/minute")
 async def ingest_exercises(
     request: Request,
@@ -314,7 +319,9 @@ async def get_exercise(exercise_id: str, user_id: str = Depends(get_current_user
     response_model=ExerciseOut,
     summary="Update exercise metadata",
 )
-async def update_exercise(exercise_id: str, update: ExerciseUpdate, user_id: str = Depends(get_current_user)) -> ExerciseOut:
+async def update_exercise(
+    exercise_id: str, update: ExerciseUpdate, user_id: str = Depends(get_current_user)
+) -> ExerciseOut:
     d = await store.get(exercise_id)
     if not d or d.get("deleted") or not _user_owns(d, user_id):
         raise HTTPException(404, "Exercise not found")
@@ -356,7 +363,9 @@ async def delete_exercise(exercise_id: str, user_id: str = Depends(get_current_u
     response_model=list[ExerciseOut],
     summary="Find similar exercises (by content overlap)",
 )
-async def find_similar(exercise_id: str, limit: int = Query(5, ge=1, le=20), user_id: str = Depends(get_current_user)):
+async def find_similar(
+    exercise_id: str, limit: int = Query(5, ge=1, le=20), user_id: str = Depends(get_current_user)
+):
     """
     Find exercises most similar to the given one.
 
@@ -381,7 +390,11 @@ async def find_similar(exercise_id: str, limit: int = Query(5, ge=1, le=20), use
     return [_dict_to_out(d) for _, d in scored[:limit]]
 
 
-@router.post("/{exercise_id}/variant", response_model=ExerciseOut, summary="Generate an AI variant of an exercise")
+@router.post(
+    "/{exercise_id}/variant",
+    response_model=ExerciseOut,
+    summary="Generate an AI variant of an exercise",
+)
 @limiter.limit("15/minute")
 async def generate_variant(
     request: Request,
@@ -443,7 +456,9 @@ async def generate_variant(
     return _dict_to_out(variant)
 
 
-@router.post("/export", response_model=ExportResponse, summary="Export selected exercises to PDF or Word")
+@router.post(
+    "/export", response_model=ExportResponse, summary="Export selected exercises to PDF or Word"
+)
 @limiter.limit("15/minute")
 async def export_exercises(
     request: Request,
@@ -479,7 +494,8 @@ async def export_exercises(
     full_doc = wrap_with_preamble(body)
 
     if req.format == "pdf":
-        import tempfile, os
+        import os
+        import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:
             out_path = os.path.join(tmpdir, "export.pdf")

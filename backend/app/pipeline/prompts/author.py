@@ -829,6 +829,7 @@ def _get_templates_for_grade(grade: str) -> str:
     """Get TikZ template examples from the graph_templates library for this grade."""
     try:
         from app.latex.graph_templates import get_templates_for_grade
+
         templates = get_templates_for_grade(grade)
         if not templates:
             return ""

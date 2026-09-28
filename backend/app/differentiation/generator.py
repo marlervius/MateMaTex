@@ -18,14 +18,13 @@ import re
 from dataclasses import dataclass, field
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.auth import get_current_user
+from app.models.llm import get_llm
 from app.rate_limit import limiter
 from app.validators import ensure_latex_size
-
-from app.models.llm import get_llm
 
 logger = structlog.get_logger()
 
@@ -47,6 +46,7 @@ class LevelQuality:
 @dataclass
 class DifferentiatedOutput:
     """Three-level differentiated content."""
+
     basic_latex: str = ""
     standard_latex: str = ""
     advanced_latex: str = ""
@@ -60,6 +60,7 @@ class DifferentiatedOutput:
 
 class DifferentiateRequest(BaseModel):
     """Request to differentiate existing LaTeX content."""
+
     latex_content: str = Field(
         ...,
         min_length=10,
@@ -68,14 +69,15 @@ class DifferentiateRequest(BaseModel):
     topic: str = Field("", description="Math topic for context")
     grade: str = Field("", description="Grade level for context")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "latex_content": "\\begin{taskbox}{Oppgave 1}\nLøs $2x + 3 = 7$\n\\end{taskbox}",
                 "topic": "Algebra",
                 "grade": "8. trinn",
             }
         }
+    )
 
 
 class LevelQualityOut(BaseModel):
@@ -201,7 +203,7 @@ async def differentiate_content(
 
     try:
         # Try to extract JSON from the response
-        json_match = re.search(r'\{[\s\S]*\}', result)
+        json_match = re.search(r"\{[\s\S]*\}", result)
         if json_match:
             data = json.loads(json_match.group())
             output.basic_latex = sanitize_latex_body(data.get("basic", ""))
@@ -316,7 +318,12 @@ def differentiate_content_sync(
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/generate", response_model=DifferentiateResponse, summary="Generate three difficulty levels from standard content")
+
+@router.post(
+    "/generate",
+    response_model=DifferentiateResponse,
+    summary="Generate three difficulty levels from standard content",
+)
 @limiter.limit("10/minute")
 async def differentiate(
     request: Request,
@@ -348,15 +355,13 @@ async def differentiate(
             basic_exercise_count=_count_exercises(output.basic_latex),
             standard_exercise_count=_count_exercises(output.standard_latex),
             advanced_exercise_count=_count_exercises(output.advanced_latex),
-            basic_quality=_level_quality_out(output.basic_quality)
-            if output.basic_latex
-            else None,
-            standard_quality=_level_quality_out(output.standard_quality)
-            if output.standard_latex
-            else None,
-            advanced_quality=_level_quality_out(output.advanced_quality)
-            if output.advanced_latex
-            else None,
+            basic_quality=_level_quality_out(output.basic_quality) if output.basic_latex else None,
+            standard_quality=(
+                _level_quality_out(output.standard_quality) if output.standard_latex else None
+            ),
+            advanced_quality=(
+                _level_quality_out(output.advanced_quality) if output.advanced_latex else None
+            ),
         )
     except Exception as e:
         logger.error("differentiation_failed", error=str(e))

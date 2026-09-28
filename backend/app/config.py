@@ -161,7 +161,7 @@ class Settings(BaseSettings):
     }
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     """Get application settings singleton."""
     return Settings()

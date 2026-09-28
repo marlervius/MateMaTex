@@ -21,12 +21,12 @@ logger = structlog.get_logger()
 router = APIRouter(tags=["collaboration"])
 
 
-from app.stores import collaboration_store as collab
-
+from app.stores import collaboration_store as collab  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
+
 
 # --- School ---
 class SchoolExerciseOut(BaseModel):
@@ -115,8 +115,7 @@ async def list_school_exercises(
     scope = school or (user_id if user_id not in ("anonymous", "api-user") else "")
     if scope:
         results = [
-            r for r in results
-            if r.get("school_id") == scope or r.get("published_by") == scope
+            r for r in results if r.get("school_id") == scope or r.get("published_by") == scope
         ]
 
     if topic:
@@ -126,7 +125,7 @@ async def list_school_exercises(
 
     total = len(results)
     start = (page - 1) * page_size
-    page_results = results[start:start + page_size]
+    page_results = results[start : start + page_size]
 
     return SchoolListResponse(
         exercises=[SchoolExerciseOut(**{k: v for k, v in d.items()}) for d in page_results],
@@ -138,15 +137,17 @@ async def list_school_exercises(
     "/exercises/{exercise_id}/publish",
     summary="Publish an exercise to the school's shared bank",
 )
-async def publish_to_school(exercise_id: str, req: PublishRequest, user_id: str = Depends(get_current_user)):
+async def publish_to_school(
+    exercise_id: str, req: PublishRequest, user_id: str = Depends(get_current_user)
+):
     """Make an exercise available to all teachers at the school."""
     # Use the public API to fetch the exercise instead of importing private stores
     from app.exercises.router import get_exercise as _get_exercise
 
     try:
         exercise = await _get_exercise(exercise_id, user_id=user_id)
-    except HTTPException:
-        raise HTTPException(404, "Exercise not found")
+    except HTTPException as err:
+        raise HTTPException(404, "Exercise not found") from err
 
     school_entry = {
         "id": exercise.id,
@@ -178,20 +179,17 @@ comments_router = APIRouter(prefix="/generations", tags=["collaboration"])
     response_model=CommentListResponse,
     summary="List comments on a generation",
 )
-async def list_comments(generation_id: str, user_id: str = Depends(get_current_user)) -> CommentListResponse:
+async def list_comments(
+    generation_id: str, user_id: str = Depends(get_current_user)
+) -> CommentListResponse:
     """Get all comments for a generation, threaded by parent_id."""
     all_comments = collab.all_comments(generation_id)
 
     # Build threaded structure
     top_level = [c for c in all_comments if c.get("parent_id") is None]
-    comment_map = {c["id"]: c for c in all_comments}
 
     def build_tree(comment: dict) -> CommentOut:
-        replies = [
-            build_tree(r)
-            for r in all_comments
-            if r.get("parent_id") == comment["id"]
-        ]
+        replies = [build_tree(r) for r in all_comments if r.get("parent_id") == comment["id"]]
         return CommentOut(
             id=comment["id"],
             content=comment["content"],
@@ -211,7 +209,9 @@ async def list_comments(generation_id: str, user_id: str = Depends(get_current_u
     response_model=CommentOut,
     summary="Add a comment to a generation",
 )
-async def add_comment(generation_id: str, req: CommentCreate, user_id: str = Depends(get_current_user)) -> CommentOut:
+async def add_comment(
+    generation_id: str, req: CommentCreate, user_id: str = Depends(get_current_user)
+) -> CommentOut:
     """Add a comment (optionally threaded) to a generation."""
     if req.parent_id:
         parent = next(
@@ -249,7 +249,9 @@ versions_router = APIRouter(prefix="/generations", tags=["collaboration"])
     response_model=VersionListResponse,
     summary="List all versions of a generation",
 )
-async def list_versions(generation_id: str, user_id: str = Depends(get_current_user)) -> VersionListResponse:
+async def list_versions(
+    generation_id: str, user_id: str = Depends(get_current_user)
+) -> VersionListResponse:
     """Get the version history of a generation."""
     versions = collab.all_versions(generation_id)
     return VersionListResponse(
@@ -293,7 +295,9 @@ async def create_version(
     "/{generation_id}/versions/{version_id}/restore",
     summary="Restore a specific version",
 )
-async def restore_version(generation_id: str, version_id: str, user_id: str = Depends(get_current_user)):
+async def restore_version(
+    generation_id: str, version_id: str, user_id: str = Depends(get_current_user)
+):
     """Restore a previous version, creating a new version entry."""
     versions = collab.all_versions(generation_id)
     target = next((v for v in versions if v["id"] == version_id), None)

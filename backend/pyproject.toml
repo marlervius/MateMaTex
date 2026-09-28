@@ -10,6 +10,15 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "TCH"]
+ignore = [
+    "E501",    # line length is enforced by black
+    "UP042",   # StrEnum changes str()/format() output of existing enums
+    "TC001",   # FastAPI/pydantic resolve annotations at runtime;
+    "TC002",   # moving imports into TYPE_CHECKING breaks them
+    "TC003",
+    "SIM102",  # nested guard clauses are often clearer than one long condition
+    "SIM103",  # early-return ladders are the house style in the verifiers
+]
 
 [tool.mypy]
 python_version = "3.12"

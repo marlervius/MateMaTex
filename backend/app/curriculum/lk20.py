@@ -948,6 +948,7 @@ GRADE_BOUNDARIES = {
 # Functions
 # ---------------------------------------------------------------------------
 
+
 def get_grade_boundaries(grade: str) -> dict:
     """
     Get the boundary constraints for a specific grade level.

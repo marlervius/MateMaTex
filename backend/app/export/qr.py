@@ -10,7 +10,6 @@ from __future__ import annotations
 import base64
 import io
 import os
-import tempfile
 
 import structlog
 from fastapi import APIRouter, Depends
@@ -50,6 +49,7 @@ class QrGenerateResponse(BaseModel):
 
 class QrBatchRequest(BaseModel):
     """Generate QR codes for multiple exercises."""
+
     items: list[dict] = Field(
         ...,
         description="List of {exercise_id, url} objects",
@@ -88,9 +88,9 @@ def generate_qr_png(
         img.save(buf, format="PNG")
         return buf.getvalue()
 
-    except ImportError:
+    except ImportError as err:
         logger.error("qrcode_package_not_installed")
-        raise ImportError("qrcode[pil] package is required for QR generation")
+        raise ImportError("qrcode[pil] package is required for QR generation") from err
 
 
 def qr_to_latex_file(
@@ -117,18 +117,21 @@ def qr_to_latex_file(
 # Endpoints
 # ---------------------------------------------------------------------------
 
+
 @router.post(
     "/qr",
     response_model=QrGenerateResponse,
     summary="Generate a QR code PNG for a URL",
 )
-async def generate_qr(req: QrGenerateRequest, user_id: str = Depends(get_current_user)) -> QrGenerateResponse:
+async def generate_qr(
+    req: QrGenerateRequest, user_id: str = Depends(get_current_user)
+) -> QrGenerateResponse:
     """Generate a QR code PNG encoded as base64."""
     try:
         png_bytes = generate_qr_png(req.url, box_size=req.size)
 
         # Also generate LaTeX include command
-        latex_cmd = rf"\includegraphics[width=2cm]{{qr}}"
+        latex_cmd = r"\includegraphics[width=2cm]{qr}"
 
         return QrGenerateResponse(
             success=True,
@@ -144,7 +147,9 @@ async def generate_qr(req: QrGenerateRequest, user_id: str = Depends(get_current
     response_model=QrBatchResponse,
     summary="Generate QR codes for multiple exercises",
 )
-async def generate_qr_batch(req: QrBatchRequest, user_id: str = Depends(get_current_user)) -> QrBatchResponse:
+async def generate_qr_batch(
+    req: QrBatchRequest, user_id: str = Depends(get_current_user)
+) -> QrBatchResponse:
     """Generate QR codes for a batch of exercise URLs."""
     codes = []
     errors = []
@@ -155,11 +160,13 @@ async def generate_qr_batch(req: QrBatchRequest, user_id: str = Depends(get_curr
             exercise_id = item.get("exercise_id", "unknown")
 
             png_bytes = generate_qr_png(url)
-            codes.append({
-                "exercise_id": exercise_id,
-                "png_base64": base64.b64encode(png_bytes).decode(),
-                "url": url,
-            })
+            codes.append(
+                {
+                    "exercise_id": exercise_id,
+                    "png_base64": base64.b64encode(png_bytes).decode(),
+                    "url": url,
+                }
+            )
         except Exception as e:
             errors.append(f"Failed for {item}: {e}")
 

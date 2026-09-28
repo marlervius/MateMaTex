@@ -18,9 +18,9 @@ from pydantic import BaseModel, Field
 
 from app.auth import get_current_user
 from app.latex.compiler import compile_to_pdf_with_log
+from app.latex.preamble import wrap_with_preamble
 from app.pipeline.agents.tikz_validator import sanitize_latex_body, strip_tikz_and_plots
 from app.rate_limit import limiter
-from app.latex.preamble import wrap_with_preamble
 from app.validators import ensure_latex_size
 
 logger = structlog.get_logger()
@@ -74,6 +74,7 @@ def _strip_solutions(latex: str) -> str:
     latex = _SOLUTION_SECTION_PATTERN.sub("", latex)
     latex = _SOLUTION_SUBSECTION_PATTERN.sub("", latex)
     return latex
+
 
 router = APIRouter(prefix="/export", tags=["export"])
 
@@ -201,7 +202,11 @@ def _make_print_optimized(latex: str) -> str:
 # ---------------------------------------------------------------------------
 # PDF Export
 # ---------------------------------------------------------------------------
-@router.post("/pdf", response_model=ExportFileResponse, summary="Export to PDF with optional cover page and print optimization")
+@router.post(
+    "/pdf",
+    response_model=ExportFileResponse,
+    summary="Export to PDF with optional cover page and print optimization",
+)
 @limiter.limit("15/minute")
 async def export_pdf(
     request: Request,
@@ -231,12 +236,14 @@ async def export_pdf(
     # Build full document
     body_parts: list[str] = []
     if req.include_cover:
-        body_parts.append(_build_cover_page(
-            school=req.cover_school,
-            teacher=req.cover_teacher,
-            subject=req.cover_subject,
-            topic=req.cover_topic,
-        ))
+        body_parts.append(
+            _build_cover_page(
+                school=req.cover_school,
+                teacher=req.cover_teacher,
+                subject=req.cover_subject,
+                topic=req.cover_topic,
+            )
+        )
 
     content, sanitize_notes = sanitize_latex_body(content)
     if sanitize_notes:
@@ -259,14 +266,16 @@ async def export_pdf(
 
     with tempfile.TemporaryDirectory() as tmpdir:
         out_path = os.path.join(tmpdir, "export.pdf")
-        pdf_path, log_excerpt = await asyncio.to_thread(
-            compile_to_pdf_with_log, full_doc, out_path
-        )
+        pdf_path, log_excerpt = await asyncio.to_thread(compile_to_pdf_with_log, full_doc, out_path)
 
         # If TikZ still breaks pdflatex, strip figures and retry once.
-        if not pdf_path and log_excerpt and (
-            "tikzpicture" in log_excerpt.lower()
-            or "undefined control sequence" in log_excerpt.lower()
+        if (
+            not pdf_path
+            and log_excerpt
+            and (
+                "tikzpicture" in log_excerpt.lower()
+                or "undefined control sequence" in log_excerpt.lower()
+            )
         ):
             logger.warning("export_pdf_retry_without_tikz", user_id=user_id)
             stripped_body = strip_tikz_and_plots(content)

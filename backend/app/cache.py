@@ -30,6 +30,7 @@ CACHE_DIR = Path(__file__).parent.parent / "data" / "cache"
 @dataclass
 class CacheEntry:
     """A cached result for an agent."""
+
     key: str
     agent: str
     result: str
@@ -85,9 +86,7 @@ class SemanticCache:
         key = self._author_key(plan_hash, request)
         return self._get(key, "author")
 
-    def set_author_output(
-        self, plan_hash: str, request: GenerationRequest, output: str
-    ) -> None:
+    def set_author_output(self, plan_hash: str, request: GenerationRequest, output: str) -> None:
         """Cache author output."""
         key = self._author_key(plan_hash, request)
         self._set(key, "author", output, request)
@@ -212,15 +211,18 @@ class SemanticCache:
 
     def _author_key(self, plan_hash: str, request: GenerationRequest) -> str:
         """Author cache key: plan + full content options."""
-        opts = json.dumps({
-            "difficulty": request.difficulty,
-            "num_exercises": request.num_exercises,
-            "include_theory": request.include_theory,
-            "include_examples": request.include_examples,
-            "include_graphs": request.include_graphs,
-            "include_solutions": request.include_solutions,
-            "language_level": request.language_level,
-        }, sort_keys=True)
+        opts = json.dumps(
+            {
+                "difficulty": request.difficulty,
+                "num_exercises": request.num_exercises,
+                "include_theory": request.include_theory,
+                "include_examples": request.include_examples,
+                "include_graphs": request.include_graphs,
+                "include_solutions": request.include_solutions,
+                "language_level": request.language_level,
+            },
+            sort_keys=True,
+        )
         raw = f"author:{plan_hash}:{opts}"
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
@@ -287,15 +289,18 @@ class SemanticCache:
         try:
             path = self._dir / f"{entry.key}.json"
             path.write_text(
-                json.dumps({
-                    "key": entry.key,
-                    "agent": entry.agent,
-                    "result": entry.result,
-                    "request_hash": entry.request_hash,
-                    "created_at": entry.created_at,
-                    "ttl_seconds": entry.ttl_seconds,
-                    "hit_count": entry.hit_count,
-                }, ensure_ascii=False),
+                json.dumps(
+                    {
+                        "key": entry.key,
+                        "agent": entry.agent,
+                        "result": entry.result,
+                        "request_hash": entry.request_hash,
+                        "created_at": entry.created_at,
+                        "ttl_seconds": entry.ttl_seconds,
+                        "hit_count": entry.hit_count,
+                    },
+                    ensure_ascii=False,
+                ),
                 encoding="utf-8",
             )
         except Exception as e:

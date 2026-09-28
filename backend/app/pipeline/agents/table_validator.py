@@ -33,6 +33,7 @@ logger = structlog.get_logger()
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _is_posisjonsskjema(tabular_text: str) -> bool:
     r"""
     Posisjonsskjema (place-value / decimal position tables) are the one
@@ -44,37 +45,42 @@ def _is_posisjonsskjema(tabular_text: str) -> bool:
       'Hundrer', 'Tiere', 'Enere', 'Tideler', 'Hundredeler'
     """
     # Column spec like {c|c|c|c|c} — all c's separated by |
-    col_spec_m = re.search(r'\\begin\{tabular\}\{([^}]+)\}', tabular_text)
+    col_spec_m = re.search(r"\\begin\{tabular\}\{([^}]+)\}", tabular_text)
     if col_spec_m:
         spec = col_spec_m.group(1)
         # Pure position spec: only c and | characters
-        if re.fullmatch(r'[c|]+', spec):
+        if re.fullmatch(r"[c|]+", spec):
             return True
 
     # Content heuristic: Norwegian decimal position header words
-    position_words = ('Hundrer', 'Tiere', 'Enere', 'Tideler', 'Hundredeler',
-                      'Tusener', 'Titusen', 'Hundreder')
-    for word in position_words:
-        if word in tabular_text:
-            return True
-
-    return False
+    position_words = (
+        "Hundrer",
+        "Tiere",
+        "Enere",
+        "Tideler",
+        "Hundredeler",
+        "Tusener",
+        "Titusen",
+        "Hundreder",
+    )
+    return any(word in tabular_text for word in position_words)
 
 
 def _count_columns_from_spec(spec: str) -> int:
     """Count the number of columns from a tabular column spec string."""
     # Remove alignment chars that don't count as columns: @{}, >{}, <{}, p{}, *{}
-    cleaned = re.sub(r'[@><]\{[^}]*\}', '', spec)
-    cleaned = re.sub(r'\*\{\d+\}\{[^}]*\}', '', cleaned)  # *{N}{spec}
+    cleaned = re.sub(r"[@><]\{[^}]*\}", "", spec)
+    cleaned = re.sub(r"\*\{\d+\}\{[^}]*\}", "", cleaned)  # *{N}{spec}
     # Remove | and space
-    cleaned = cleaned.replace('|', '').replace(' ', '')
+    cleaned = cleaned.replace("|", "").replace(" ", "")
     # Count remaining column letters: l, r, c, p, m, b, X
-    return len(re.findall(r'[lrcpmbX]', cleaned))
+    return len(re.findall(r"[lrcpmbX]", cleaned))
 
 
 # ---------------------------------------------------------------------------
 # Rule 1 + 2: Convert \hline to booktabs AND strip | from column specs
 # ---------------------------------------------------------------------------
+
 
 def _fix_hline_and_pipes(body: str) -> tuple[str, int]:
     r"""
@@ -90,7 +96,7 @@ def _fix_hline_and_pipes(body: str) -> tuple[str, int]:
     count = 0
 
     tabular_re = re.compile(
-        r'(\\begin\{tabular\}\{)([^}]+)(\})(.*?)(\\end\{tabular\})',
+        r"(\\begin\{tabular\}\{)([^}]+)(\})(.*?)(\\end\{tabular\})",
         re.DOTALL,
     )
 
@@ -110,38 +116,38 @@ def _fix_hline_and_pipes(body: str) -> tuple[str, int]:
         changed = False
 
         # --- Fix column spec: remove | ---
-        new_spec = col_spec.replace('|', '')
+        new_spec = col_spec.replace("|", "")
         if new_spec != col_spec:
             col_spec = new_spec
             changed = True
 
         # --- Fix \hline → booktabs ---
-        hlines = list(re.finditer(r'\\hline', content))
+        hlines = list(re.finditer(r"\\hline", content))
         if hlines:
             changed = True
             if len(hlines) == 1:
                 # Only one \hline — treat as \toprule
-                content = content.replace('\\hline', '\\toprule', 1)
+                content = content.replace("\\hline", "\\toprule", 1)
             elif len(hlines) == 2:
                 # Two \hlines — top and bottom
-                content = content[:hlines[0].start()] + '\\toprule' + content[hlines[0].end():]
+                content = content[: hlines[0].start()] + "\\toprule" + content[hlines[0].end() :]
                 # Recalculate positions after first replacement
-                hlines2 = list(re.finditer(r'\\hline', content))
+                hlines2 = list(re.finditer(r"\\hline", content))
                 if hlines2:
                     last = hlines2[-1]
-                    content = content[:last.start()] + '\\bottomrule' + content[last.end():]
+                    content = content[: last.start()] + "\\bottomrule" + content[last.end() :]
             else:
                 # Three or more: first → \toprule, last → \bottomrule, rest → \midrule
                 # Work backwards to preserve positions
                 positions = [(h.start(), h.end()) for h in hlines]
                 replacements = {}
-                replacements[positions[0]] = '\\toprule'
-                replacements[positions[-1]] = '\\bottomrule'
+                replacements[positions[0]] = "\\toprule"
+                replacements[positions[-1]] = "\\bottomrule"
                 for pos in positions[1:-1]:
-                    replacements[pos] = '\\midrule'
+                    replacements[pos] = "\\midrule"
 
                 # Rebuild content with replacements (reverse order to preserve indices)
-                for (start, end) in sorted(replacements.keys(), reverse=True):
+                for start, end in sorted(replacements.keys(), reverse=True):
                     content = content[:start] + replacements[(start, end)] + content[end:]
 
         if changed:
@@ -158,6 +164,7 @@ def _fix_hline_and_pipes(body: str) -> tuple[str, int]:
 # Rule 3: Ensure tabular is wrapped in \begin{center}...\end{center}
 # ---------------------------------------------------------------------------
 
+
 def _wrap_tabular_in_center(body: str) -> tuple[str, int]:
     """
     Any \begin{tabular} that is not already inside \begin{center} should
@@ -168,11 +175,20 @@ def _wrap_tabular_in_center(body: str) -> tuple[str, int]:
     for an unclosed tcolorbox begin tag.
     """
     count = 0
-    tcolorbox_envs = ('taskbox', 'definisjon', 'eksempel', 'definitionbox',
-                      'examplebox', 'tipbox', 'merk', 'losning', 'tcolorbox')
+    tcolorbox_envs = (
+        "taskbox",
+        "definisjon",
+        "eksempel",
+        "definitionbox",
+        "examplebox",
+        "tipbox",
+        "merk",
+        "losning",
+        "tcolorbox",
+    )
 
     tabular_re = re.compile(
-        r'\\begin\{tabular\}.*?\\end\{tabular\}',
+        r"\\begin\{tabular\}.*?\\end\{tabular\}",
         re.DOTALL,
     )
 
@@ -186,35 +202,36 @@ def _wrap_tabular_in_center(body: str) -> tuple[str, int]:
         output_parts.append(body[pos:tab_start])
 
         # Check preceding 600 chars for unclosed center / tcolorbox
-        preceding = body[max(0, tab_start - 600):tab_start]
+        preceding = body[max(0, tab_start - 600) : tab_start]
 
         # Already inside \begin{center}?
-        center_opens = len(re.findall(r'\\begin\{center\}', preceding))
-        center_closes = len(re.findall(r'\\end\{center\}', preceding))
+        center_opens = len(re.findall(r"\\begin\{center\}", preceding))
+        center_closes = len(re.findall(r"\\end\{center\}", preceding))
         inside_center = center_opens > center_closes
 
         # Inside a tcolorbox-derived env?
         inside_tcolorbox = any(
-            len(re.findall(rf'\\begin\{{{env}\}}', preceding)) >
-            len(re.findall(rf'\\end\{{{env}\}}', preceding))
+            len(re.findall(rf"\\begin\{{{env}\}}", preceding))
+            > len(re.findall(rf"\\end\{{{env}\}}", preceding))
             for env in tcolorbox_envs
         )
 
         if inside_center or inside_tcolorbox:
             output_parts.append(tab_text)
         else:
-            output_parts.append('\\begin{center}\n' + tab_text + '\n\\end{center}')
+            output_parts.append("\\begin{center}\n" + tab_text + "\n\\end{center}")
             count += 1
 
         pos = tab_end
 
     output_parts.append(body[pos:])
-    return ''.join(output_parts), count
+    return "".join(output_parts), count
 
 
 # ---------------------------------------------------------------------------
 # Rule 4: Fix rows with too many cells (& count mismatch)
 # ---------------------------------------------------------------------------
+
 
 def _fix_column_count_mismatch(body: str) -> tuple[str, int]:
     """
@@ -230,7 +247,7 @@ def _fix_column_count_mismatch(body: str) -> tuple[str, int]:
     count = 0
 
     tabular_re = re.compile(
-        r'(\\begin\{tabular\}\{)([^}]+)(\})(.*?)(\\end\{tabular\})',
+        r"(\\begin\{tabular\}\{)([^}]+)(\})(.*?)(\\end\{tabular\})",
         re.DOTALL,
     )
 
@@ -253,14 +270,14 @@ def _fix_column_count_mismatch(body: str) -> tuple[str, int]:
 
         # Split content into rows by \\
         # Keep the \\ in the output by splitting on \\\\ and re-joining
-        row_sep = re.compile(r'(\\\\(?:\[[^\]]*\])?)')
+        row_sep = re.compile(r"(\\\\(?:\[[^\]]*\])?)")
         parts = row_sep.split(content)
 
         # parts alternates: [row_content, \\, row_content, \\, ...]
         changed_here = False
         new_parts = []
 
-        for i, part in enumerate(parts):
+        for part in parts:
             if row_sep.fullmatch(part):
                 # This is a \\ separator — keep as-is
                 new_parts.append(part)
@@ -268,19 +285,17 @@ def _fix_column_count_mismatch(body: str) -> tuple[str, int]:
 
             # Skip booktabs rules and empty/whitespace
             stripped = part.strip()
-            if not stripped or re.match(
-                r'^\\(toprule|midrule|bottomrule|hline)\s*$', stripped
-            ):
+            if not stripped or re.match(r"^\\(toprule|midrule|bottomrule|hline)\s*$", stripped):
                 new_parts.append(part)
                 continue
 
             # Skip rows containing \multicolumn (complex — leave alone)
-            if '\\multicolumn' in part:
+            if "\\multicolumn" in part:
                 new_parts.append(part)
                 continue
 
             # Count cells in this row
-            cells = part.split('&')
+            cells = part.split("&")
             actual_cols = len(cells)
 
             if actual_cols == num_cols:
@@ -291,9 +306,9 @@ def _fix_column_count_mismatch(body: str) -> tuple[str, int]:
             if actual_cols > num_cols:
                 # Only trim if the extra cells are empty/whitespace
                 excess = cells[num_cols:]
-                if all(c.strip() == '' for c in excess):
+                if all(c.strip() == "" for c in excess):
                     cells = cells[:num_cols]
-                    new_parts.append('&'.join(cells))
+                    new_parts.append("&".join(cells))
                     changed_here = True
                     continue
 
@@ -302,7 +317,7 @@ def _fix_column_count_mismatch(body: str) -> tuple[str, int]:
 
         if changed_here:
             count += 1
-            return begin_tag + col_spec + close_brace + ''.join(new_parts) + end_tag
+            return begin_tag + col_spec + close_brace + "".join(new_parts) + end_tag
 
         return full
 
@@ -313,6 +328,7 @@ def _fix_column_count_mismatch(body: str) -> tuple[str, int]:
 # ---------------------------------------------------------------------------
 # Rule 5: Ensure \toprule/\midrule/\bottomrule present if booktabs used
 # ---------------------------------------------------------------------------
+
 
 def _ensure_booktabs_structure(body: str) -> tuple[str, int]:
     r"""
@@ -325,7 +341,7 @@ def _ensure_booktabs_structure(body: str) -> tuple[str, int]:
     count = 0
 
     tabular_re = re.compile(
-        r'(\\begin\{tabular\}\{)([^}]+)(\})(.*?)(\\end\{tabular\})',
+        r"(\\begin\{tabular\}\{)([^}]+)(\})(.*?)(\\end\{tabular\})",
         re.DOTALL,
     )
 
@@ -341,25 +357,26 @@ def _ensure_booktabs_structure(body: str) -> tuple[str, int]:
         if _is_posisjonsskjema(full):
             return full
 
-        has_rules = any(kw in content for kw in
-                        ('\\toprule', '\\midrule', '\\bottomrule', '\\hline'))
-        has_rows = '\\\\' in content
+        has_rules = any(
+            kw in content for kw in ("\\toprule", "\\midrule", "\\bottomrule", "\\hline")
+        )
+        has_rows = "\\\\" in content
 
         if has_rules or not has_rows:
             return full
 
         # Add minimal toprule after opening, bottomrule before closing
         # Find first \\ to place toprule before header row
-        first_row_end = content.find('\\\\')
+        first_row_end = content.find("\\\\")
         if first_row_end == -1:
             return full
 
         new_content = (
-            '\n\\toprule\n'
-            + content[:first_row_end + 2]   # header row + \\
-            + '\n\\midrule'
-            + content[first_row_end + 2:]
-            + '\\bottomrule\n'
+            "\n\\toprule\n"
+            + content[: first_row_end + 2]  # header row + \\
+            + "\n\\midrule"
+            + content[first_row_end + 2 :]
+            + "\\bottomrule\n"
         )
         count += 1
         return begin_tag + col_spec + close_brace + new_content + end_tag
@@ -371,6 +388,7 @@ def _ensure_booktabs_structure(body: str) -> tuple[str, int]:
 # ---------------------------------------------------------------------------
 # Main agent
 # ---------------------------------------------------------------------------
+
 
 def run_table_validator(state: PipelineState) -> PipelineState:
     """

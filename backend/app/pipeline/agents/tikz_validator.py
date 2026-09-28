@@ -33,19 +33,20 @@ logger = structlog.get_logger()
 # Individual fix functions
 # ---------------------------------------------------------------------------
 
+
 def _strip_includegraphics(body: str) -> tuple[str, int]:
     """Remove all \\includegraphics commands."""
     pattern = re.compile(
-        r'\\includegraphics\s*(?:\[.*?\])?\s*\{[^}]*\}',
+        r"\\includegraphics\s*(?:\[.*?\])?\s*\{[^}]*\}",
         re.DOTALL,
     )
-    new_body, count = pattern.subn('', body)
+    new_body, count = pattern.subn("", body)
     return new_body, count
 
 
 _TITLED_BOX_ENVS = (
-    r'(?:eksempel|examplebox|definisjon|definitionbox|regel|setning|merk|'
-    r'tipbox|losning|vurdering|husk|vanligfeil|utforsk|laeringsmaal|oppsummering)'
+    r"(?:eksempel|examplebox|definisjon|definitionbox|regel|setning|merk|"
+    r"tipbox|losning|vurdering|husk|vanligfeil|utforsk|laeringsmaal|oppsummering)"
 )
 
 
@@ -58,22 +59,20 @@ def _brace_box_titles(body: str) -> tuple[str, int]:
     braces — [title={...}] — any content is safe.
     """
     count = 0
-    pattern = re.compile(
-        r'(\\begin\{' + _TITLED_BOX_ENVS + r'\}\[title=)([^{\]][^\]]*)(\])'
-    )
+    pattern = re.compile(r"(\\begin\{" + _TITLED_BOX_ENVS + r"\}\[title=)([^{\]][^\]]*)(\])")
 
     def repl(m: re.Match) -> str:
         nonlocal count
         value = m.group(2)
         # Plain titles without special characters parse fine — leave them.
-        if not re.search(r'[=$\\,]', value):
+        if not re.search(r"[=$\\,]", value):
             return m.group(0)
         # Value contains an unmatched [ — the real title extends past our
         # match (e.g. "Intervallet [2, 5]"); too risky to rewrite.
-        if value.count('[') != value.count(']'):
+        if value.count("[") != value.count("]"):
             return m.group(0)
         count += 1
-        return f'{m.group(1)}{{{value}}}{m.group(3)}'
+        return f"{m.group(1)}{{{value}}}{m.group(3)}"
 
     return pattern.sub(repl, body), count
 
@@ -86,10 +85,8 @@ def _wrap_bare_tikzpicture(body: str) -> tuple[str, int]:
     count = 0
 
     # Find all tikzpicture spans and check if they are inside figure
-    result = []
-    pos = 0
-    tikz_start_re = re.compile(r'\\begin\{tikzpicture\}')
-    tikz_end_re = re.compile(r'\\end\{tikzpicture\}')
+    tikz_start_re = re.compile(r"\\begin\{tikzpicture\}")
+    tikz_end_re = re.compile(r"\\end\{tikzpicture\}")
 
     i = 0
     text = body
@@ -108,32 +105,27 @@ def _wrap_bare_tikzpicture(body: str) -> tuple[str, int]:
             break
 
         # Check if there is a \begin{figure} before this tikzpicture (within 500 chars)
-        preceding = text[max(0, m_start.start()-500):m_start.start()]
+        preceding = text[max(0, m_start.start() - 500) : m_start.start()]
         # Count begin{figure} vs end{figure} in preceding context
-        fig_opens = len(re.findall(r'\\begin\{figure\}', preceding))
-        fig_closes = len(re.findall(r'\\end\{figure\}', preceding))
+        fig_opens = len(re.findall(r"\\begin\{figure\}", preceding))
+        fig_closes = len(re.findall(r"\\end\{figure\}", preceding))
         inside_figure = fig_opens > fig_closes
 
         if inside_figure:
             # Already wrapped — pass through as-is
-            output_parts.append(text[i:m_end.end()])
+            output_parts.append(text[i : m_end.end()])
         else:
             # Not wrapped — add figure wrapper. No caption: a generic
             # "Figur"-caption looks worse than none and pollutes numbering.
-            tikz_block = text[m_start.start():m_end.end()]
-            wrapped = (
-                '\\begin{figure}[H]\n'
-                '\\centering\n'
-                + tikz_block
-                + '\n\\end{figure}'
-            )
-            output_parts.append(text[i:m_start.start()])
+            tikz_block = text[m_start.start() : m_end.end()]
+            wrapped = "\\begin{figure}[H]\n" "\\centering\n" + tikz_block + "\n\\end{figure}"
+            output_parts.append(text[i : m_start.start()])
             output_parts.append(wrapped)
             count += 1
 
         i = m_end.end()
 
-    return ''.join(output_parts), count
+    return "".join(output_parts), count
 
 
 def _wrap_bare_axis(body: str) -> tuple[str, int]:
@@ -144,8 +136,8 @@ def _wrap_bare_axis(body: str) -> tuple[str, int]:
     text = body
     output_parts = []
     i = 0
-    axis_start_re = re.compile(r'\\begin\{axis\}')
-    axis_end_re = re.compile(r'\\end\{axis\}')
+    axis_start_re = re.compile(r"\\begin\{axis\}")
+    axis_end_re = re.compile(r"\\end\{axis\}")
 
     while True:
         m_start = axis_start_re.search(text, i)
@@ -159,30 +151,28 @@ def _wrap_bare_axis(body: str) -> tuple[str, int]:
             break
 
         # Check for surrounding figure env — need tikzpicture wrapping axis too
-        preceding = text[max(0, m_start.start()-600):m_start.start()]
-        fig_opens = len(re.findall(r'\\begin\{figure\}', preceding))
-        fig_closes = len(re.findall(r'\\end\{figure\}', preceding))
+        preceding = text[max(0, m_start.start() - 600) : m_start.start()]
+        fig_opens = len(re.findall(r"\\begin\{figure\}", preceding))
+        fig_closes = len(re.findall(r"\\end\{figure\}", preceding))
         inside_figure = fig_opens > fig_closes
 
         if inside_figure:
-            output_parts.append(text[i:m_end.end()])
+            output_parts.append(text[i : m_end.end()])
         else:
-            axis_block = text[m_start.start():m_end.end()]
+            axis_block = text[m_start.start() : m_end.end()]
             wrapped = (
-                '\\begin{figure}[H]\n'
-                '\\centering\n'
-                '\\begin{tikzpicture}\n'
-                + axis_block
-                + '\n\\end{tikzpicture}\n'
-                '\\end{figure}'
+                "\\begin{figure}[H]\n"
+                "\\centering\n"
+                "\\begin{tikzpicture}\n" + axis_block + "\n\\end{tikzpicture}\n"
+                "\\end{figure}"
             )
-            output_parts.append(text[i:m_start.start()])
+            output_parts.append(text[i : m_start.start()])
             output_parts.append(wrapped)
             count += 1
 
         i = m_end.end()
 
-    return ''.join(output_parts), count
+    return "".join(output_parts), count
 
 
 def _replace_pytagoras_squares(body: str) -> tuple[str, int]:
@@ -200,7 +190,7 @@ def _replace_pytagoras_squares(body: str) -> tuple[str, int]:
     count = 0
 
     fig_re = re.compile(
-        r'\\begin\{figure\}.*?\\end\{figure\}',
+        r"\\begin\{figure\}.*?\\end\{figure\}",
         re.DOTALL,
     )
 
@@ -209,20 +199,20 @@ def _replace_pytagoras_squares(body: str) -> tuple[str, int]:
         fig_text = m.group(0)
 
         # Must have a tikzpicture
-        if '\\begin{tikzpicture}' not in fig_text:
+        if "\\begin{tikzpicture}" not in fig_text:
             return fig_text
 
         # Must have all three Pythagorean area labels WITH numeric values
         # e.g. "$a^2 = 16$" or "node at (...) {$a^2 = 9$}"
-        has_a2 = bool(re.search(r'[$]a\^2\s*=\s*\d', fig_text))
-        has_b2 = bool(re.search(r'[$]b\^2\s*=\s*\d', fig_text))
-        has_c2 = bool(re.search(r'[$]c\^2\s*=\s*\d', fig_text))
+        has_a2 = bool(re.search(r"[$]a\^2\s*=\s*\d", fig_text))
+        has_b2 = bool(re.search(r"[$]b\^2\s*=\s*\d", fig_text))
+        has_c2 = bool(re.search(r"[$]c\^2\s*=\s*\d", fig_text))
 
         if not (has_a2 and has_b2 and has_c2):
             return fig_text  # Not the Pytagoras-squares anti-pattern
 
         # Must also have many node/draw commands (squares take many lines)
-        node_count = len(re.findall(r'\\(?:node|draw|fill)\b', fig_text))
+        node_count = len(re.findall(r"\\(?:node|draw|fill)\b", fig_text))
         if node_count < 10:
             return fig_text  # Too few elements — not the squares pattern
 
@@ -230,27 +220,28 @@ def _replace_pytagoras_squares(body: str) -> tuple[str, int]:
         # Normal scenes with people/flags/etc. may have x up to 16 (width), but
         # the Pytagoras squares pattern specifically creates negative y < -8
         coords = re.findall(
-            r'\((-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\)',
+            r"\((-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\)",
             fig_text,
         )
-        extreme_oob = any(
-            abs(float(x)) > 9 or abs(float(y)) > 9
-            for x, y in coords
-        )
+        extreme_oob = any(abs(float(x)) > 9 or abs(float(y)) > 9 for x, y in coords)
 
         if not extreme_oob:
             return fig_text  # Coordinates within bounds — leave it alone
 
         # All conditions met: this is the problematic squares-on-all-sides pattern
-        caption_m = re.search(r'\\caption\{([^}]*)\}', fig_text)
-        caption = caption_m.group(1) if caption_m else 'Rettvinklet trekant med Pytagoras\\textquotesingle{} setning.'
+        caption_m = re.search(r"\\caption\{([^}]*)\}", fig_text)
+        caption = (
+            caption_m.group(1)
+            if caption_m
+            else "Rettvinklet trekant med Pytagoras\\textquotesingle{} setning."
+        )
         count += 1
         return (
-            '\\begin{figure}[H]\n'
-            '\\centering\n'
-            '\\MMArettvinklet{3}{4}{5}\n'
-            f'\\caption{{{caption}}}\n'
-            '\\end{figure}'
+            "\\begin{figure}[H]\n"
+            "\\centering\n"
+            "\\MMArettvinklet{3}{4}{5}\n"
+            f"\\caption{{{caption}}}\n"
+            "\\end{figure}"
         )
 
     new_body = fig_re.sub(replace_figure, body)
@@ -294,20 +285,20 @@ def _fix_double_caption(body: str) -> tuple[str, int]:
         removed = 0
         # Match figure envs that have NO tikzpicture or axis inside
         # \begin{figure} optionally followed by [H] or similar specifier, then content
-        fig_re = re.compile(r'\\begin\{figure\}(?:\[[^\]]*\])?(.*?)\\end\{figure\}', re.DOTALL)
+        fig_re = re.compile(r"\\begin\{figure\}(?:\[[^\]]*\])?(.*?)\\end\{figure\}", re.DOTALL)
 
         def check_and_remove(m: re.Match) -> str:
             nonlocal removed
             content = m.group(1)
-            if '\\begin{tikzpicture}' in content or '\\begin{axis}' in content:
+            if "\\begin{tikzpicture}" in content or "\\begin{axis}" in content:
                 return m.group(0)  # Real figure — keep it
             # Check if it's an orphaned caption-only wrapper
-            cap_m = re.search(r'Figur\s+\d+\s*:\s*([^\n]+)', content)
+            cap_m = re.search(r"Figur\s+\d+\s*:\s*([^\n]+)", content)
             if cap_m:
                 removed += 1
                 # Convert the figure-env wrapper into a bare orphaned caption line
                 # so that Pass 2 (fix_orphaned_lines) can pick it up
-                return '\n' + cap_m.group(0).strip()
+                return "\n" + cap_m.group(0).strip()
             return m.group(0)
 
         new_text = fig_re.sub(check_and_remove, text)
@@ -320,16 +311,16 @@ def _fix_double_caption(body: str) -> tuple[str, int]:
         \\end{figure} by a standalone 'Figur N: Real text.' line, and merge them.
         """
         fixed = 0
-        fig_re = re.compile(r'\\begin\{figure\}.*?\\end\{figure\}', re.DOTALL)
+        fig_re = re.compile(r"\\begin\{figure\}.*?\\end\{figure\}", re.DOTALL)
 
         # Generic words that indicate a placeholder caption
-        _GENERIC_CAPTIONS = {'figur', 'graf', 'figur.', 'graf.', '', 'figure', 'graph'}
+        generic_captions = {"figur", "graf", "figur.", "graf.", "", "figure", "graph"}
 
         def has_generic_caption(fig_text: str) -> bool:
-            m = re.search(r'\\caption\{([^}]*)\}', fig_text)
+            m = re.search(r"\\caption\{([^}]*)\}", fig_text)
             if not m:
                 return False
-            return m.group(1).strip().lower() in _GENERIC_CAPTIONS
+            return m.group(1).strip().lower() in generic_captions
 
         output = []
         pos = 0
@@ -341,12 +332,12 @@ def _fix_double_caption(body: str) -> tuple[str, int]:
 
             if has_generic_caption(fig_text):
                 rest = text[fig_end:]
-                ma = re.match(r'\s*\n+Figur\s+\d+\s*:\s*([^\n]+)', rest)
+                ma = re.match(r"\s*\n+Figur\s+\d+\s*:\s*([^\n]+)", rest)
                 if ma:
                     real_caption = ma.group(1).strip()
                     fixed_fig = re.sub(
-                        r'\\caption\{[^}]*\}',
-                        '\\\\caption{' + real_caption + '}',
+                        r"\\caption\{[^}]*\}",
+                        "\\\\caption{" + real_caption + "}",
                         fig_text,
                         count=1,
                     )
@@ -359,7 +350,7 @@ def _fix_double_caption(body: str) -> tuple[str, int]:
             pos = fig_end
 
         output.append(text[pos:])
-        return ''.join(output), fixed
+        return "".join(output), fixed
 
     # --- Pass 3: Remove remaining orphaned "Figur N: ..." lines that are
     #             still floating outside any figure environment (generic or not).
@@ -373,7 +364,7 @@ def _fix_double_caption(body: str) -> tuple[str, int]:
 
         # Build a set of positions that are inside a figure env
         figure_ranges = []
-        for fm in re.finditer(r'\\begin\{figure\}.*?\\end\{figure\}', text, re.DOTALL):
+        for fm in re.finditer(r"\\begin\{figure\}.*?\\end\{figure\}", text, re.DOTALL):
             figure_ranges.append((fm.start(), fm.end()))
 
         def is_inside_figure(pos: int) -> bool:
@@ -383,11 +374,11 @@ def _fix_double_caption(body: str) -> tuple[str, int]:
             nonlocal removed
             if not is_inside_figure(m.start()):
                 removed += 1
-                return ''
+                return ""
             return m.group(0)
 
         # Match lines like "Figur 2: something" or "Figur 2: Figur"
-        pattern = re.compile(r'^Figur\s+\d+\s*:[^\n]+$', re.MULTILINE)
+        pattern = re.compile(r"^Figur\s+\d+\s*:[^\n]+$", re.MULTILINE)
         new_text = pattern.sub(remove_line, text)
         return new_text, removed
 
@@ -412,11 +403,11 @@ def _move_figures_out_of_taskbox(body: str) -> tuple[str, int]:
     count = 0
 
     taskbox_re = re.compile(
-        r'(\\begin\{taskbox\}\{[^}]*\})(.*?)(\\end\{taskbox\})',
+        r"(\\begin\{taskbox\}\{[^}]*\})(.*?)(\\end\{taskbox\})",
         re.DOTALL,
     )
     figure_re = re.compile(
-        r'\\begin\{figure\}.*?\\end\{figure\}',
+        r"\\begin\{figure\}.*?\\end\{figure\}",
         re.DOTALL,
     )
 
@@ -432,12 +423,12 @@ def _move_figures_out_of_taskbox(body: str) -> tuple[str, int]:
             return m.group(0)
 
         # Remove figures from inside taskbox content
-        cleaned_content = figure_re.sub('', content)
+        cleaned_content = figure_re.sub("", content)
         # Collapse excess blank lines created by removal
-        cleaned_content = re.sub(r'\n{3,}', '\n\n', cleaned_content)
+        cleaned_content = re.sub(r"\n{3,}", "\n\n", cleaned_content)
 
         count += len(figures_found)
-        figures_block = '\n\n' + '\n\n'.join(figures_found)
+        figures_block = "\n\n" + "\n\n".join(figures_found)
         return open_tag + cleaned_content + close_tag + figures_block
 
     new_body = taskbox_re.sub(extract_figures, body)
@@ -448,8 +439,8 @@ def _fix_figure_placement(body: str) -> tuple[str, int]:
     """
     Ensure all \\begin{figure} have [H] placement specifier.
     """
-    pattern = re.compile(r'\\begin\{figure\}(?!\[)')
-    new_body, count = pattern.subn(r'\\begin{figure}[H]', body)
+    pattern = re.compile(r"\\begin\{figure\}(?!\[)")
+    new_body, count = pattern.subn(r"\\begin{figure}[H]", body)
     return new_body, count
 
 
@@ -463,13 +454,13 @@ def _add_missing_centering(body: str) -> tuple[str, int]:
         nonlocal count
         full = m.group(0)
         # Check if centering is already present
-        after = full[len('\\begin{figure}[H]'):]
-        if '\\centering' not in after[:60]:
+        after = full[len("\\begin{figure}[H]") :]
+        if "\\centering" not in after[:60]:
             count += 1
-            return '\\begin{figure}[H]\n\\centering'
+            return "\\begin{figure}[H]\n\\centering"
         return full
 
-    pattern = re.compile(r'\\begin\{figure\}\[H\]')
+    pattern = re.compile(r"\\begin\{figure\}\[H\]")
     new_body = pattern.sub(add_centering, body)
     return new_body, count
 
@@ -569,6 +560,7 @@ def sanitize_latex_body(body: str) -> tuple[str, list[str]]:
 # ---------------------------------------------------------------------------
 # Main agent
 # ---------------------------------------------------------------------------
+
 
 def run_tikz_validator(state: PipelineState) -> PipelineState:
     """

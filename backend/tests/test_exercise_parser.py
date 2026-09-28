@@ -2,18 +2,12 @@
 Tests for the exercise parser — LaTeX → atomic exercises.
 """
 
-import pytest
-
 from app.exercises.parser import (
     Difficulty,
     ParsedExercise,
-    _detect_type,
-    _estimate_difficulty,
-    _extract_keywords,
     exercises_to_latex,
     parse_exercises,
 )
-
 
 # ---------------------------------------------------------------------------
 # Sample LaTeX content

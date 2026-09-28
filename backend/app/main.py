@@ -21,11 +21,11 @@ import os
 import re
 import shutil
 import uuid
+from collections.abc import AsyncGenerator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import AsyncGenerator, Optional
 
 import structlog
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -37,21 +37,29 @@ from slowapi.errors import RateLimitExceeded
 
 from app.auth import get_current_user, require_stream_access
 from app.config import get_config, get_settings
-from app.job_store import cleanup_old_snapshots, evict_terminal_jobs, get_job_memory, persist_terminal_job, resolve_job
-from app.pipeline.cancel import cancel_job, clear_cancel
+from app.job_store import (
+    cleanup_old_snapshots,
+    evict_terminal_jobs,
+    get_job_memory,
+    persist_terminal_job,
+    resolve_job,
+)
 from app.logging_config import configure_logging
 from app.models.state import GenerationRequest, PipelineState, PipelineStatus
+from app.pipeline.cancel import cancel_job, clear_cancel
 from app.rate_limit import limiter
 
 configure_logging()
 logger = structlog.get_logger()
 settings = get_settings()
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if settings.database_url:
         try:
             from app.db import get_pool
+
             await get_pool()
             logger.info("startup_complete", environment=settings.environment)
         except Exception as e:
@@ -88,8 +96,8 @@ async def lifespan(app: FastAPI):
 
     cleanup_old_snapshots(max_age_days=7)
     evict_terminal_jobs(get_job_memory())
-    from app.stores import collaboration_store, exercise_store
-    from app.stores import sharing_store
+    from app.stores import collaboration_store, exercise_store, sharing_store
+
     exercise_store._ensure_loaded()
     collaboration_store._ensure_loaded()
     sharing_store._ensure_loaded()
@@ -102,6 +110,7 @@ async def lifespan(app: FastAPI):
     if settings.database_url:
         try:
             from app.db import close_pool
+
             await close_pool()
         except ModuleNotFoundError:
             logger.warning("shutdown_db_driver_missing", msg="asyncpg not installed")
@@ -160,16 +169,16 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Mount sub-routers (Fase 2 modules)
 # ---------------------------------------------------------------------------
-from app.exercises.router import router as exercises_router
-from app.editor.compiler import router as editor_compile_router
-from app.editor.ai_actions import router as editor_ai_router
-from app.differentiation.generator import router as diff_router
-from app.differentiation.hint_engine import router as hint_router
-from app.export.router import router as export_router
-from app.export.qr import router as qr_router
-from app.sharing.router import router as sharing_router
-from app.collaboration.router import router as collab_router
-from app.m1.router import router as m1_router
+from app.collaboration.router import router as collab_router  # noqa: E402
+from app.differentiation.generator import router as diff_router  # noqa: E402
+from app.differentiation.hint_engine import router as hint_router  # noqa: E402
+from app.editor.ai_actions import router as editor_ai_router  # noqa: E402
+from app.editor.compiler import router as editor_compile_router  # noqa: E402
+from app.exercises.router import router as exercises_router  # noqa: E402
+from app.export.qr import router as qr_router  # noqa: E402
+from app.export.router import router as export_router  # noqa: E402
+from app.m1.router import router as m1_router  # noqa: E402
+from app.sharing.router import router as sharing_router  # noqa: E402
 
 app.include_router(exercises_router)
 app.include_router(editor_compile_router)
@@ -205,7 +214,7 @@ class CompileRequest(BaseModel):
 
 class CompileResponse(BaseModel):
     success: bool
-    pdf_path: Optional[str] = None
+    pdf_path: str | None = None
     errors: list[str] = []
 
 
@@ -299,10 +308,11 @@ async def stream_progress(
 
     async def event_generator() -> AsyncGenerator[str, None]:
         import time as _time
+
         last_step_count = 0
         last_heartbeat = _time.monotonic()
         stream_started = _time.monotonic()
-        _HEARTBEAT_INTERVAL = 15  # seconds
+        heartbeat_interval = 15  # seconds
 
         while True:
             if _time.monotonic() - stream_started > _MAX_STREAM_SECONDS:
@@ -316,22 +326,30 @@ async def stream_progress(
 
             while last_step_count < len(state.steps):
                 step = state.steps[last_step_count]
-                yield _sse_event("step", {
-                    "agent": step.agent.value,
-                    "started_at": step.started_at.isoformat(),
-                    "completed_at": step.completed_at.isoformat() if step.completed_at else None,
-                    "duration_seconds": step.duration_seconds,
-                    "output_summary": step.output_summary,
-                    "error": step.error,
-                    "retries": step.retries,
-                })
+                yield _sse_event(
+                    "step",
+                    {
+                        "agent": step.agent.value,
+                        "started_at": step.started_at.isoformat(),
+                        "completed_at": (
+                            step.completed_at.isoformat() if step.completed_at else None
+                        ),
+                        "duration_seconds": step.duration_seconds,
+                        "output_summary": step.output_summary,
+                        "error": step.error,
+                        "retries": step.retries,
+                    },
+                )
                 last_step_count += 1
                 last_heartbeat = _time.monotonic()
 
             if state.current_agent:
-                yield _sse_event("current_agent", {
-                    "agent": state.current_agent.value,
-                })
+                yield _sse_event(
+                    "current_agent",
+                    {
+                        "agent": state.current_agent.value,
+                    },
+                )
                 last_heartbeat = _time.monotonic()
 
             if state.status in (
@@ -339,20 +357,23 @@ async def stream_progress(
                 PipelineStatus.COMPLETED_WITH_WARNINGS,
                 PipelineStatus.FAILED,
             ):
-                yield _sse_event("complete", {
-                    "status": state.status.value,
-                    "total_duration": state.total_duration_seconds,
-                    "total_steps": len(state.steps),
-                    "math_checks": state.math_verification.claims_checked,
-                    "math_correct": state.math_verification.claims_correct,
-                    "latex_compiled": state.latex_compilation.success,
-                    "error": state.error_message,
-                })
+                yield _sse_event(
+                    "complete",
+                    {
+                        "status": state.status.value,
+                        "total_duration": state.total_duration_seconds,
+                        "total_steps": len(state.steps),
+                        "math_checks": state.math_verification.claims_checked,
+                        "math_correct": state.math_verification.claims_correct,
+                        "latex_compiled": state.latex_compilation.success,
+                        "error": state.error_message,
+                    },
+                )
                 break
 
             # Send SSE comment heartbeat to prevent proxy/Vercel from closing idle connections
             now = _time.monotonic()
-            if now - last_heartbeat >= _HEARTBEAT_INTERVAL:
+            if now - last_heartbeat >= heartbeat_interval:
                 yield ": heartbeat\n\n"
                 last_heartbeat = now
 
@@ -389,6 +410,7 @@ async def abort_generation(job_id: str, user_id: str = Depends(get_current_user)
         return {"success": True, "message": "Job cancelled"}
     else:
         return {"success": False, "message": "Job already finished"}
+
 
 @app.get("/generate/{job_id}/status")
 async def get_job_status(job_id: str, user_id: str = Depends(get_current_user)):
@@ -494,13 +516,14 @@ async def get_job_pdf(job_id: str, user_id: str = Depends(get_current_user)):
                 media_type="application/pdf",
                 headers={"Cache-Control": "private, max-age=0, must-revalidate"},
             )
-        except Exception:
-            raise HTTPException(status_code=500, detail="Invalid PDF data")
+        except Exception as err:
+            raise HTTPException(status_code=500, detail="Invalid PDF data") from err
 
     if not state.pdf_path or not os.path.isfile(state.pdf_path):
         # Fall back to compiling the stored full_document on demand.
         if state.full_document:
             from app.latex.compiler import compile_to_pdf
+
             config = get_config()
             output_dir = Path(settings.output_dir) / "pipeline_pdfs"
             output_dir.mkdir(parents=True, exist_ok=True)
@@ -563,7 +586,6 @@ async def compile_latex(
         content = wrap_with_preamble(content)
 
     config = get_config()
-    safe_name = _safe_filename(body.filename)
     out_dir = Path(config.output_dir) / "compile_cache"
     out_dir.mkdir(parents=True, exist_ok=True)
     pdf_path = await asyncio.to_thread(
@@ -583,6 +605,7 @@ async def compile_latex(
 async def estimate_cost(request: GenerationRequest, user_id: str = Depends(get_current_user)):
     """Estimate token cost BEFORE generation."""
     from app.cache import get_cache
+
     cache = get_cache()
     tokens = cache.estimate_tokens(request)
     similar = cache.find_similar(request)
@@ -598,6 +621,7 @@ async def estimate_cost(request: GenerationRequest, user_id: str = Depends(get_c
 async def cache_stats(user_id: str = Depends(get_current_user)):
     """Get cache statistics."""
     from app.cache import get_cache
+
     return get_cache().stats()
 
 
@@ -607,6 +631,7 @@ async def clear_cache(user_id: str = Depends(get_current_user)):
     if settings.environment == "production":
         raise HTTPException(status_code=403, detail="Cache clear disabled in production")
     from app.cache import get_cache
+
     count = get_cache().clear()
     return {"cleared": count}
 
@@ -625,11 +650,16 @@ async def health():
 @app.get("/health/ready")
 async def health_ready():
     """Readiness check — verifies dependencies."""
-    checks: dict[str, str] = {"api_key": "ok" if settings.mate_api_key or settings.environment != "production" else "missing"}
+    checks: dict[str, str] = {
+        "api_key": (
+            "ok" if settings.mate_api_key or settings.environment != "production" else "missing"
+        )
+    }
 
     if settings.database_url:
         try:
             from app.db import get_pool
+
             pool = await get_pool()
             async with pool.acquire() as conn:
                 await conn.fetchval("SELECT 1")

@@ -9,14 +9,14 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import hashlib
 import os
 import re
 import subprocess
 import tempfile
 from collections import OrderedDict
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 import structlog
 from fastapi import APIRouter, Depends, Request
@@ -24,9 +24,9 @@ from pydantic import BaseModel
 
 from app.auth import get_current_user
 from app.config import get_config
-from app.rate_limit import limiter
 from app.latex.compiler import get_compile_gate
 from app.latex.preamble import wrap_with_preamble
+from app.rate_limit import limiter
 from app.validators import ensure_latex_size
 
 logger = structlog.get_logger()
@@ -54,6 +54,7 @@ class CompileError:
 # ---------------------------------------------------------------------------
 class EditorCompileRequest(BaseModel):
     """LaTeX body to compile. Preamble is added automatically if missing."""
+
     latex_body: str
     filename: str = "preview"
 
@@ -105,23 +106,25 @@ def _parse_log_errors(log_content: str) -> tuple[list[dict], list[dict]]:
             line_num = 0
             for j in range(max(0, i - 5), i):
                 if lines[j].startswith("l."):
-                    try:
+                    with contextlib.suppress(IndexError, ValueError):
                         line_num = int(lines[j].split(".")[1].split()[0])
-                    except (IndexError, ValueError):
-                        pass
-            errors.append({
-                "line": line_num,
-                "message": line.lstrip("! ").strip(),
-                "severity": "error",
-            })
+            errors.append(
+                {
+                    "line": line_num,
+                    "message": line.lstrip("! ").strip(),
+                    "severity": "error",
+                }
+            )
 
         # Warnings
         elif "Warning:" in line and "LaTeX" in line:
-            warnings.append({
-                "line": 0,
-                "message": line.strip(),
-                "severity": "warning",
-            })
+            warnings.append(
+                {
+                    "line": 0,
+                    "message": line.strip(),
+                    "severity": "warning",
+                }
+            )
 
     return errors, warnings
 
@@ -131,59 +134,73 @@ def _compile_latex(full_content: str, filename: str) -> tuple[str, list[dict], l
     Run pdflatex and return (pdf_base64, errors, warnings).
     Uses the app-wide compile gate to limit concurrent engine processes.
     """
-    with get_compile_gate():
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tex_path = os.path.join(tmpdir, f"{filename}.tex")
-            pdf_path = os.path.join(tmpdir, f"{filename}.pdf")
-            log_path = os.path.join(tmpdir, f"{filename}.log")
+    with get_compile_gate(), tempfile.TemporaryDirectory() as tmpdir:
+        tex_path = os.path.join(tmpdir, f"{filename}.tex")
+        pdf_path = os.path.join(tmpdir, f"{filename}.pdf")
+        log_path = os.path.join(tmpdir, f"{filename}.log")
 
-            with open(tex_path, "w", encoding="utf-8") as f:
-                f.write(full_content)
+        with open(tex_path, "w", encoding="utf-8") as f:
+            f.write(full_content)
 
-            try:
-                pdflatex = get_config().pdflatex_path
-                proc_result = subprocess.run(
-                    [
-                        pdflatex,
-                        "-interaction=nonstopmode",
-                        "-halt-on-error",
-                        f"-output-directory={tmpdir}",
-                        tex_path,
-                    ],
-                    capture_output=True,
-                    text=False,  # Read as bytes — pdflatex may output latin1
-                    timeout=120,
-                )
-                # Decode safely (pdflatex mixes UTF-8 and latin1)
-                proc_result.stdout = proc_result.stdout.decode("utf-8", errors="replace") if proc_result.stdout else ""
-                proc_result.stderr = proc_result.stderr.decode("utf-8", errors="replace") if proc_result.stderr else ""
-                result = proc_result
-            except subprocess.TimeoutExpired:
-                return "", [{"line": 0, "message": "Compilation timed out (120s)", "severity": "error"}], []
-            except FileNotFoundError:
-                return "", [{"line": 0, "message": "pdflatex not found on system", "severity": "error"}], []
+        try:
+            pdflatex = get_config().pdflatex_path
+            proc_result = subprocess.run(
+                [
+                    pdflatex,
+                    "-interaction=nonstopmode",
+                    "-halt-on-error",
+                    f"-output-directory={tmpdir}",
+                    tex_path,
+                ],
+                capture_output=True,
+                text=False,  # Read as bytes — pdflatex may output latin1
+                timeout=120,
+            )
+            # Decode safely (pdflatex mixes UTF-8 and latin1)
+            proc_result.stdout = (
+                proc_result.stdout.decode("utf-8", errors="replace") if proc_result.stdout else ""
+            )
+            proc_result.stderr = (
+                proc_result.stderr.decode("utf-8", errors="replace") if proc_result.stderr else ""
+            )
+        except subprocess.TimeoutExpired:
+            return (
+                "",
+                [{"line": 0, "message": "Compilation timed out (120s)", "severity": "error"}],
+                [],
+            )
+        except FileNotFoundError:
+            return (
+                "",
+                [{"line": 0, "message": "pdflatex not found on system", "severity": "error"}],
+                [],
+            )
 
-            # Parse log for errors/warnings
-            log_content = ""
-            if os.path.exists(log_path):
-                with open(log_path, "r", encoding="utf-8", errors="replace") as f:
-                    log_content = f.read()
+        # Parse log for errors/warnings
+        log_content = ""
+        if os.path.exists(log_path):
+            with open(log_path, encoding="utf-8", errors="replace") as f:
+                log_content = f.read()
 
-            errors, warnings = _parse_log_errors(log_content)
+        errors, warnings = _parse_log_errors(log_content)
 
-            # Read PDF if successful
-            pdf_base64 = ""
-            if os.path.exists(pdf_path):
-                with open(pdf_path, "rb") as f:
-                    pdf_base64 = base64.b64encode(f.read()).decode()
+        # Read PDF if successful
+        pdf_base64 = ""
+        if os.path.exists(pdf_path):
+            with open(pdf_path, "rb") as f:
+                pdf_base64 = base64.b64encode(f.read()).decode()
 
-            return pdf_base64, errors, warnings
+        return pdf_base64, errors, warnings
 
 
 # ---------------------------------------------------------------------------
 # Endpoint
 # ---------------------------------------------------------------------------
-@router.post("/compile", response_model=EditorCompileResponse, summary="Compile LaTeX body to PDF (with caching and process pool)")
+@router.post(
+    "/compile",
+    response_model=EditorCompileResponse,
+    summary="Compile LaTeX body to PDF (with caching and process pool)",
+)
 @limiter.limit("30/minute")
 async def compile_editor_latex(
     request: Request,
@@ -218,9 +235,7 @@ async def compile_editor_latex(
 
     # Compile
     safe_name = re.sub(r"[^\w\-]", "_", req.filename.strip())[:64] or "preview"
-    pdf_base64, errors, warnings = await asyncio.to_thread(
-        _compile_latex, content, safe_name
-    )
+    pdf_base64, errors, warnings = await asyncio.to_thread(_compile_latex, content, safe_name)
 
     # Cache result
     _compile_cache[content_hash] = (pdf_base64, errors)

@@ -50,8 +50,7 @@ def run_content_quality(state: PipelineState) -> PipelineState:
                     report.score = min(report.score, sem_score)
                     report.passed = report.passed and sem_score >= 70
                 report.semantic_summary = (
-                    f"Semantisk vurdering: {sem_score}/100 "
-                    f"({len(sem_issues)} observasjoner)"
+                    f"Semantisk vurdering: {sem_score}/100 " f"({len(sem_issues)} observasjoner)"
                 )
 
         state.content_quality = report

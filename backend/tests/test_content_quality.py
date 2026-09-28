@@ -129,9 +129,7 @@ class TestTopicCoverage:
         assert len(spec.required_subtopics) >= 6
 
     def test_named_subtopic_does_not_expand_to_full_category(self):
-        spec = get_topic_coverage_spec(
-            "VG1 1T", "Lineære funksjoner", material_type="kapittel"
-        )
+        spec = get_topic_coverage_spec("VG1 1T", "Lineære funksjoner", material_type="kapittel")
         assert spec.category == "Funksjoner"
         assert spec.required_subtopics == ["Lineære funksjoner"]
 

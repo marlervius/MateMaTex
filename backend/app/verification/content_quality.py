@@ -108,9 +108,7 @@ def evaluate_content_quality(
             )
     elif request.material_type == "differensiert":
         for level in ("grunnleggende", "standard", "avansert"):
-            if not re.search(
-                rf"\\section\*?\{{[^}}]*{level}", body, re.IGNORECASE
-            ):
+            if not re.search(rf"\\section\*?\{{[^}}]*{level}", body, re.IGNORECASE):
                 issues.append(
                     ContentQualityIssue(
                         code=f"missing_level_{level}",

@@ -5,12 +5,12 @@ Organized by grade level and topic.
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
 class GraphTemplate:
     """A reusable graph template."""
+
     id: str
     name: str
     category: str
@@ -46,7 +46,7 @@ NUMBERLINE_BASIC = GraphTemplate(
 \caption{Tallinje fra 0 til 10.}
 \end{figure}
 """,
-    parameters=["MARK_VALUE"]
+    parameters=["MARK_VALUE"],
 )
 
 NUMBERLINE_NEGATIVE = GraphTemplate(
@@ -78,7 +78,7 @@ NUMBERLINE_NEGATIVE = GraphTemplate(
 \caption{Tallinje med negative og positive tall.}
 \end{figure}
 """,
-    parameters=[]
+    parameters=[],
 )
 
 NUMBERLINE_FRACTIONS = GraphTemplate(
@@ -111,7 +111,7 @@ NUMBERLINE_FRACTIONS = GraphTemplate(
 \caption{Tallinje med brøker.}
 \end{figure}
 """,
-    parameters=[]
+    parameters=[],
 )
 
 
@@ -146,7 +146,7 @@ FRACTION_CIRCLE = GraphTemplate(
 \caption{Brøken $\frac{3}{4}$ vist som kakediagram.}
 \end{figure}
 """,
-    parameters=["NUMERATOR", "DENOMINATOR"]
+    parameters=["NUMERATOR", "DENOMINATOR"],
 )
 
 FRACTION_RECTANGLE = GraphTemplate(
@@ -174,7 +174,7 @@ FRACTION_RECTANGLE = GraphTemplate(
 \caption{Brøken $\frac{2}{5}$ vist som rektangel.}
 \end{figure}
 """,
-    parameters=["NUMERATOR", "DENOMINATOR"]
+    parameters=["NUMERATOR", "DENOMINATOR"],
 )
 
 
@@ -213,7 +213,7 @@ TRIANGLE_LABELED = GraphTemplate(
 \caption{Trekant $ABC$ med sider $a$, $b$, $c$ og vinkel $\alpha$.}
 \end{figure}
 """,
-    parameters=[]
+    parameters=[],
 )
 
 TRIANGLE_RIGHT_ANGLE = GraphTemplate(
@@ -229,7 +229,7 @@ TRIANGLE_RIGHT_ANGLE = GraphTemplate(
 \caption{Pytagoras' setning: $a^2 + b^2 = c^2$, her: $4^2 + 3^2 = 5^2$.}
 \end{figure}
 """,
-    parameters=[]
+    parameters=[],
 )
 
 CIRCLE_WITH_PARTS = GraphTemplate(
@@ -254,14 +254,14 @@ CIRCLE_WITH_PARTS = GraphTemplate(
     % Point on circle
     \fill[mainBlue] (2.5,0) circle (3pt) node[right] {$P$};
     % Arc showing circumference
-    \draw[thick, mainBlue!70, decorate, decoration={snake, amplitude=0.5mm}] 
+    \draw[thick, mainBlue!70, decorate, decoration={snake, amplitude=0.5mm}]
         (0:2.7) arc (0:60:2.7);
     \node[mainBlue] at (1.8,2.2) {$O = 2\pi r$};
 \end{tikzpicture}
 \caption{Sirkel med sentrum $M$, radius $r$, diameter $d$ og omkrets $O$.}
 \end{figure}
 """,
-    parameters=[]
+    parameters=[],
 )
 
 COORDINATE_SYSTEM = GraphTemplate(
@@ -292,7 +292,7 @@ COORDINATE_SYSTEM = GraphTemplate(
 \caption{Koordinatsystem.}
 \end{figure}
 """,
-    parameters=[]
+    parameters=[],
 )
 
 
@@ -339,7 +339,7 @@ LINEAR_FUNCTION = GraphTemplate(
 \caption{Lineær funksjon $f(x) = 2x + 1$ med stigningstall $a = 2$ og konstantledd $b = 1$.}
 \end{figure}
 """,
-    parameters=["A", "B"]
+    parameters=["A", "B"],
 )
 
 QUADRATIC_FUNCTION = GraphTemplate(
@@ -379,7 +379,7 @@ QUADRATIC_FUNCTION = GraphTemplate(
 \caption{Andregradsfunksjon med toppunkt og nullpunkter.}
 \end{figure}
 """,
-    parameters=[]
+    parameters=[],
 )
 
 
@@ -426,7 +426,7 @@ HISTOGRAM = GraphTemplate(
 \caption{Histogram som viser fordelingen av verdier.}
 \end{figure}
 """,
-    parameters=[]
+    parameters=[],
 )
 
 BOX_PLOT = GraphTemplate(
@@ -464,7 +464,7 @@ BOX_PLOT = GraphTemplate(
 \caption{Boksplott med minimum, $Q_1$, median, $Q_3$ og maksimum.}
 \end{figure}
 """,
-    parameters=[]
+    parameters=[],
 )
 
 PIE_CHART = GraphTemplate(
@@ -500,7 +500,7 @@ PIE_CHART = GraphTemplate(
 \caption{Sektordiagram som viser prosentfordeling.}
 \end{figure}
 """,
-    parameters=[]
+    parameters=[],
 )
 
 
@@ -533,7 +533,7 @@ COUNTING_BLOCKS = GraphTemplate(
 \caption{$5 + 2 = 7$ vist med tellebrikker.}
 \end{figure}
 """,
-    parameters=["NUM1", "NUM2"]
+    parameters=["NUM1", "NUM2"],
 )
 
 TEN_FRAME = GraphTemplate(
@@ -568,7 +568,7 @@ TEN_FRAME = GraphTemplate(
 \caption{Tallet 7 vist i tierramme.}
 \end{figure}
 """,
-    parameters=["NUMBER"]
+    parameters=["NUMBER"],
 )
 
 
@@ -606,7 +606,7 @@ VECTOR_ADDITION = GraphTemplate(
 \caption{$\vec{u}=[1,2]$ (blå), $\vec{v}=[3,1]$ (grønn), $\vec{u}+\vec{v}=[4,3]$ (oransje), $2\vec{u}=[2,4]$ (lilla).}
 \end{figure}
 """,
-    parameters=[]
+    parameters=[],
 )
 
 VECTOR_PARAMETER_LINE = GraphTemplate(
@@ -636,7 +636,7 @@ VECTOR_PARAMETER_LINE = GraphTemplate(
 \caption{Linjen $\begin{bmatrix}x\\y\end{bmatrix}=\begin{bmatrix}1\\1\end{bmatrix}+t\begin{bmatrix}2\\1\end{bmatrix}$ med retningsvektor $\vec{v}=[2,1]$.}
 \end{figure}
 """,
-    parameters=[]
+    parameters=[],
 )
 
 VECTOR_ANGLE = GraphTemplate(
@@ -662,7 +662,7 @@ VECTOR_ANGLE = GraphTemplate(
 \caption{Vinkelen $\theta$ mellom $\vec{u}$ og $\vec{v}$: $\cos\theta = \dfrac{\vec{u}\cdot\vec{v}}{|\vec{u}||\vec{v}|}$.}
 \end{figure}
 """,
-    parameters=[]
+    parameters=[],
 )
 
 
@@ -711,13 +711,42 @@ TEMPLATES_BY_CATEGORY = {
 
 TEMPLATES_BY_GRADE = {
     "1-4": [NUMBERLINE_BASIC, FRACTION_CIRCLE, FRACTION_RECTANGLE, COUNTING_BLOCKS, TEN_FRAME],
-    "5-7": [NUMBERLINE_NEGATIVE, NUMBERLINE_FRACTIONS, FRACTION_CIRCLE, FRACTION_RECTANGLE,
-            TRIANGLE_LABELED, CIRCLE_WITH_PARTS, COORDINATE_SYSTEM, HISTOGRAM, PIE_CHART],
-    "8-10": [NUMBERLINE_NEGATIVE, TRIANGLE_LABELED, TRIANGLE_RIGHT_ANGLE, CIRCLE_WITH_PARTS,
-             COORDINATE_SYSTEM, LINEAR_FUNCTION, HISTOGRAM, BOX_PLOT, PIE_CHART,
-             VECTOR_ADDITION, VECTOR_PARAMETER_LINE, VECTOR_ANGLE],
-    "VG": [COORDINATE_SYSTEM, LINEAR_FUNCTION, QUADRATIC_FUNCTION, HISTOGRAM, BOX_PLOT, PIE_CHART,
-           VECTOR_ADDITION, VECTOR_PARAMETER_LINE, VECTOR_ANGLE],
+    "5-7": [
+        NUMBERLINE_NEGATIVE,
+        NUMBERLINE_FRACTIONS,
+        FRACTION_CIRCLE,
+        FRACTION_RECTANGLE,
+        TRIANGLE_LABELED,
+        CIRCLE_WITH_PARTS,
+        COORDINATE_SYSTEM,
+        HISTOGRAM,
+        PIE_CHART,
+    ],
+    "8-10": [
+        NUMBERLINE_NEGATIVE,
+        TRIANGLE_LABELED,
+        TRIANGLE_RIGHT_ANGLE,
+        CIRCLE_WITH_PARTS,
+        COORDINATE_SYSTEM,
+        LINEAR_FUNCTION,
+        HISTOGRAM,
+        BOX_PLOT,
+        PIE_CHART,
+        VECTOR_ADDITION,
+        VECTOR_PARAMETER_LINE,
+        VECTOR_ANGLE,
+    ],
+    "VG": [
+        COORDINATE_SYSTEM,
+        LINEAR_FUNCTION,
+        QUADRATIC_FUNCTION,
+        HISTOGRAM,
+        BOX_PLOT,
+        PIE_CHART,
+        VECTOR_ADDITION,
+        VECTOR_PARAMETER_LINE,
+        VECTOR_ANGLE,
+    ],
 }
 
 
@@ -740,7 +769,7 @@ def get_templates_for_category(category: str) -> list[GraphTemplate]:
     return TEMPLATES_BY_CATEGORY.get(category, [])
 
 
-def get_template_by_id(template_id: str) -> Optional[GraphTemplate]:
+def get_template_by_id(template_id: str) -> GraphTemplate | None:
     """Get a specific template by ID."""
     for t in ALL_TEMPLATES:
         if t.id == template_id:
@@ -759,13 +788,13 @@ def get_template_summary_for_prompt(grade: str) -> str:
     This helps the Illustrator agent know what templates are available.
     """
     templates = get_templates_for_grade(grade)
-    
+
     summary = "=== TILGJENGELIGE GRAFMALER ===\n\n"
     summary += "Du kan bruke disse ferdige TikZ-malene (kopier og tilpass):\n\n"
-    
+
     for t in templates:
         summary += f"**{t.name}** ({t.category})\n"
         summary += f"   {t.description}\n"
         summary += f"   Bruk: [USE TEMPLATE: {t.id}]\n\n"
-    
+
     return summary

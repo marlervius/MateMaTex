@@ -8,6 +8,7 @@ Verifies that:
 """
 
 import pytest
+from pydantic import ValidationError
 
 from app.differentiation.generator import (
     DifferentiatedOutput,
@@ -79,7 +80,7 @@ class TestQrGeneration:
             assert isinstance(result, bytes)
             if result:
                 # PNG magic bytes
-                assert result[:4] == b'\x89PNG'
+                assert result[:4] == b"\x89PNG"
         except ImportError:
             pytest.skip("qrcode package not installed")
 
@@ -108,7 +109,7 @@ class TestDifferentiateRequest:
         assert req.topic == "Algebra"
 
     def test_short_content_rejected(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             DifferentiateRequest(latex_content="short")
 
 

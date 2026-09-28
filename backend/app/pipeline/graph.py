@@ -104,8 +104,7 @@ def try_restore_cached_pipeline(
                 or (
                     not restored.content_quality.passed
                     and (
-                        restored.content_quality.score > 0
-                        or bool(restored.content_quality.issues)
+                        restored.content_quality.score > 0 or bool(restored.content_quality.issues)
                     )
                 )
             )
@@ -132,7 +131,7 @@ def try_restore_cached_pipeline(
 # Routing functions (conditional edges)
 # ---------------------------------------------------------------------------
 
-from app.pipeline.cancel import clear_cancel, is_cancelled
+from app.pipeline.cancel import clear_cancel, is_cancelled  # noqa: E402
 
 
 def _should_skip_editor(state: PipelineState) -> bool:
@@ -140,11 +139,7 @@ def _should_skip_editor(state: PipelineState) -> bool:
     config = get_config()
     if config.skip_editor:
         return True
-    fast_types = {
-        t.strip()
-        for t in config.skip_editor_material_types.split(",")
-        if t.strip()
-    }
+    fast_types = {t.strip() for t in config.skip_editor_material_types.split(",") if t.strip()}
     return state.request.material_type in fast_types
 
 
@@ -260,10 +255,7 @@ def route_final_math(
     config = get_config()
     if state.error_message.startswith("Endelig fasitkontroll feilet"):
         return "math_blocked"
-    if (
-        state.math_verification.claims_incorrect > 0
-        and not config.verification_fail_open
-    ):
+    if state.math_verification.claims_incorrect > 0 and not config.verification_fail_open:
         return "math_blocked"
     return "content_quality"
 
@@ -276,12 +268,8 @@ def run_math_blocked(state: PipelineState) -> PipelineState:
         expression = claim.latex_expression.strip()
         detail = claim.error_message.strip()
         if expression:
-            error_details.append(
-                f"{expression}: {detail}" if detail else expression
-            )
-    details_suffix = (
-        " Kontroller: " + " | ".join(error_details) if error_details else ""
-    )
+            error_details.append(f"{expression}: {detail}" if detail else expression)
+    details_suffix = " Kontroller: " + " | ".join(error_details) if error_details else ""
     state.status = PipelineStatus.FAILED
     if not state.error_message.startswith("Endelig fasitkontroll feilet"):
         state.error_message = (
@@ -305,7 +293,9 @@ def run_math_blocked(state: PipelineState) -> PipelineState:
     return state
 
 
-def should_retry_latex(state: PipelineState) -> Literal["latex_fixer", "latex_fallback", "finalize"]:
+def should_retry_latex(
+    state: PipelineState,
+) -> Literal["latex_fixer", "latex_fallback", "finalize"]:
     """
     After LaTeX validation: retry with fixer if compilation failed and retries remain.
     If max retries reached and still failing, go to fallback.
@@ -344,6 +334,7 @@ def should_retry_latex(state: PipelineState) -> Literal["latex_fixer", "latex_fa
 # ---------------------------------------------------------------------------
 # Terminal nodes
 # ---------------------------------------------------------------------------
+
 
 def _apply_differentiation(state: PipelineState) -> None:
     """Build a three-level document when material_type is differensiert."""
@@ -429,9 +420,7 @@ def finalize(state: PipelineState) -> PipelineState:
     )
 
     verified_banner = (
-        mv.claims_checked > 0
-        and mv.claims_incorrect == 0
-        and mv.claims_unparseable == 0
+        mv.claims_checked > 0 and mv.claims_incorrect == 0 and mv.claims_unparseable == 0
     )
     needs_review = mv.claims_unparseable > 0
     if body.strip() and (verified_banner or needs_review):
@@ -473,9 +462,7 @@ def finalize(state: PipelineState) -> PipelineState:
     if not state.pdf_base64 and state.latex_compilation.pdf_base64:
         state.pdf_base64 = state.latex_compilation.pdf_base64
 
-    state.used_latex_fallback = (
-        state.used_latex_fallback or state.latex_compilation.used_fallback
-    )
+    state.used_latex_fallback = state.used_latex_fallback or state.latex_compilation.used_fallback
 
     # Compute totals
     state.total_duration_seconds = sum(s.duration_seconds for s in state.steps)
@@ -485,9 +472,8 @@ def finalize(state: PipelineState) -> PipelineState:
     has_unparseable = mv.claims_unparseable > 0
     has_fail_open_incorrect = mv.claims_incorrect > 0 and config.verification_fail_open
     reasons: list[str] = []
-    if (
-        not state.content_quality.passed
-        and (state.content_quality.score > 0 or bool(state.content_quality.issues))
+    if not state.content_quality.passed and (
+        state.content_quality.score > 0 or bool(state.content_quality.issues)
     ):
         reasons.append("content_quality")
     if has_unparseable:
@@ -539,6 +525,7 @@ def finalize(state: PipelineState) -> PipelineState:
 # Graph builder
 # ---------------------------------------------------------------------------
 
+
 def create_pipeline() -> StateGraph:
     """
     Build the LangGraph pipeline.
@@ -569,7 +556,7 @@ def create_pipeline() -> StateGraph:
     graph.add_node("editor", run_editor)
     graph.add_node("final_math_verifier", run_final_math_verifier)
     graph.add_node("content_quality", run_content_quality)
-    graph.add_node("tikz_validator", run_tikz_validator)    # Rule-based figure fixer
+    graph.add_node("tikz_validator", run_tikz_validator)  # Rule-based figure fixer
     graph.add_node("table_validator", run_table_validator)  # Rule-based table fixer
     graph.add_node("latex_validator", run_latex_validator)
     graph.add_node("latex_fixer", run_latex_fixer)
@@ -656,6 +643,7 @@ def create_pipeline() -> StateGraph:
 # ---------------------------------------------------------------------------
 # Convenience runner
 # ---------------------------------------------------------------------------
+
 
 def _coerce_state(value: object) -> PipelineState:
     """LangGraph may yield a dict or a PipelineState — normalise to PipelineState."""

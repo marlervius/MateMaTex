@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Any
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, field_validator
 # ---------------------------------------------------------------------------
 class PipelineStatus(str, Enum):
     """Overall pipeline status."""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -29,6 +30,7 @@ class PipelineStatus(str, Enum):
 
 class AgentRole(str, Enum):
     """Every agent in the pipeline."""
+
     PEDAGOGUE = "pedagogue"
     AUTHOR = "author"
     CONTENT_QUALITY = "content_quality"
@@ -52,26 +54,22 @@ class PdfStyle(BaseModel):
     All fields default to the classic look, so omitting this object reproduces
     the previous output exactly.
     """
+
     theme: str = Field(
         default="default",
         description="Color palette: default|calm|playful|highcontrast",
     )
-    student_mode: bool = Field(
-        default=False, description="Favour writing space (answer fields)"
-    )
+    student_mode: bool = Field(default=False, description="Favour writing space (answer fields)")
     accessible: bool = Field(
         default=False, description="Emit PDF language metadata / tagged-PDF mode"
     )
-    dyslexia: bool = Field(
-        default=False, description="Sans-serif body with generous leading"
-    )
-    high_contrast: bool = Field(
-        default=False, description="Force the high-contrast palette"
-    )
+    dyslexia: bool = Field(default=False, description="Sans-serif body with generous leading")
+    high_contrast: bool = Field(default=False, description="Force the high-contrast palette")
 
 
 class GenerationRequest(BaseModel):
     """User's input to the pipeline."""
+
     grade: str = Field(description="Grade level, e.g. '10. trinn', 'VG2 R1'")
     topic: str = Field(description="Math topic", max_length=500)
     material_type: str = Field(
@@ -93,6 +91,7 @@ class GenerationRequest(BaseModel):
 
 class MathClaim(BaseModel):
     """A single mathematical claim extracted from the LaTeX for verification."""
+
     claim_id: str = Field(default_factory=lambda: uuid.uuid4().hex[:8])
     latex_expression: str = Field(description="Raw LaTeX of the claim")
     claim_type: str = Field(description="equation|inequality|computation|solution")
@@ -107,6 +106,7 @@ class MathClaim(BaseModel):
 
 class VerificationResult(BaseModel):
     """Result of the SymPy math verification pass."""
+
     claims_checked: int = 0
     claims_correct: int = 0
     claims_incorrect: int = 0
@@ -119,7 +119,10 @@ class VerificationResult(BaseModel):
 
 class LayoutIssue(BaseModel):
     """A single layout problem detected in the compilation log."""
-    kind: str = Field(description="overfull_hbox|underfull_hbox|overfull_vbox|oversized_float|undefined_reference|multiply_defined|missing_font")
+
+    kind: str = Field(
+        description="overfull_hbox|underfull_hbox|overfull_vbox|oversized_float|undefined_reference|multiply_defined|missing_font"
+    )
     severity: str = Field(default="info", description="info|warning|error")
     detail: str = ""
     overflow_pt: float = 0.0
@@ -152,6 +155,7 @@ class ContentQualityReport(BaseModel):
 
 class LayoutReport(BaseModel):
     """Structured quality assessment of the compiled document's layout."""
+
     score: int = 100
     issues: list[LayoutIssue] = Field(default_factory=list)
     overfull_count: int = 0
@@ -163,6 +167,7 @@ class LayoutReport(BaseModel):
 
 class LatexCompilationResult(BaseModel):
     """Result of actual pdflatex compilation check."""
+
     success: bool = False
     pdf_path: str = ""
     pdf_bytes: bytes | None = Field(
@@ -182,6 +187,7 @@ class LatexCompilationResult(BaseModel):
 
 class AgentStep(BaseModel):
     """Observability record for a single agent execution."""
+
     agent: AgentRole
     started_at: datetime = Field(default_factory=datetime.now)
     completed_at: datetime | None = None

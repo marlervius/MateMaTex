@@ -16,8 +16,8 @@ from app.curriculum import format_boundaries_for_prompt, get_language_level_inst
 from app.models.llm import LLMInterface
 from app.models.state import AgentRole, AgentStep, PipelineState
 from app.pipeline.prompts.pedagogue import (
-    SYSTEM_PROMPT,
     FEW_SHOT_EXAMPLES,
+    SYSTEM_PROMPT,
     build_pedagogue_prompt,
 )
 
@@ -68,6 +68,7 @@ def run_pedagogue(state: PipelineState) -> PipelineState:
 
         # Check cache first
         from app.cache import get_cache
+
         cache = get_cache()
         cached_plan = cache.get_pedagogue_plan(state.request)
         if cached_plan:

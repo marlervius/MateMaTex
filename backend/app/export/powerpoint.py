@@ -21,7 +21,7 @@ def _extract_exercises_for_slides(latex: str) -> list[dict]:
 
     # Match taskbox environments
     pattern = re.compile(
-        r'\\begin\{taskbox\}\{([^}]*)\}(.*?)\\end\{taskbox\}',
+        r"\\begin\{taskbox\}\{([^}]*)\}(.*?)\\end\{taskbox\}",
         re.DOTALL,
     )
 
@@ -32,7 +32,7 @@ def _extract_exercises_for_slides(latex: str) -> list[dict]:
 
     if not exercises:
         # Fallback: split by \section or double newlines
-        sections = re.split(r'\\section\*?\{([^}]*)\}', latex)
+        sections = re.split(r"\\section\*?\{([^}]*)\}", latex)
         for i in range(1, len(sections), 2):
             title = sections[i].strip() if i < len(sections) else f"Slide {i}"
             body = sections[i + 1].strip() if i + 1 < len(sections) else ""
@@ -45,24 +45,24 @@ def _extract_exercises_for_slides(latex: str) -> list[dict]:
 def _simplify_latex_for_slide(text: str) -> str:
     """Strip LaTeX to readable text for PowerPoint slides."""
     # Remove environments
-    text = re.sub(r'\\begin\{[^}]*\}(?:\{[^}]*\})?', '', text)
-    text = re.sub(r'\\end\{[^}]*\}', '', text)
+    text = re.sub(r"\\begin\{[^}]*\}(?:\{[^}]*\})?", "", text)
+    text = re.sub(r"\\end\{[^}]*\}", "", text)
 
     # Simplify math
-    text = re.sub(r'\$([^$]*)\$', r'\1', text)
-    text = re.sub(r'\\frac\{([^}]*)\}\{([^}]*)\}', r'(\1)/(\2)', text)
-    text = re.sub(r'\\sqrt\{([^}]*)\}', r'√(\1)', text)
-    text = re.sub(r'\\cdot', r'·', text)
-    text = re.sub(r'\\times', r'×', text)
+    text = re.sub(r"\$([^$]*)\$", r"\1", text)
+    text = re.sub(r"\\frac\{([^}]*)\}\{([^}]*)\}", r"(\1)/(\2)", text)
+    text = re.sub(r"\\sqrt\{([^}]*)\}", r"√(\1)", text)
+    text = re.sub(r"\\cdot", r"·", text)
+    text = re.sub(r"\\times", r"×", text)
 
     # Clean commands
-    text = re.sub(r'\\textbf\{([^}]*)\}', r'\1', text)
-    text = re.sub(r'\\textit\{([^}]*)\}', r'\1', text)
-    text = re.sub(r'\\item', r'• ', text)
-    text = re.sub(r'\\[a-zA-Z]+\*?\{([^}]*)\}', r'\1', text)
-    text = re.sub(r'\\[a-zA-Z]+\*?', '', text)
-    text = re.sub(r'[{}]', '', text)
-    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = re.sub(r"\\textbf\{([^}]*)\}", r"\1", text)
+    text = re.sub(r"\\textit\{([^}]*)\}", r"\1", text)
+    text = re.sub(r"\\item", r"• ", text)
+    text = re.sub(r"\\[a-zA-Z]+\*?\{([^}]*)\}", r"\1", text)
+    text = re.sub(r"\\[a-zA-Z]+\*?", "", text)
+    text = re.sub(r"[{}]", "", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
 
     return text.strip()
 
@@ -83,9 +83,7 @@ def latex_to_pptx(
         solutions_as: 'speaker_notes' or 'hidden_slides'
     """
     from pptx import Presentation
-    from pptx.util import Inches, Pt, Emu
-    from pptx.enum.text import PP_ALIGN
-    from pptx.dml.color import RGBColor
+    from pptx.util import Inches, Pt
 
     prs = Presentation()
     prs.slide_width = Inches(13.333)
@@ -103,14 +101,14 @@ def latex_to_pptx(
     # Extract solutions section
     solutions: dict[int, str] = {}
     sol_match = re.search(
-        r'\\section\*?\{Løsningsforslag\}(.*)',
+        r"\\section\*?\{Løsningsforslag\}(.*)",
         latex_content,
         re.DOTALL,
     )
     if sol_match:
         sol_text = sol_match.group(1)
         for m in re.finditer(
-            r'\\textbf\{Oppgave\s*(\d+)\}(.*?)(?=\\textbf\{Oppgave|\Z)',
+            r"\\textbf\{Oppgave\s*(\d+)\}(.*?)(?=\\textbf\{Oppgave|\Z)",
             sol_text,
             re.DOTALL,
         ):

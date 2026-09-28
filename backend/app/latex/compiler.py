@@ -134,7 +134,8 @@ def compile_to_pdf_with_log(
                         # halt on first hard error so we don't loop on a broken doc
                         "-halt-on-error",
                         "-file-line-error",
-                        "-output-directory", str(tmpdir),
+                        "-output-directory",
+                        str(tmpdir),
                         str(tex_path),
                     ],
                     capture_output=True,

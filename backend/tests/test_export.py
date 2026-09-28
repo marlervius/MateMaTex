@@ -4,13 +4,12 @@ Tests for the export module — PDF, Word, PowerPoint.
 
 import pytest
 
-from app.export.word import _strip_latex_commands, latex_to_docx
 from app.export.powerpoint import (
     _extract_exercises_for_slides,
     _simplify_latex_for_slide,
     latex_to_pptx,
 )
-
+from app.export.word import _strip_latex_commands, latex_to_docx
 
 # ---------------------------------------------------------------------------
 # Sample data
@@ -118,7 +117,7 @@ class TestWordExport:
             assert isinstance(result, bytes)
             assert len(result) > 100
             # DOCX files start with PK (ZIP format)
-            assert result[:2] == b'PK'
+            assert result[:2] == b"PK"
         except ImportError:
             pytest.skip("python-docx not installed")
 
@@ -142,7 +141,7 @@ class TestPowerPointExport:
             assert isinstance(result, bytes)
             assert len(result) > 100
             # PPTX files start with PK (ZIP format)
-            assert result[:2] == b'PK'
+            assert result[:2] == b"PK"
         except ImportError:
             pytest.skip("python-pptx not installed")
 

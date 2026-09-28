@@ -21,43 +21,71 @@ from __future__ import annotations
 # ---------------------------------------------------------------------------
 THEMES: dict[str, dict[str, str]] = {
     "default": {
-        "mainBlue": "0,102,204", "lightBlue": "230,242,255",
-        "mainGreen": "0,153,76", "lightGreen": "232,250,240",
-        "mainOrange": "230,126,34", "lightOrange": "255,245,235",
-        "mainPurple": "102,51,153", "lightPurple": "245,240,255",
-        "mainTeal": "0,128,128", "lightTeal": "235,250,250",
-        "mainGray": "80,80,90", "lightGray": "248,248,252",
-        "mainRed": "200,55,55", "lightRed": "253,238,238",
+        "mainBlue": "0,102,204",
+        "lightBlue": "230,242,255",
+        "mainGreen": "0,153,76",
+        "lightGreen": "232,250,240",
+        "mainOrange": "230,126,34",
+        "lightOrange": "255,245,235",
+        "mainPurple": "102,51,153",
+        "lightPurple": "245,240,255",
+        "mainTeal": "0,128,128",
+        "lightTeal": "235,250,250",
+        "mainGray": "80,80,90",
+        "lightGray": "248,248,252",
+        "mainRed": "200,55,55",
+        "lightRed": "253,238,238",
     },
     # Softer, desaturated — calm reading experience
     "calm": {
-        "mainBlue": "70,110,150", "lightBlue": "238,244,249",
-        "mainGreen": "82,138,108", "lightGreen": "240,247,243",
-        "mainOrange": "190,140,90", "lightOrange": "250,245,238",
-        "mainPurple": "120,110,160", "lightPurple": "245,243,250",
-        "mainTeal": "70,135,135", "lightTeal": "239,247,247",
-        "mainGray": "95,100,110", "lightGray": "247,248,250",
-        "mainRed": "170,90,90", "lightRed": "250,242,242",
+        "mainBlue": "70,110,150",
+        "lightBlue": "238,244,249",
+        "mainGreen": "82,138,108",
+        "lightGreen": "240,247,243",
+        "mainOrange": "190,140,90",
+        "lightOrange": "250,245,238",
+        "mainPurple": "120,110,160",
+        "lightPurple": "245,243,250",
+        "mainTeal": "70,135,135",
+        "lightTeal": "239,247,247",
+        "mainGray": "95,100,110",
+        "lightGray": "247,248,250",
+        "mainRed": "170,90,90",
+        "lightRed": "250,242,242",
     },
     # Brighter, friendlier — lower grades
     "playful": {
-        "mainBlue": "0,140,220", "lightBlue": "224,243,255",
-        "mainGreen": "30,180,90", "lightGreen": "226,250,236",
-        "mainOrange": "245,140,30", "lightOrange": "255,243,228",
-        "mainPurple": "150,70,200", "lightPurple": "245,235,255",
-        "mainTeal": "0,170,170", "lightTeal": "224,250,250",
-        "mainGray": "90,90,100", "lightGray": "247,247,250",
-        "mainRed": "230,60,70", "lightRed": "255,235,236",
+        "mainBlue": "0,140,220",
+        "lightBlue": "224,243,255",
+        "mainGreen": "30,180,90",
+        "lightGreen": "226,250,236",
+        "mainOrange": "245,140,30",
+        "lightOrange": "255,243,228",
+        "mainPurple": "150,70,200",
+        "lightPurple": "245,235,255",
+        "mainTeal": "0,170,170",
+        "lightTeal": "224,250,250",
+        "mainGray": "90,90,100",
+        "lightGray": "247,247,250",
+        "mainRed": "230,60,70",
+        "lightRed": "255,235,236",
     },
     # Strong contrast for visual accessibility (WCAG-friendly)
     "highcontrast": {
-        "mainBlue": "0,51,153", "lightBlue": "255,255,255",
-        "mainGreen": "0,102,51", "lightGreen": "255,255,255",
-        "mainOrange": "170,70,0", "lightOrange": "255,255,255",
-        "mainPurple": "85,0,128", "lightPurple": "255,255,255",
-        "mainTeal": "0,90,90", "lightTeal": "255,255,255",
-        "mainGray": "20,20,20", "lightGray": "255,255,255",
-        "mainRed": "153,0,0", "lightRed": "255,255,255",
+        "mainBlue": "0,51,153",
+        "lightBlue": "255,255,255",
+        "mainGreen": "0,102,51",
+        "lightGreen": "255,255,255",
+        "mainOrange": "170,70,0",
+        "lightOrange": "255,255,255",
+        "mainPurple": "85,0,128",
+        "lightPurple": "255,255,255",
+        "mainTeal": "0,90,90",
+        "lightTeal": "255,255,255",
+        "mainGray": "20,20,20",
+        "lightGray": "255,255,255",
+        "mainRed": "153,0,0",
+        "lightRed": "255,255,255",
     },
 }
 
@@ -166,8 +194,10 @@ def build_preamble(
 
     return (
         doc_meta
-        + r"\documentclass[a4paper,11pt]{article}" + "\n"
-        + r"\usepackage[norsk]{babel}" + "\n"
+        + r"\documentclass[a4paper,11pt]{article}"
+        + "\n"
+        + r"\usepackage[norsk]{babel}"
+        + "\n"
         + _text_font_block(dyslexia=dyslexia)
         + _MATH_GRAPHICS_LAYOUT
         + _MATH_FONT_BLOCK
@@ -185,9 +215,12 @@ def build_preamble(
         + _HEADER_FOOTER
         + student_block
         + f"\n% ---- Spacing ----\n{leading}\n"
-        + rf"\setlength{{\parskip}}{{{parskip}}}" + "\n"
-        + r"\setlength{\parindent}{0pt}" + "\n"
-        + r"\setlist{itemsep=0.3em, parsep=0.2em, topsep=0.3em}" + "\n"
+        + rf"\setlength{{\parskip}}{{{parskip}}}"
+        + "\n"
+        + r"\setlength{\parindent}{0pt}"
+        + "\n"
+        + r"\setlist{itemsep=0.3em, parsep=0.2em, topsep=0.3em}"
+        + "\n"
         + _LAYOUT_HARDENING
     )
 

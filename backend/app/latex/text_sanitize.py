@@ -12,23 +12,21 @@ import unicodedata
 
 # Non-standard hyphens / invisible chars that often become wrong glyphs in PDF.
 CHAR_MAP: dict[str, str] = {
-    "\u00ad": "",       # soft hyphen
-    "\u2010": "-",      # hyphen
-    "\u2011": "-",      # non-breaking hyphen
-    "\u2012": "\u2013", # figure dash → en-dash
-    "\u2043": "-",      # hyphen bullet
-    "\ufeff": "",       # BOM
-    "\u200b": "",       # zero-width space
-    "\u200c": "",       # zero-width non-joiner
-    "\u200d": "",       # zero-width joiner
-    "\u2060": "",       # word joiner
+    "\u00ad": "",  # soft hyphen
+    "\u2010": "-",  # hyphen
+    "\u2011": "-",  # non-breaking hyphen
+    "\u2012": "\u2013",  # figure dash → en-dash
+    "\u2043": "-",  # hyphen bullet
+    "\ufeff": "",  # BOM
+    "\u200b": "",  # zero-width space
+    "\u200c": "",  # zero-width non-joiner
+    "\u200d": "",  # zero-width joiner
+    "\u2060": "",  # word joiner
 }
 
 # Protect LaTeX math and commands from markdown stripping.
 _PLACEHOLDER_PREFIX = "\x00MMTX"
-_MATH_RE = re.compile(
-    r"(\$\$[\s\S]*?\$\$|\$[^$\n]+\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))"
-)
+_MATH_RE = re.compile(r"(\$\$[\s\S]*?\$\$|\$[^$\n]+\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))")
 _CMD_RE = re.compile(r"(\\[a-zA-Z@]+(?:\[[^\]]*\])?(?:\{[^{}]*\})*)")
 
 

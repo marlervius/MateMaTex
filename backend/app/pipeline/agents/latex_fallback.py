@@ -90,7 +90,9 @@ For å sikre at du likevel får oppgavene og teksten, har systemet fjernet probl
         else:
             state.latex_compilation.success = False
             step.error = f"Fallback compilation failed: {result.errors[:2]}"
-            logger.warning("latex_fallback_still_failed", job_id=state.job_id, errors=result.errors[:3])
+            logger.warning(
+                "latex_fallback_still_failed", job_id=state.job_id, errors=result.errors[:3]
+            )
 
     except Exception as e:
         step.error = str(e)
