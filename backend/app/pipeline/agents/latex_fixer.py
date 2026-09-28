@@ -9,7 +9,6 @@ from datetime import datetime
 
 import structlog
 
-from app.config import get_config
 from app.models.llm import LLMInterface
 from app.models.state import AgentRole, AgentStep, PipelineState
 from app.pipeline.prompts.latex_fixer import SYSTEM_PROMPT, build_fixer_prompt
@@ -105,7 +104,6 @@ def run_latex_fixer(state: PipelineState) -> PipelineState:
             logger.info("latex_fixer_rule_based", job_id=state.job_id)
             return state
 
-        config = get_config()
         llm = LLMInterface(temperature=0.1)  # Very low temp for precise fixes
 
         error_report = format_latex_errors_for_agent(state.latex_compilation)
@@ -123,14 +121,13 @@ def run_latex_fixer(state: PipelineState) -> PipelineState:
         fixed_doc = response.strip()
 
         # Clean LLM output: strip markdown code fences that LLMs often add
-        import re as _re
         # Remove ```latex ... ``` or ``` ... ``` wrapping
-        fixed_doc = _re.sub(r'^```(?:latex|tex)?\s*\n?', '', fixed_doc)
-        fixed_doc = _re.sub(r'\n?```\s*$', '', fixed_doc)
+        fixed_doc = re.sub(r"^```(?:latex|tex)?\s*\n?", "", fixed_doc)
+        fixed_doc = re.sub(r"\n?```\s*$", "", fixed_doc)
         fixed_doc = fixed_doc.strip()
 
         # Strip any prose the LLM prepended before the actual LaTeX document
-        for latex_start_marker in (r'\documentclass', r'\begin{document}'):
+        for latex_start_marker in (r"\documentclass", r"\begin{document}"):
             idx = fixed_doc.find(latex_start_marker)
             if idx > 0:
                 logger.debug("latex_fixer_stripped_prose", chars_removed=idx)
@@ -138,7 +135,7 @@ def run_latex_fixer(state: PipelineState) -> PipelineState:
                 break
 
         # Validate that the fixed document still contains \begin{document}
-        if r'\begin{document}' not in fixed_doc:
+        if r"\begin{document}" not in fixed_doc:
             logger.warning("latex_fixer_missing_begin_document", doc_start=fixed_doc[:100])
             # Fall back to the original document — don't overwrite with garbage
             fixed_doc = state.full_document
@@ -147,9 +144,8 @@ def run_latex_fixer(state: PipelineState) -> PipelineState:
             state.full_document = fixed_doc
 
         # Also extract body for consistency
-        import re
         body_match = re.search(
-            r'\\begin\{document\}(.*?)\\end\{document\}',
+            r"\\begin\{document\}(.*?)\\end\{document\}",
             fixed_doc,
             re.DOTALL,
         )
